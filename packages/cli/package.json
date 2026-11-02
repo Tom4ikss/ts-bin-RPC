@@ -16,6 +16,7 @@
     "typescript": "7.1.0-beta"
   },
   "devDependencies": {
+    "fast-check": "^4.10.2",
     "ts-bin-rpc": "workspace:*"
   },
   "license": "MIT"

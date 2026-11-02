@@ -13,33 +13,50 @@ function time(fn, input, iters) {
   return performance.now() - t0;
 }
 
-export function measure(fn, input, { quick = false } = {}) {
-  const warmupMs = quick ? 50 : 300;
-  const batchMs = quick ? 10 : 25;
-  const samples = quick ? 5 : 15;
+function settings(quick) {
+  return { warmupMs: quick ? 50 : 300, batchMs: quick ? 10 : 25, samples: quick ? 5 : 15 };
+}
 
+/** Warms `fn` up and returns the iteration count of one batch. */
+function calibrate(fn, input, { warmupMs, batchMs }) {
   const tw = performance.now();
   while (performance.now() - tw < warmupMs) sink = (sink + fn(input)) | 0;
-
   let iters = 1;
   while (time(fn, input, iters) < batchMs) iters *= 2;
+  return iters;
+}
 
-  const r = [];
-  for (let s = 0; s < samples; s++) r.push((time(fn, input, iters) * 1000) / iters);
+function summary(r) {
   r.sort((a, b) => a - b);
-  return { us: r[samples >> 1], min: r[0], max: r[samples - 1] };
+  return { us: r[r.length >> 1], min: r[0], max: r[r.length - 1] };
+}
+
+export function measure(fn, input, { quick = false } = {}) {
+  const s = settings(quick);
+  const iters = calibrate(fn, input, s);
+  const r = [];
+  for (let k = 0; k < s.samples; k++) r.push((time(fn, input, iters) * 1000) / iters);
+  return summary(r);
 }
 
 // groups: [{ group, cases: [{ label, fn, input }] }]; the first case of a group is the baseline.
+// Samples of a group's cases are interleaved, so slow drift (GC heap growth, JIT tier changes, thermal
+// throttling) affects every case alike instead of whichever one runs last.
 export function runGroups(groups, opts = {}) {
+  const s = settings(opts.quick);
   const rows = [];
   for (const g of groups) {
+    const iters = g.cases.map((c) => calibrate(c.fn, c.input, s));
+    const r = g.cases.map(() => []);
+    for (let k = 0; k < s.samples; k++) {
+      g.cases.forEach((c, j) => r[j].push((time(c.fn, c.input, iters[j]) * 1000) / iters[j]));
+    }
     let base;
-    for (const c of g.cases) {
-      const m = measure(c.fn, c.input, opts);
+    g.cases.forEach((c, j) => {
+      const m = summary(r[j]);
       base ??= m.us;
       rows.push({ group: g.group, variant: c.label, us: m.us, spread: (m.max - m.min) / m.us, ratio: base / m.us });
-    }
+    });
   }
   if (sink === 0x7fffffff) console.log('');
   return rows;

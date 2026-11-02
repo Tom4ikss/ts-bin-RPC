@@ -13,8 +13,10 @@ function tbr(...args: string[]) {
 }
 
 describe('tbr generate / check', () => {
-  const lock = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'tbr-')), 'tbr.lock.json');
-  const at = (step: string) => ['--project', fixture('evolution', 'tsconfig.json'), '--router', `${step}.ts`, '--lock', lock];
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tbr-'));
+  const lock = path.join(dir, 'tbr.lock.json');
+  const gen = path.join(dir, 'tbr.gen.ts');
+  const at = (step: string) => ['--project', fixture('evolution', 'tsconfig.json'), '--router', `${step}.ts`, '--lock', lock, '--out', gen];
 
   it('check fails without a lockfile', () => {
     expect(tbr('check', ...at('v1'))).toMatchObject({ code: 1, output: expect.stringContaining('does not exist') });
@@ -26,10 +28,12 @@ describe('tbr generate / check', () => {
     expect(r.output).toContain('procedure get: object get:input -> object User');
     expect(r.output).toContain('"mail": { "id": 2, "type": "string" }');
     expect(fs.existsSync(lock)).toBe(false);
+    expect(fs.existsSync(gen)).toBe(false);
   });
 
   it('generate creates the lockfile, check accepts it', () => {
     expect(tbr('generate', ...at('v1'))).toMatchObject({ code: 0, output: expect.stringContaining('created') });
+    expect(fs.readFileSync(gen, 'utf8')).toContain('from "ts-bin-rpc/runtime"');
     expect(tbr('check', ...at('v1'))).toMatchObject({ code: 0, output: expect.stringContaining('up to date') });
   });
 

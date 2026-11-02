@@ -2,8 +2,8 @@
 
 Work in progress: a code-first TypeScript RPC with a binary wire format, lazy client-side views,
 zero-copy `TypedArray` columns and tRPC-like DX. Nothing is published yet; this repository holds the
-research, the design, the benchmarks that fixed the wire format and the first part of the code
-generator.
+research, the design, the benchmarks that fixed the wire format, the code generator and the codec
+runtime. The server, the client and the protocol come next (phase 3).
 
 Project documents (in Russian):
 [design](docs/DESIGN.md), [wire format v0](docs/FORMAT.md), [roadmap to alpha](docs/ROADMAP.md),
@@ -18,8 +18,9 @@ Project documents (in Russian):
 | `bench/node/` | Node-only experiments: compression, realtime frame sizes, the original exploratory benches |
 | `bench/results/` | latest full runs |
 | `spikes/ts71/` | checks that the TypeScript 7.1 API exposes what the codegen needs |
-| `packages/cli/` | `tbr`: reads the router's TypeScript types through TypeScript 7.1, builds the schema IR, maintains `tbr.lock.json` |
-| `packages/ts-bin-rpc/` | the runtime package; for now only the numeric brands (`u8` … `i64`) |
+| `packages/cli/` | `tbr`: reads the router's TypeScript types through TypeScript 7.1, builds the schema IR, maintains `tbr.lock.json`, emits codecs |
+| `packages/ts-bin-rpc/` | the runtime package: numeric brands (`u8` … `i64`) and the codec runtime (`ts-bin-rpc/runtime`) |
+| `playground/` | a router to play with: `pnpm watch` regenerates on save, `pnpm demo` encodes and reads a message |
 
 ## Running
 
@@ -33,15 +34,19 @@ node bench/run.mjs strings --runtimes=node,chromium
 node bench/node/compression.mjs      # needs the zstd CLI for the zstd column
 node bench/node/realtime-size.mjs
 pnpm spike:ts71
-pnpm test                            # codegen golden tests
+pnpm test                            # golden, round-trip and verifier fuzzing tests
+pnpm --filter @tbr/bench gen && node bench/run.mjs generated   # generated codecs against the hand-written one
 ```
 
-The codegen so far stops at the schema and the lockfile (phase 1):
+Code generation (phase 2): `tbr generate` updates `tbr.lock.json` and writes typed codecs for every
+procedure to `tbr.gen.ts` next to the router.
 
 ```sh
-cd packages/cli
-pnpm tbr generate --dry-run --project test/fixtures/supported/tsconfig.json --router router.ts
-pnpm tbr check --project <tsconfig> --router src/router.ts#appRouter
+cd playground
+pnpm gen                             # tbr.lock.json + src/tbr.gen.ts
+pnpm demo
+pnpm ir                              # print the schema IR and the lockfile without writing
+pnpm check                           # classify changes against the lockfile
 ```
 
 ## Results (phase 0)

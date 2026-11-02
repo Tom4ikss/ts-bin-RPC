@@ -2,3 +2,6 @@ node_modules/
 .DS_Store
 *.log
 spikes/**/package-lock.json
+packages/cli/test/.gen/*.ts
+bench/gen/out/
+playground/src/tbr.gen.ts
