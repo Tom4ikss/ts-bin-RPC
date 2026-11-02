@@ -1,8 +1,10 @@
 #!/usr/bin/env -S node --experimental-strip-types --no-warnings
-// tbr generate | check: schema IR, lockfile and generated codecs.
+// tbr generate | check | decode: schema IR, lockfile, generated codecs and a message dump.
 import fs from 'node:fs';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
+import { decodeError, FLAG_ERROR, VerifyError, type Codec } from 'ts-bin-rpc/runtime';
 import { buildSchema } from './build.ts';
 import { emitCodecs } from './emit.ts';
 import { emptyLock, parseLock, stringifyLock, updateLock, type Change } from './lock.ts';
@@ -10,7 +12,8 @@ import { formatLocation } from './ir.ts';
 import { printErrors, printSchema } from './print.ts';
 import { Ts71Source } from './source.ts';
 
-const USAGE = `usage: tbr <generate|check> [options]
+const USAGE = `usage: tbr generate | check [options]
+       tbr decode <file|-> (--proc <path> [--input] | --type <Name>) [options]
 
   --project <tsconfig>     TypeScript project (default: tsconfig.json)
   --router <file#export>   router to compile (default: src/router.ts#appRouter)
@@ -18,9 +21,11 @@ const USAGE = `usage: tbr <generate|check> [options]
   --out <file>             generated codecs (default: tbr.gen.ts next to the router)
   --dry-run                generate: print the schema and the lockfile instead of writing
   --allow-breaking         generate: accept breaking changes
+  --proc <path>            decode: the message is the output of this procedure (with --input: its input)
+  --type <Name>            decode: the message is this object type
 `;
 
-export function run(argv: string[], out: (s: string) => void = (s) => process.stdout.write(s)): number {
+export function run(argv: string[], out: (s: string) => void = (s) => process.stdout.write(s)): number | Promise<number> {
   const { values, positionals } = parseArgs({
     args: argv,
     allowPositionals: true,
@@ -31,11 +36,14 @@ export function run(argv: string[], out: (s: string) => void = (s) => process.st
       out: { type: 'string' },
       'dry-run': { type: 'boolean', default: false },
       'allow-breaking': { type: 'boolean', default: false },
+      proc: { type: 'string' },
+      type: { type: 'string' },
+      input: { type: 'boolean', default: false },
       help: { type: 'boolean', short: 'h', default: false },
     },
   });
   const command = positionals[0];
-  if (values.help || (command !== 'generate' && command !== 'check')) {
+  if (values.help || (command !== 'generate' && command !== 'check' && command !== 'decode')) {
     out(USAGE);
     return values.help ? 0 : 2;
   }
@@ -45,6 +53,14 @@ export function run(argv: string[], out: (s: string) => void = (s) => process.st
   const [routerFile, exportName = 'appRouter'] = values.router.split('#');
   const lockPath = path.resolve(values.lock ?? path.join(root, 'tbr.lock.json'));
   const outPath = path.resolve(values.out ?? path.join(path.dirname(path.resolve(root, routerFile)), 'tbr.gen.ts'));
+
+  if (command === 'decode') {
+    if (!positionals[1] || !!values.proc === !!values.type) {
+      out(USAGE);
+      return 2;
+    }
+    return decode(positionals[1], outPath, values, out);
+  }
 
   const src = new Ts71Source(project);
   let built;
@@ -92,7 +108,9 @@ export function run(argv: string[], out: (s: string) => void = (s) => process.st
   }
   if (!upToDate) fs.writeFileSync(lockPath, text);
   out(upToDate ? `${rel} is up to date\n` : `${hadLock ? 'updated' : 'created'} ${rel}\n`);
-  const code = emitCodecs(built.schema, lock);
+  let from = path.relative(path.dirname(outPath), path.resolve(root, routerFile)).split(path.sep).join('/');
+  if (!from.startsWith('.')) from = `./${from}`;
+  const code = emitCodecs(built.schema, lock, { router: { from, name: exportName } });
   const relOut = path.relative(process.cwd(), outPath) || outPath;
   if (fs.existsSync(outPath) && fs.readFileSync(outPath, 'utf8') === code) out(`${relOut} is up to date\n`);
   else {
@@ -100,6 +118,45 @@ export function run(argv: string[], out: (s: string) => void = (s) => process.st
     out(`wrote ${relOut}\n`);
   }
   return 0;
+}
+
+async function decode(file: string, genPath: string, o: { proc?: string; type?: string; input: boolean }, out: (s: string) => void): Promise<number> {
+  const bytes = new Uint8Array(fs.readFileSync(file === '-' ? 0 : file));
+  try {
+    if (bytes.length > 3 && bytes[3] & FLAG_ERROR) {
+      const e = decodeError(bytes);
+      const data = e.data && JSON.parse(new TextDecoder().decode(e.data));
+      out(dump({ error: { code: e.code, message: e.message, data } }));
+      return 0;
+    }
+    const mod = (await import(pathToFileURL(genPath).href)) as {
+      procedures: Record<string, { input: Codec<unknown> | null; output: Codec<unknown> | null }>;
+      codecs: Record<string, Codec<unknown>>;
+    };
+    const what = o.type ? `type '${o.type}'` : `${o.input ? 'input' : 'output'} of '${o.proc}'`;
+    const proc = o.proc ? mod.procedures[o.proc] : undefined;
+    const codec = o.type ? mod.codecs[o.type] : o.input ? proc?.input : proc?.output;
+    if (!codec) {
+      out(`${path.relative(process.cwd(), genPath)} has no ${what}\n`);
+      return 1;
+    }
+    out(dump(codec.decode(bytes)));
+    return 0;
+  } catch (e) {
+    if (!(e instanceof VerifyError)) throw e;
+    out(`invalid message: ${e.message}\n`);
+    return 1;
+  }
+}
+
+/** JSON with bigints as strings and typed arrays as arrays. */
+function dump(v: unknown): string {
+  const json = JSON.stringify(
+    v,
+    (_, x) => (typeof x === 'bigint' ? x.toString() : ArrayBuffer.isView(x) && !(x instanceof DataView) ? Array.from(x as unknown as ArrayLike<number>, Number) : x),
+    2,
+  );
+  return json + '\n';
 }
 
 function printChanges(changes: Change[]): string {
@@ -115,5 +172,5 @@ if (process.argv[1] && fs.realpathSync(process.argv[1]) === import.meta.filename
     if (e.code === 'EPIPE') process.exit(process.exitCode ?? 0); // `tbr generate --dry-run | head`
     throw e;
   });
-  process.exitCode = run(process.argv.slice(2));
+  Promise.resolve(run(process.argv.slice(2))).then((code) => (process.exitCode = code));
 }

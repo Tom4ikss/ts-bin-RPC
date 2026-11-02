@@ -55,8 +55,24 @@ export function ranks(b: Uint8Array, pres: number, nul: number, n: number): Int3
   return out;
 }
 
+export type { u8, i8, u16, i16, u32, i32, f32, f64, u64, i64 } from './brands.ts';
+export type { Expect, Same, InputOf, InputOptional, OutputOf, ProcedurePath } from './router.ts';
+
 /** `console.log(view)` in Node prints the plain value instead of view internals. */
 export const INSPECT: unique symbol = Symbol.for('nodejs.util.inspect.custom') as never;
+
+/** Views implement `[PLAIN]()`: a deep copy made of plain objects. */
+export const PLAIN: unique symbol = Symbol.for('ts-bin-rpc.plain') as never;
+
+/** Deep copy of a value returned by a view: plain objects, arrays, fresh dates and typed arrays. */
+export function toPlain<T>(v: T): T {
+  if (v === null || typeof v !== 'object') return v;
+  if (Array.isArray(v)) return v.map(toPlain) as T;
+  if (PLAIN in v) return (v as { [PLAIN](): T })[PLAIN]();
+  if (v instanceof Date) return new Date(v.getTime()) as T;
+  if (ArrayBuffer.isView(v) && !(v instanceof DataView)) return (v as unknown as TypedArray).slice() as T;
+  return v;
+}
 
 /** Memo slot marker for lazily computed view fields whose value may itself be `undefined`. */
 export const UNSET: unique symbol = Symbol('unset');
@@ -93,7 +109,7 @@ const utf16StrictDecoder = new TextDecoder('utf-16le', { fatal: true });
  * and `dv` do not, so callers re-read them after anything that may allocate.
  */
 export class Writer {
-  buf: Uint8Array;
+  buf: Uint8Array<ArrayBuffer>;
   dv: DataView;
   pos: number;
   readonly strings: boolean;
@@ -277,7 +293,7 @@ export class Writer {
     return p;
   }
 
-  finish(root: number, flags = 0): Uint8Array {
+  finish(root: number, flags = 0): Uint8Array<ArrayBuffer> {
     if (this.strings) {
       flags |= FLAG_STRINGS;
       const aLen = this.#asciiLen;
@@ -714,7 +730,7 @@ export interface ViewOptions {
 }
 
 export interface Codec<T> {
-  encode(value: T): Uint8Array;
+  encode(value: T): Uint8Array<ArrayBuffer>;
   /** Lazy views over the message: fields are read on access. */
   view(bytes: Uint8Array, options?: ViewOptions): T;
   /** Plain objects, safe to mutate and spread. */
@@ -734,8 +750,13 @@ export interface CodecDef<T> {
 
 export function codec<T>(d: CodecDef<T>): Codec<T> {
   const open = (bytes: Uint8Array, o: ViewOptions = {}): Reader => {
-    if (o.verify === false) return new Reader(bytes);
+    if (o.verify === false) {
+      const r = new Reader(bytes);
+      if (r.flags & FLAG_ERROR) throw new VerifyError('message is an error envelope');
+      return r;
+    }
     const c = new Check(bytes, o.limits);
+    if (c.flags & FLAG_ERROR) c.fail('message is an error envelope');
     c.need(c.root, d.size);
     d.check(c, c.root);
     return c.reader();
@@ -764,4 +785,49 @@ export function codec<T>(d: CodecDef<T>): Codec<T> {
       open(bytes, { limits });
     },
   };
+}
+
+// ------------------------------------------------------------------------------------- error envelope
+
+/** Error envelope (FORMAT §9): flag ERROR, root table { 0: code, 1: message, 2?: data }. */
+export interface ErrorEnvelope {
+  code: string;
+  message: string;
+  /** UTF-8 JSON. */
+  data?: Uint8Array;
+}
+
+export function encodeError(e: ErrorEnvelope): Uint8Array<ArrayBuffer> {
+  const w = new Writer(true);
+  const root = w.alloc(4, 4);
+  const vt = w.alloc(10, 2);
+  w.ru16(vt, 10);
+  w.ru16(vt + 2, 24);
+  w.ru16(vt + 4, 4);
+  w.ru16(vt + 6, 12);
+  w.ru16(vt + 8, e.data ? 20 : 0);
+  const t = w.alloc(24, 8, 4);
+  w.ri32(t, t - vt);
+  w.str(t + 4, e.code);
+  w.str(t + 12, e.message);
+  if (e.data) w.ru32(t + 20, w.typed(e.data, Uint8Array));
+  w.ru32(root, t);
+  return w.finish(root, FLAG_ERROR);
+}
+
+/** Verifies and reads an error envelope; throws VerifyError on anything else. */
+export function decodeError(bytes: Uint8Array, limits?: Partial<Limits>): ErrorEnvelope {
+  const c = new Check(bytes, limits);
+  if (!(c.flags & FLAG_ERROR)) c.fail('not an error envelope');
+  const t = c.u32(c.root);
+  const vt = c.table(t, 1);
+  const code = c.field(t, vt, 0, 8), message = c.field(t, vt, 1, 8), data = c.field(t, vt, 2, 4);
+  if (!code || !message) c.fail('error envelope without code or message');
+  c.str(code);
+  c.str(message);
+  if (data) c.typed(c.u32(data), 1, 2);
+  const r = c.reader();
+  const e: ErrorEnvelope = { code: r.str(code), message: r.str(message) };
+  if (data) e.data = r.typedAt(r.dv.getUint32(data, true), Uint8Array).slice();
+  return e;
 }

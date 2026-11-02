@@ -24,8 +24,27 @@ importers:
         specifier: workspace:*
         version: link:../packages/ts-bin-rpc
 
+  e2e:
+    dependencies:
+      ts-bin-rpc:
+        specifier: workspace:*
+        version: link:../packages/ts-bin-rpc
+    devDependencies:
+      playwright:
+        specifier: ^1.64.1
+        version: 1.64.1
+      ts-bin-rpc-cli:
+        specifier: workspace:*
+        version: link:../packages/cli
+      typescript:
+        specifier: 7.1.0-beta
+        version: 7.1.0-beta
+
   packages/cli:
     dependencies:
+      ts-bin-rpc:
+        specifier: workspace:*
+        version: link:../ts-bin-rpc
       typescript:
         specifier: 7.1.0-beta
         version: 7.1.0-beta
@@ -33,12 +52,12 @@ importers:
       fast-check:
         specifier: ^4.10.2
         version: 4.10.2
-      ts-bin-rpc:
-        specifier: workspace:*
-        version: link:../ts-bin-rpc
 
   packages/ts-bin-rpc:
     devDependencies:
+      '@types/node':
+        specifier: '22'
+        version: 22.20.5
       typescript:
         specifier: 7.1.0-beta
         version: 7.1.0-beta

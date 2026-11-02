@@ -3,5 +3,7 @@ node_modules/
 *.log
 spikes/**/package-lock.json
 packages/cli/test/.gen/*.ts
+packages/cli/test/.gen/*/
 bench/gen/out/
 playground/src/tbr.gen.ts
+e2e/src/tbr.gen.ts

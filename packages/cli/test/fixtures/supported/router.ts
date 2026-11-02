@@ -46,6 +46,7 @@ type Ctx = { userId: string };
 export const appRouter = {
   health: async () => 'ok' as const,
   ping: async (): Promise<void> => {},
+  whoami: async (_: void, ctx: { user: string }): Promise<string> => ctx.user,
   user: {
     get: async (input: { id: u32 }, _ctx: Ctx): Promise<User> => null!,
     list: async (input?: { limit?: u32; role?: Role }): Promise<Page<User>> => null!,

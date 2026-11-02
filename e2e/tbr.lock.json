@@ -1,0 +1,97 @@
+{
+  "format": 0,
+  "procedures": {
+    "crash": { "input": "void", "output": "string" },
+    "echo": { "input": "object echo:input", "output": "object echo:output" },
+    "events": { "input": "void", "output": "union Event[]" },
+    "series": { "input": "object series:input", "output": "object series:output" },
+    "user.get": { "input": "object user.get:input", "output": "object User" },
+    "user.list": { "input": "object user.list:input?", "output": "object User[]" },
+    "user.rename": { "input": "object user.rename:input", "output": "void" },
+    "whoami": { "input": "void", "output": "object whoami:output" }
+  },
+  "objects": {
+    "Event#failure": {
+      "fields": {
+        "type": { "id": 0, "type": "const \"failure\"" },
+        "code": { "id": 1, "type": "u32" },
+        "message": { "id": 2, "type": "string" }
+      }
+    },
+    "Event#login": {
+      "fields": {
+        "type": { "id": 0, "type": "const \"login\"" },
+        "at": { "id": 1, "type": "timestamp" },
+        "user": { "id": 2, "type": "string" }
+      }
+    },
+    "User": {
+      "fields": {
+        "id": { "id": 0, "type": "u32" },
+        "name": { "id": 1, "type": "string" },
+        "role": { "id": 2, "type": "enum Role" },
+        "balance": { "id": 3, "type": "u64" },
+        "createdAt": { "id": 4, "type": "timestamp" },
+        "tags": { "id": 5, "type": "string[]" },
+        "manager": { "id": 6, "type": "object User | null | undefined" }
+      }
+    },
+    "echo:input": {
+      "fields": {
+        "text": { "id": 0, "type": "string" },
+        "bytes": { "id": 1, "type": "bytes" }
+      }
+    },
+    "echo:output": {
+      "fields": {
+        "text": { "id": 0, "type": "string" },
+        "bytes": { "id": 1, "type": "bytes" }
+      }
+    },
+    "series:input": {
+      "fields": {
+        "n": { "id": 0, "type": "u32" }
+      }
+    },
+    "series:output": {
+      "fields": {
+        "t": { "id": 0, "type": "Float64Array" },
+        "v": { "id": 1, "type": "Float32Array" }
+      }
+    },
+    "user.get:input": {
+      "fields": {
+        "id": { "id": 0, "type": "u32" }
+      }
+    },
+    "user.list:input": {
+      "fields": {
+        "role": { "id": 0, "type": "enum Role | undefined" },
+        "limit": { "id": 1, "type": "u32 | undefined" }
+      }
+    },
+    "user.rename:input": {
+      "fields": {
+        "id": { "id": 0, "type": "u32" },
+        "name": { "id": 1, "type": "string" }
+      }
+    },
+    "whoami:output": {
+      "fields": {
+        "user": { "id": 0, "type": "string | null" }
+      }
+    }
+  },
+  "enums": {
+    "Role": { "values": ["admin", "user"] }
+  },
+  "unions": {
+    "Event": {
+      "discriminant": "type",
+      "variants": [
+        { "tag": "failure", "object": "Event#failure" },
+        { "tag": "login", "object": "Event#login" }
+      ]
+    }
+  }
+}

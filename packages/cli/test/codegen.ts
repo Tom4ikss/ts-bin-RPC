@@ -26,7 +26,8 @@ export async function generate(fixture: string, router = 'router.ts', lock = emp
     if (errors.length) throw new Error(errors.map((e) => `${e.path}: ${e.message}`).join('\n'));
     const next = updateLock(lock, schema).lock;
     const file = path.join(import.meta.dirname, '.gen', `${out}.ts`);
-    fs.writeFileSync(file, emitCodecs(schema, next));
+    const from = path.relative(path.dirname(file), path.join(dir, router)).split(path.sep).join('/');
+    fs.writeFileSync(file, emitCodecs(schema, next, { router: { from, name: 'appRouter' } }));
     return { schema, lock: next, file, mod: await import(file) };
   } finally {
     src.close();

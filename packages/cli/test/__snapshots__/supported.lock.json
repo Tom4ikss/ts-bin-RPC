@@ -7,7 +7,8 @@
     "shapes": { "input": "void", "output": "union Shape[]" },
     "user.get": { "input": "object user.get:input", "output": "object User" },
     "user.list": { "input": "object user.list:input?", "output": "object Page<User>" },
-    "user.rename": { "input": "object user.rename:input", "output": "void" }
+    "user.rename": { "input": "object user.rename:input", "output": "void" },
+    "whoami": { "input": "void", "output": "string" }
   },
   "objects": {
     "Address": {

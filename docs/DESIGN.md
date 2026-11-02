@@ -72,24 +72,25 @@ export type AppRouter = typeof appRouter;
 
 // server/main.ts
 import { createHandler } from 'ts-bin-rpc/server';
-import { serverCodecs } from './generated/server';
+import { procedures } from './tbr.gen.ts';
 
 const handler = createHandler(appRouter, {
-  codecs: serverCodecs,
+  procedures,
   prefix: '/rpc',
   context: (req) => ({ db, user: auth(req) }),
 });
 // Bun.serve({ fetch: handler }) / Deno.serve(handler) / export default { fetch: handler }
+// Node: http.createServer(toNodeListener(handler)) из 'ts-bin-rpc/node'
 ```
 
 **Клиент**
 
 ```ts
 import { createClient } from 'ts-bin-rpc/client';
-import { clientCodecs } from '../server/generated/client';
+import { procedures } from '../server/tbr.gen.ts';
 import type { AppRouter } from '../server/router';
 
-const api = createClient<AppRouter>({ url: '/rpc', codecs: clientCodecs });
+const api = createClient<AppRouter>({ url: '/rpc', procedures });
 
 const user = await api.user.get({ id: 1 });   // ctx в сигнатуре клиента нет; user: User,
                                               // строки декодируются при первом чтении
@@ -100,9 +101,9 @@ uplot.setData([s.t, s.value]);                 // Float64Array/Float32Array по
 **Кодоген**
 
 ```sh
-tbr generate --watch     # src/server/router.ts#appRouter → src/server/generated/{client,server}.ts
+tbr generate             # src/server/router.ts#appRouter → tbr.lock.json, src/server/tbr.gen.ts
 tbr check                # CI: lockfile совместим с текущими типами
-tbr decode resp.bin --proc user.get --response
+tbr decode resp.bin --proc user.get    # --input для тела запроса, --type User для объекта
 ```
 
 ## 3. Архитектура
@@ -218,6 +219,11 @@ export type u8  = number & { readonly [tbr]?: 'u8' };
 
 ## 7. Сгенерированный код
 
+*Состояние на фазу 3:* генерируется один файл `tbr.gen.ts`, его импортируют и клиент, и сервер.
+Разделение на клиентскую и серверную части, описанное ниже, сделаем вместе с бюджетом бандла
+(ROADMAP 4.5). Views и `toPlain` устроены так, как описано; `decode` на сервере — это `toPlain`
+поверх верифицированного view.
+
 **Клиент** (`generated/client.ts`): кодировщики входов, views выходов, верификаторы выходов
 (подключаются в dev), таблица процедур.
 
@@ -318,34 +324,53 @@ class UserView implements User {          // implements ловит устаре�
    не пишет breaking-изменения без `--allow-breaking`.
 
 **Устаревший кодоген ловится тремя слоями:**
-1. `--watch` перегенерирует за доли секунды.
-2. **На уровне типов:** сгенерированный код ссылается на исходные типы через `import type` и
-   indexed access (`Parameters<AppRouter['user']['get']>[0]`). Views делают `implements User`, плюс
-   проверка точного набора ключей и точного набора процедур. Добавил поле или процедуру и не
-   перегенерировал — получаешь ошибку TS с подсказкой `run tbr generate`.
-3. **В рантайме (dev):** клиент шлёт хеш схемы в заголовке `x-tbr-schema`. При расхождении сервер в
-   dev отвечает понятной ошибкой, в production пишет предупреждение в лог и полагается на правила
-   эволюции.
+1. `--watch` перегенерирует за доли секунды (фаза 4).
+2. **На уровне типов:** сгенерированный файл импортирует роутер через `import type` и экспортирует
+   тип `Contract`: для каждой процедуры сгенерированные типы входа и выхода должны быть взаимно
+   присваиваемы с `InputOf<Router, 'user.get'>` и `OutputOf<…>`, набор процедур — совпадать.
+   Интерфейсы в сгенерированном коде используют бренды (`u32`), поэтому ловится и смена `u32` на
+   `u16`. Изменил тип и не перегенерировал — ошибка TS вида
+   `Type 'StaleCodegen_RunTbrGenerate<"user.get output">' does not satisfy the constraint 'true'`.
+3. **В рантайме:** сервер при старте сверяет роутер с таблицей процедур. Клиент шлёт хеш контракта
+   процедуры (lockfile-записи всех достижимых из неё типов) в заголовке `x-tbr-schema`. При
+   расхождении сервер по умолчанию пишет предупреждение (раз на процедуру) и обслуживает вызов:
+   безопасные изменения совместимы, а старые клиенты во время выкатки — норма. `schemaMismatch:
+   'error'` даёт `409 SCHEMA_MISMATCH`. Клиент с `debug: true` предупреждает о том же со своей
+   стороны.
 
 ## 10. Протокол (HTTP, alpha)
 
-- `POST {prefix}/{procedure}`, например `/rpc/user.get`. Имя процедуры остаётся в пути: это читаемо
+- `POST {prefix}/{procedure}`, например `/rpc/user.get`. Тело запроса пустое, если у процедуры нет
+  входа или вход опционален и не передан. Процедура без входа, но с контекстом —
+  `(_: void, ctx: Ctx)`. Имя процедуры остаётся в пути: это читаемо
   в Network tab, логах и роутинге CDN, а длина URL при HPACK ничего не стоит. Хеш-ID эндпоинтов из
   первоначального плана отброшен.
-- Тело — сообщение (§6). `Content-Type: application/vnd.tbr` (имя рабочее).
+- Тело — сообщение (§6). `Content-Type: application/vnd.tbr` (имя рабочее). Сервер отвечает `415`
+  на любой другой тип: HTML-форма или simple request с чужого сайта процедуру не вызовет, для
+  нашего типа браузер требует CORS preflight.
 - Ответ `200` — сообщение выхода. Ошибки — конверт ошибки с полями `code`, `message`, `data?` и
   HTTP-статусом:
 
   | Код | Статус |
   |---|---|
   | `BAD_INPUT` | 400 |
-  | `NOT_FOUND` | 404 |
   | `UNAUTHORIZED` | 401 |
-  | `SCHEMA_MISMATCH` | 409 |
+  | `FORBIDDEN` | 403 |
+  | `NOT_FOUND` | 404 |
+  | `METHOD_NOT_ALLOWED` | 405 |
+  | `CONFLICT`, `SCHEMA_MISMATCH` | 409 |
+  | `PAYLOAD_TOO_LARGE` | 413 |
+  | `UNSUPPORTED_MEDIA_TYPE` | 415 |
+  | `TOO_MANY_REQUESTS` | 429 |
   | `INTERNAL` | 500 |
+  | `BAD_RESPONSE` (только на клиенте: ответ не сообщение или не прошёл верификацию) | 502 |
 
-- Пользовательские ошибки: `throw new RpcError('FORBIDDEN', 'msg', data)` в хендлере. На клиенте
-  они превращаются в `RpcError` с тем же `code`.
+  Остальные коды — ошибки приложения, статус 400.
+
+- Пользовательские ошибки: `throw new RpcError('FORBIDDEN', 'msg', data)` в хендлере, `data`
+  уходит JSON-ом. На клиенте они превращаются в `RpcError` с тем же `code`, `status` и `data`.
+  Остальные исключения клиент видит как `500 INTERNAL` без деталей, сервер передаёт их в
+  `onError`.
 - Сжатие отдаётся HTTP-слою: `Content-Encoding` ставит сервер или CDN, браузер распаковывает сам.
 - Пост-alpha: GET для идемпотентных запросов (кэш), батчинг, WebSocket-транспорт со смешанными
   кадрами и snapshot + delta.

@@ -15,7 +15,7 @@ const src = new Ts71Source(path.join(dir, 'tsconfig.json'));
 try {
   const { schema, errors } = buildSchema(src, path.join(dir, 'router.ts'), 'appRouter');
   if (errors.length) throw new Error(errors.map((e) => e.message).join('\n'));
-  const code = emitCodecs(schema, updateLock(emptyLock(), schema).lock, './runtime.mjs');
+  const code = emitCodecs(schema, updateLock(emptyLock(), schema).lock, { runtime: './runtime.mjs' });
   fs.writeFileSync(path.join(out, 'codec.mjs'), stripTypeScriptTypes(code));
   const runtime = fs.readFileSync(path.join(dir, '../../packages/ts-bin-rpc/src/runtime.ts'), 'utf8');
   fs.writeFileSync(path.join(out, 'runtime.mjs'), stripTypeScriptTypes(runtime));

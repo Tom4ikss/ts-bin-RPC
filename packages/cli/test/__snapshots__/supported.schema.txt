@@ -5,6 +5,7 @@ procedure shapes: () -> union Shape[]
 procedure user.get: object user.get:input -> object User
 procedure user.list: object user.list:input? -> object Page<User>
 procedure user.rename: object user.rename:input -> void
+procedure whoami: () -> string
 
 object Address {
   city: string

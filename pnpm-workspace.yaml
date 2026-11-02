@@ -3,3 +3,4 @@ packages:
   - bench
   - spikes/*
   - playground
+  - e2e

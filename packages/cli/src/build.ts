@@ -52,7 +52,9 @@ class Builder {
     let input: IRType | null = null;
     let inputOptional = false;
     const p0 = entry.params[0];
-    if (p0) {
+    const k0 = p0 && this.src.describe(p0.type).k;
+    // `(_: void, ctx)`: a procedure that needs ctx but takes no input.
+    if (p0 && k0 !== 'void' && k0 !== 'undefined') {
       const r = this.slot(p0.type, { path: `${entry.path} → input`, anon: `${entry.path}:input`, location: entry.location });
       if (r?.nullable) this.fail(ctx, 'a procedure input cannot be null');
       input = r?.type ?? null;

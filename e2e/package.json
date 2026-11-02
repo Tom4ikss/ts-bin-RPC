@@ -1,0 +1,19 @@
+{
+  "name": "tbr-e2e",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "gen": "tbr generate --router src/router.ts",
+    "typecheck": "tbr generate --router src/router.ts && tsc -p tsconfig.json",
+    "test": "tbr generate --router src/router.ts && vitest run",
+    "serve": "node --experimental-strip-types --no-warnings src/serve.ts"
+  },
+  "dependencies": {
+    "ts-bin-rpc": "workspace:*"
+  },
+  "devDependencies": {
+    "playwright": "^1.64.1",
+    "ts-bin-rpc-cli": "workspace:*",
+    "typescript": "7.1.0-beta"
+  }
+}

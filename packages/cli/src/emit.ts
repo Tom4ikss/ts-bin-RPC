@@ -1,6 +1,7 @@
 // Emits one TypeScript module with a specialized encoder, view, verifier and plain-copy function per
 // type of the schema. Layout: docs/FORMAT.md; wire IDs, enum indices and union tags come from the lockfile.
-import { signature, type Field, type IRType, type ScalarKind, type Schema } from './ir.ts';
+import { createHash } from 'node:crypto';
+import { signature, type Field, type IRType, type Procedure, type ScalarKind, type Schema } from './ir.ts';
 import type { Lock } from './lock.ts';
 
 interface Scalar {
@@ -18,16 +19,16 @@ interface Scalar {
 const num = (x: string) => x;
 const S: Record<ScalarKind, Scalar> = {
   bool: { size: 1, ctor: 'Uint8Array', ts: 'boolean', write: 'bool', name: 'boolean', cond: (x) => `${x} !== true && ${x} !== false`, conv: (x) => `${x} ? 1 : 0`, elem: (x) => `${x} !== 0`, slot: (p) => `r.bytes[${p}] !== 0` },
-  u8: { size: 1, ctor: 'Uint8Array', ts: 'number', write: 'u8', name: 'u8', cond: (x) => `(${x} & 0xff) !== ${x}`, conv: num, elem: num, slot: (p) => `r.bytes[${p}]` },
-  i8: { size: 1, ctor: 'Int8Array', ts: 'number', write: 'i8', name: 'i8', cond: (x) => `(${x} << 24) >> 24 !== ${x}`, conv: num, elem: num, slot: (p) => `r.dv.getInt8(${p})` },
-  u16: { size: 2, ctor: 'Uint16Array', ts: 'number', write: 'u16', name: 'u16', cond: (x) => `(${x} & 0xffff) !== ${x}`, conv: num, elem: num, slot: (p) => `r.dv.getUint16(${p}, true)` },
-  i16: { size: 2, ctor: 'Int16Array', ts: 'number', write: 'i16', name: 'i16', cond: (x) => `(${x} << 16) >> 16 !== ${x}`, conv: num, elem: num, slot: (p) => `r.dv.getInt16(${p}, true)` },
-  u32: { size: 4, ctor: 'Uint32Array', ts: 'number', write: 'u32', name: 'u32', cond: (x) => `${x} >>> 0 !== ${x}`, conv: num, elem: num, slot: (p) => `r.dv.getUint32(${p}, true)` },
-  i32: { size: 4, ctor: 'Int32Array', ts: 'number', write: 'i32', name: 'i32', cond: (x) => `(${x} | 0) !== ${x}`, conv: num, elem: num, slot: (p) => `r.dv.getInt32(${p}, true)` },
-  f32: { size: 4, ctor: 'Float32Array', ts: 'number', write: 'f32', name: 'number', cond: (x) => `typeof ${x} !== 'number'`, conv: num, elem: num, slot: (p) => `r.dv.getFloat32(${p}, true)` },
+  u8: { size: 1, ctor: 'Uint8Array', ts: 'u8', write: 'u8', name: 'u8', cond: (x) => `(${x} & 0xff) !== ${x}`, conv: num, elem: num, slot: (p) => `r.bytes[${p}]` },
+  i8: { size: 1, ctor: 'Int8Array', ts: 'i8', write: 'i8', name: 'i8', cond: (x) => `(${x} << 24) >> 24 !== ${x}`, conv: num, elem: num, slot: (p) => `r.dv.getInt8(${p})` },
+  u16: { size: 2, ctor: 'Uint16Array', ts: 'u16', write: 'u16', name: 'u16', cond: (x) => `(${x} & 0xffff) !== ${x}`, conv: num, elem: num, slot: (p) => `r.dv.getUint16(${p}, true)` },
+  i16: { size: 2, ctor: 'Int16Array', ts: 'i16', write: 'i16', name: 'i16', cond: (x) => `(${x} << 16) >> 16 !== ${x}`, conv: num, elem: num, slot: (p) => `r.dv.getInt16(${p}, true)` },
+  u32: { size: 4, ctor: 'Uint32Array', ts: 'u32', write: 'u32', name: 'u32', cond: (x) => `${x} >>> 0 !== ${x}`, conv: num, elem: num, slot: (p) => `r.dv.getUint32(${p}, true)` },
+  i32: { size: 4, ctor: 'Int32Array', ts: 'i32', write: 'i32', name: 'i32', cond: (x) => `(${x} | 0) !== ${x}`, conv: num, elem: num, slot: (p) => `r.dv.getInt32(${p}, true)` },
+  f32: { size: 4, ctor: 'Float32Array', ts: 'f32', write: 'f32', name: 'number', cond: (x) => `typeof ${x} !== 'number'`, conv: num, elem: num, slot: (p) => `r.dv.getFloat32(${p}, true)` },
   f64: { size: 8, ctor: 'Float64Array', ts: 'number', write: 'f64', name: 'number', cond: (x) => `typeof ${x} !== 'number'`, conv: num, elem: num, slot: (p) => `r.dv.getFloat64(${p}, true)` },
-  u64: { size: 8, ctor: 'BigUint64Array', ts: 'bigint', write: 'u64', name: 'u64', cond: (x) => `typeof ${x} !== 'bigint' || BigInt.asUintN(64, ${x}) !== ${x}`, conv: num, elem: num, slot: (p) => `r.dv.getBigUint64(${p}, true)` },
-  i64: { size: 8, ctor: 'BigInt64Array', ts: 'bigint', write: 'i64', name: 'i64', cond: (x) => `typeof ${x} !== 'bigint' || BigInt.asIntN(64, ${x}) !== ${x}`, conv: num, elem: num, slot: (p) => `r.dv.getBigInt64(${p}, true)` },
+  u64: { size: 8, ctor: 'BigUint64Array', ts: 'u64', write: 'u64', name: 'u64', cond: (x) => `typeof ${x} !== 'bigint' || BigInt.asUintN(64, ${x}) !== ${x}`, conv: num, elem: num, slot: (p) => `r.dv.getBigUint64(${p}, true)` },
+  i64: { size: 8, ctor: 'BigInt64Array', ts: 'i64', write: 'i64', name: 'i64', cond: (x) => `typeof ${x} !== 'bigint' || BigInt.asIntN(64, ${x}) !== ${x}`, conv: num, elem: num, slot: (p) => `r.dv.getBigInt64(${p}, true)` },
   timestamp: { size: 8, ctor: 'Float64Array', ts: 'Date', write: 'ts', name: 'Date', cond: (x) => `!(${x} instanceof Date)`, conv: (x) => `${x}.getTime()`, elem: (x) => `new Date(${x})`, slot: (p) => `new Date(r.dv.getFloat64(${p}, true))` },
 };
 
@@ -53,12 +54,22 @@ interface WireField {
   bit: number; // vtable mask bit, -1 when always present
 }
 
-export function emitCodecs(schema: Schema, lock: Lock, runtime = 'ts-bin-rpc/runtime'): string {
-  return new Emitter(schema, lock).emit(runtime);
+export interface EmitOptions {
+  /** Module the generated code imports the runtime from. */
+  runtime?: string;
+  /** The router, imported as a type to check that generated types still match it (DESIGN §9). */
+  router?: { from: string; name: string };
 }
+
+export function emitCodecs(schema: Schema, lock: Lock, options: EmitOptions = {}): string {
+  return new Emitter(schema, lock).emit(options.runtime ?? 'ts-bin-rpc/runtime', options.router);
+}
+
+const BRANDS = new Set(['u8', 'i8', 'u16', 'i16', 'u32', 'i32', 'f32', 'u64', 'i64']);
 
 class Emitter {
   private out: string[] = [];
+  private brands = new Set<string>();
   private done = new Set<string>();
   private ids = new Map<string, string>();
   private taken = new Set<string>();
@@ -73,14 +84,7 @@ class Emitter {
     if (this.objectIndex.size > VT_KEY_STRIDE) throw new Error(`more than ${VT_KEY_STRIDE} object types`);
   }
 
-  emit(runtime: string): string {
-    const head = [
-      '// Generated by tbr. Do not edit.',
-      '/* eslint-disable */',
-      `import { align, bad, bit, ranks, codec, Writer, Reader, Check, StrCol, NumCol, BoolCol, DateCol, EnumCol, ConstCol, ListCol, TypedListCol, UNSET, INSPECT, VerifyError } from ${lit(runtime)};`,
-      `import type { Codec, Col } from ${lit(runtime)};`,
-      '',
-    ];
+  emit(runtime: string, router?: { from: string; name: string }): string {
     for (const name of Object.keys(this.schema.enums).sort()) this.enumDecl(name);
     for (const name of Object.keys(this.schema.unions).sort()) this.unionDecl(name);
     for (const name of Object.keys(this.schema.objects).sort()) this.objectDecl(name);
@@ -97,14 +101,82 @@ class Emitter {
       return k;
     };
     const procs = this.schema.procedures.map(
-      (p) => `  ${lit(p.path)}: { input: ${p.input ? root(p.input) : 'null'}, inputOptional: ${p.inputOptional}, output: ${p.output ? root(p.output) : 'null'} },`,
+      (p) =>
+        `  ${lit(p.path)}: { input: ${p.input ? root(p.input) : 'null'}, inputOptional: ${p.inputOptional}, output: ${p.output ? root(p.output) : 'null'}, hash: ${lit(this.contractHash(p))} },`,
     );
     const named = Object.keys(this.schema.objects).sort().map((n) => `  ${lit(n)}: ${root({ kind: 'object', name: n })},`);
     this.out.push(
       `export const procedures = {\n${procs.join('\n')}\n} as const;\n`,
       `export const codecs: Record<string, Codec<any>> = {\n${named.join('\n')}\n};\n`,
     );
+    if (router) this.contract();
+
+    const types = ['Codec', 'Col', ...[...this.brands].sort()];
+    if (router) types.push('Expect', 'Same', 'InputOf', 'InputOptional', 'OutputOf', 'ProcedurePath');
+    const head = [
+      '// Generated by tbr. Do not edit.',
+      '/* eslint-disable */',
+      `import { align, bad, bit, ranks, codec, Writer, Reader, Check, StrCol, NumCol, BoolCol, DateCol, EnumCol, ConstCol, ListCol, TypedListCol, UNSET, INSPECT, PLAIN, VerifyError } from ${lit(runtime)};`,
+      `import type { ${types.join(', ')} } from ${lit(runtime)};`,
+      ...(router ? [`import type { ${router.name} as tbr_router } from ${lit(router.from)};`] : []),
+      '',
+    ];
     return head.join('\n') + '\n' + this.out.join('\n');
+  }
+
+  /** Type-level check that generated types still accept the same values as the router's (DESIGN §9). */
+  private contract() {
+    const L = [
+      'type TbrRouter = typeof tbr_router;',
+      '',
+      '/** Fails to compile when the router changed after `tbr generate`. */',
+      'export type Contract = [',
+      '  Expect<Same<keyof typeof procedures, ProcedurePath<TbrRouter>, "procedure list">>,',
+    ];
+    for (const p of this.schema.procedures) {
+      const P = lit(p.path);
+      if (p.input) {
+        L.push(`  Expect<Same<${this.ts(p.input)}, InputOf<TbrRouter, ${P}>, ${lit(`${p.path} input`)}>>,`);
+        L.push(`  Expect<Same<${p.inputOptional}, InputOptional<TbrRouter, ${P}>, ${lit(`${p.path} input optionality`)}>>,`);
+      } else L.push(`  Expect<Same<never, InputOf<TbrRouter, ${P}>, ${lit(`${p.path} input`)}>>,`);
+      if (p.output) L.push(`  Expect<Same<${this.ts(p.output)}, OutputOf<TbrRouter, ${P}>, ${lit(`${p.path} output`)}>>,`);
+      else L.push(`  Expect<Same<true, [OutputOf<TbrRouter, ${P}>] extends [void | undefined] ? true : false, ${lit(`${p.path} output`)}>>,`);
+    }
+    L.push('];', '');
+    this.out.push(L.join('\n'));
+  }
+
+  /** Hash of the lockfile entries a procedure reaches: changes whenever its wire contract may have. */
+  private contractHash(p: Procedure): string {
+    const objects = new Set<string>(), enums = new Set<string>(), unions = new Set<string>();
+    const visit = (t: IRType | null): void => {
+      if (!t) return;
+      switch (t.kind) {
+        case 'array': return visit(t.element);
+        case 'enum': enums.add(t.name); return;
+        case 'union':
+          if (unions.has(t.name)) return;
+          unions.add(t.name);
+          for (const v of this.schema.unions[t.name].variants) visit({ kind: 'object', name: v.object });
+          return;
+        case 'object':
+          if (objects.has(t.name)) return;
+          objects.add(t.name);
+          for (const f of this.schema.objects[t.name].fields) visit(f.type);
+          return;
+      }
+    };
+    visit(p.input);
+    visit(p.output);
+    const pick = <T>(names: Set<string>, all: Record<string, T>) => Object.fromEntries([...names].sort().map((n) => [n, all[n]]));
+    const text = JSON.stringify({
+      procedure: this.lock.procedures[p.path],
+      inputOptional: p.inputOptional,
+      objects: pick(objects, this.lock.objects),
+      enums: pick(enums, this.lock.enums),
+      unions: pick(unions, this.lock.unions),
+    });
+    return createHash('sha256').update(text).digest('base64url').slice(0, 16);
   }
 
   // ------------------------------------------------------------------------------------------ naming
@@ -136,7 +208,11 @@ class Emitter {
 
   private ts(t: IRType): string {
     switch (t.kind) {
-      case 'scalar': return S[t.scalar].ts;
+      case 'scalar': {
+        const ts = S[t.scalar].ts;
+        if (BRANDS.has(ts)) this.brands.add(ts);
+        return ts;
+      }
       case 'string': return 'string';
       case 'bytes': return 'Uint8Array';
       case 'typedArray': return t.array;
@@ -489,7 +565,7 @@ class Emitter {
       else body.push(`    return ${expr};`);
       L.push(`  get ${prop(f.name)}(): ${this.fieldTs(f)} {`, ...body, '  }');
     }
-    L.push(`  toJSON(): ${T} { return p_${x}(this); }`, `  [INSPECT](): ${T} { return p_${x}(this); }`, '}', '');
+    L.push(`  toJSON(): ${T} { return p_${x}(this); }`, `  [PLAIN](): ${T} { return p_${x}(this); }`, `  [INSPECT](): ${T} { return p_${x}(this); }`, '}', '');
 
     // Table verifier
     L.push(`function vT_${x}(c: Check, o: number, d: number): void {`, '  const vt = c.table(o, d);', '  let p = 0;');
@@ -636,7 +712,7 @@ class Emitter {
       if (f.nullable) L.push(`    if (c.n${k} >= 0 && bit(c.r.bytes, c.n${k}, i)) return null;`);
       L.push(`    return ${expr};`, '  }');
     }
-    L.push(`  toJSON(): ${T} { return p_${x}(this); }`, `  [INSPECT](): ${T} { return p_${x}(this); }`, '}', '');
+    L.push(`  toJSON(): ${T} { return p_${x}(this); }`, `  [PLAIN](): ${T} { return p_${x}(this); }`, `  [INSPECT](): ${T} { return p_${x}(this); }`, '}', '');
 
     // Verifier
     L.push(
@@ -723,7 +799,7 @@ class Emitter {
     if (fx) {
       const name = `eB_${this.elem(t)}`;
       this.once(name, () => [
-        `function ${name}(w: Writer, a: ArrayLike<${fx.ts}>, n: number): number {`,
+        `function ${name}(w: Writer, a: ArrayLike<${this.ts(t)}>, n: number): number {`,
         `  const o = w.alloc(n * ${fx.size}, ${fx.size});`,
         `  const t = new ${fx.ctor}(w.buf.buffer, o, n);`,
         t.kind === 'enum'
@@ -799,7 +875,7 @@ class Emitter {
         const typed = `${r}.typed(${s.ctor}, ${b}, ${n})`;
         if (t.scalar === 'bool') return `new BoolCol(${typed})`;
         if (t.scalar === 'timestamp') return `new DateCol(${typed})`;
-        return `new NumCol<${s.ts}>(${typed})`;
+        return `new NumCol<${this.ts(t)}>(${typed})`;
       }
       case 'enum': {
         const fx = this.fixed(t)!;
