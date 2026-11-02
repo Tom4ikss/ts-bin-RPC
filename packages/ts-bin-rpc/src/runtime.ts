@@ -20,6 +20,8 @@ export const DEFAULT_LIMITS: Limits = { maxBytes: 64 * 1024 * 1024, maxDepth: 64
 
 export class EncodeError extends TypeError {
   override name = 'EncodeError';
+  /** Where in the value: `[17].manager.age`; empty for the value itself. Set by Codec.encode. */
+  path?: string;
 }
 
 export class VerifyError extends Error {
@@ -163,27 +165,27 @@ export class Writer {
     this.buf[at] = v ? 1 : 0;
   }
   u8(at: number, v: number) {
-    if ((v & 0xff) !== v) bad('u8', v);
+    if (typeof v !== 'number' || (v & 0xff) !== v) bad('u8', v);
     this.buf[at] = v;
   }
   i8(at: number, v: number) {
-    if ((v << 24) >> 24 !== v) bad('i8', v);
+    if (typeof v !== 'number' || (v << 24) >> 24 !== v) bad('i8', v);
     this.dv.setInt8(at, v);
   }
   u16(at: number, v: number) {
-    if ((v & 0xffff) !== v) bad('u16', v);
+    if (typeof v !== 'number' || (v & 0xffff) !== v) bad('u16', v);
     this.dv.setUint16(at, v, true);
   }
   i16(at: number, v: number) {
-    if ((v << 16) >> 16 !== v) bad('i16', v);
+    if (typeof v !== 'number' || (v << 16) >> 16 !== v) bad('i16', v);
     this.dv.setInt16(at, v, true);
   }
   u32(at: number, v: number) {
-    if (v >>> 0 !== v) bad('u32', v);
+    if (typeof v !== 'number' || v >>> 0 !== v) bad('u32', v);
     this.dv.setUint32(at, v, true);
   }
   i32(at: number, v: number) {
-    if ((v | 0) !== v) bad('i32', v);
+    if (typeof v !== 'number' || (v | 0) !== v) bad('i32', v);
     this.dv.setInt32(at, v, true);
   }
   f32(at: number, v: number) {
@@ -738,7 +740,114 @@ export interface Codec<T> {
   verify(bytes: Uint8Array, limits?: Partial<Limits>): void;
 }
 
+// ------------------------------------------------------------------------------------ type descriptors
+
+/** The schema as data, emitted next to the codecs. Only read after an encode fails, to find where. */
+export type TypeDesc =
+  | { kind: 'scalar'; scalar: string }
+  | { kind: 'string' }
+  | { kind: 'bytes' }
+  | { kind: 'typedArray'; array: string }
+  | { kind: 'const'; value: string | number | boolean }
+  | { kind: 'enum'; name: string }
+  | { kind: 'array'; element: TypeDesc }
+  | { kind: 'object'; name: string }
+  | { kind: 'union'; name: string };
+
+export interface SchemaDesc {
+  objects: Record<string, readonly { name: string; type: TypeDesc; optional: boolean; nullable: boolean }[]>;
+  enums: Record<string, readonly string[]>;
+  unions: Record<string, { discriminant: string; variants: Record<string, string> }>;
+}
+
+export interface Mismatch {
+  path: string;
+  expected: string;
+  got: unknown;
+}
+
+const SCALAR_OK: Record<string, (v: any) => boolean> = {
+  bool: (v) => v === true || v === false,
+  u8: (v) => typeof v === 'number' && (v & 0xff) === v,
+  i8: (v) => typeof v === 'number' && (v << 24) >> 24 === v,
+  u16: (v) => typeof v === 'number' && (v & 0xffff) === v,
+  i16: (v) => typeof v === 'number' && (v << 16) >> 16 === v,
+  u32: (v) => typeof v === 'number' && v >>> 0 === v,
+  i32: (v) => typeof v === 'number' && (v | 0) === v,
+  f32: (v) => typeof v === 'number',
+  f64: (v) => typeof v === 'number',
+  u64: (v) => typeof v === 'bigint' && BigInt.asUintN(64, v) === v,
+  i64: (v) => typeof v === 'bigint' && BigInt.asIntN(64, v) === v,
+  timestamp: (v) => v instanceof Date,
+};
+const SCALAR_NAME: Record<string, string> = { bool: 'boolean', f32: 'number', f64: 'number', timestamp: 'Date' };
+
+/**
+ * First value the encoder rejects, with its path; mirrors the checks of generated encoders. Null when
+ * the value is fine, which means the descriptor and the encoder disagree.
+ */
+export function locate(schema: SchemaDesc, type: TypeDesc, value: unknown, path = ''): Mismatch | null {
+  const miss = (expected: string, got: unknown = value): Mismatch => ({ path, expected, got });
+  switch (type.kind) {
+    case 'scalar':
+      return SCALAR_OK[type.scalar](value) ? null : miss(SCALAR_NAME[type.scalar] ?? type.scalar);
+    case 'string':
+      if (typeof value !== 'string') return miss('string');
+      return isAscii(value) || value.isWellFormed() ? null : miss('a string without lone surrogates');
+    case 'bytes':
+      return value instanceof Uint8Array ? null : miss('Uint8Array');
+    case 'typedArray':
+      return value instanceof (globalThis as unknown as Record<string, TypedCtor>)[type.array] ? null : miss(type.array);
+    case 'const':
+      return value === type.value ? null : miss(JSON.stringify(type.value));
+    case 'enum': {
+      const values = schema.enums[type.name];
+      return values.includes(value as string) ? null : miss(`${type.name} (${values.map((v) => JSON.stringify(v)).join(' | ')})`);
+    }
+    case 'array': {
+      if (!Array.isArray(value)) return miss('array');
+      for (let i = 0; i < value.length; i++) {
+        const m = locate(schema, type.element, value[i], `${path}[${i}]`);
+        if (m) return m;
+      }
+      return null;
+    }
+    case 'object': {
+      if (typeof value !== 'object' || value === null) return miss(type.name);
+      for (const f of schema.objects[type.name]) {
+        const v = (value as Record<string, unknown>)[f.name];
+        if (v == null && (f.optional || f.nullable)) continue;
+        const m = locate(schema, f.type, v, path ? `${path}.${f.name}` : f.name);
+        if (m) return m;
+      }
+      return null;
+    }
+    case 'union': {
+      if (typeof value !== 'object' || value === null) return miss(type.name);
+      const u = schema.unions[type.name];
+      const tag = (value as Record<string, unknown>)[u.discriminant];
+      const object = typeof tag === 'string' ? u.variants[tag] : undefined;
+      if (object === undefined) {
+        const at = path ? `${path}.${u.discriminant}` : u.discriminant;
+        return { path: at, expected: `${type.name} variant (${Object.keys(u.variants).map((t) => JSON.stringify(t)).join(' | ')})`, got: tag };
+      }
+      return locate(schema, { kind: 'object', name: object }, value, path);
+    }
+  }
+}
+
+/** Rebuilds an encoder error with the path of the offending value. */
+function explain(e: EncodeError, schema: SchemaDesc, type: TypeDesc, value: unknown): EncodeError {
+  const m = locate(schema, type, value);
+  if (!m) return e;
+  const out = new EncodeError(`${m.path ? `at ${m.path}: ` : ''}expected ${m.expected}, got ${show(m.got)}`);
+  out.path = m.path;
+  return out;
+}
+
 export interface CodecDef<T> {
+  /** For error messages: where in the value an encode failed. */
+  desc?: { schema: SchemaDesc; type: TypeDesc };
   strings: boolean;
   size: number;
   align: number;
@@ -768,7 +877,11 @@ export function codec<T>(d: CodecDef<T>): Codec<T> {
     encode(value) {
       const w = new Writer(d.strings, capacity);
       const at = w.alloc(d.size, d.align);
-      d.write(w, at, value);
+      try {
+        d.write(w, at, value);
+      } catch (e) {
+        throw e instanceof EncodeError && d.desc ? explain(e, d.desc.schema, d.desc.type, value) : e;
+      }
       const bytes = w.finish(at);
       capacity = Math.max(256, bytes.length + (bytes.length >>> 3));
       return bytes;

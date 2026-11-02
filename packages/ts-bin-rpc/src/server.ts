@@ -1,6 +1,6 @@
 // createHandler: a Fetch API handler, `(Request) => Promise<Response>`, for Bun.serve, Deno.serve,
 // Cloudflare Workers, or Node through `ts-bin-rpc/node`.
-import { DEFAULT_LIMITS, encodeError, VerifyError, type Limits } from './runtime.ts';
+import { DEFAULT_LIMITS, EncodeError, encodeError, VerifyError, type Limits } from './runtime.ts';
 import { CONTENT_TYPE, RpcError, SCHEMA_HEADER, type ProcedureEntry, type Procedures } from './rpc.ts';
 import type { AnyProcedure, AnyRouter } from './router.ts';
 
@@ -27,7 +27,11 @@ export interface HandlerOptions<R> {
    */
   schemaMismatch?: 'warn' | 'error' | 'ignore';
   limits?: Partial<Limits>;
-  /** Called with errors other than RpcError; the client gets `500 INTERNAL` without details. Default: console.error. */
+  /**
+   * Called with errors other than RpcError; the client gets `500 INTERNAL` without details. An output
+   * that does not match its type arrives as EncodeError with `path`; the client gets `500 BAD_OUTPUT`.
+   * Default: console.error.
+   */
   onError?: (error: unknown, info: { path: string; request: Request }) => void;
 }
 
@@ -101,7 +105,18 @@ export function createHandler<R extends AnyRouter>(router: R, options: HandlerOp
 
       const ctx = context ? await context(request) : undefined;
       const result = await route.fn.call(route.self, input, ctx);
-      const body = proc.output ? proc.output.encode(result) : new Uint8Array(0);
+      let body = new Uint8Array(0);
+      if (proc.output) {
+        try {
+          body = proc.output.encode(result);
+        } catch (e) {
+          if (!(e instanceof EncodeError)) throw e;
+          // The procedure broke its own contract (TS lets `300` into a u8): a server bug, so 5xx, but
+          // a code of its own so that monitoring tells it apart from crashes.
+          onError(e, { path, request });
+          return fail(new RpcError('BAD_OUTPUT', 'the procedure returned a value that does not match its declared type'), {}, proc);
+        }
+      }
       return new Response(body, { status: 200, headers: headers(proc) });
     } catch (e) {
       if (e instanceof RpcError) return fail(e, {}, proc);
@@ -121,5 +136,6 @@ function fail(e: RpcError, extra: Record<string, string> = {}, proc?: ProcedureE
 }
 
 function defaultOnError(error: unknown, info: { path: string }) {
-  console.error(`ts-bin-rpc: procedure '${info.path}' failed:`, error);
+  if (error instanceof EncodeError) console.error(`ts-bin-rpc: procedure '${info.path}' returned an invalid value ${error.message}`);
+  else console.error(`ts-bin-rpc: procedure '${info.path}' failed:`, error);
 }

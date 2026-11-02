@@ -21,6 +21,16 @@ describe('createHandler', () => {
     await expect(client(via(handler)).whoami()).rejects.toMatchObject({ code: 'SCHEMA_MISMATCH', status: 409 });
   });
 
+  it('answers 500 BAD_OUTPUT when a procedure breaks its own types, with the path for onError', async () => {
+    const onError = vi.fn();
+    const broken = { ...appRouter, user: { ...appRouter.user, list: async () => [{ ...(await appRouter.user.get({ id: 1 })), id: -5 }] } };
+    const handler = createHandler(broken, { procedures, prefix: '/rpc', onError });
+    const e = await client(via(handler)).user.list().catch((x: unknown) => x);
+    expect(e).toMatchObject({ code: 'BAD_OUTPUT', status: 500, message: 'the procedure returned a value that does not match its declared type' });
+    expect(onError.mock.calls[0][0]).toMatchObject({ name: 'EncodeError', path: '[0].id', message: 'at [0].id: expected u32, got -5' });
+    expect(onError.mock.calls[0][1].path).toBe('user.list');
+  });
+
   it('limits the request size', async () => {
     const handler = createHandler(appRouter, { procedures, prefix: '/rpc', limits: { maxBytes: 64 } });
     await expect(client(via(handler)).echo({ text: 'x'.repeat(100), bytes: new Uint8Array() })).rejects.toMatchObject({ code: 'PAYLOAD_TOO_LARGE', status: 413 });

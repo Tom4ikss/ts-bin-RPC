@@ -5,7 +5,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { signature, type IRType } from '../src/ir.ts';
 import { arbitraries } from './arbitrary.ts';
 import { generate, type Generated } from './codegen.ts';
-import { VerifyError } from 'ts-bin-rpc/runtime';
+import { EncodeError, VerifyError } from 'ts-bin-rpc/runtime';
 
 const fixtures = ['codec', 'supported'];
 const gen: Record<string, Generated> = {};
@@ -48,9 +48,50 @@ describe.each(fixtures)('%s: round trip', (fixture) => {
   });
 });
 
+/** Every slot of plain objects and arrays inside v, where a bad value can be planted. */
+function slots(v: unknown, out: [Record<string | number, unknown>, string | number][] = []) {
+  if (Array.isArray(v)) v.forEach((x, i) => (out.push([v as never, i]), slots(x, out)));
+  else if (v !== null && typeof v === 'object' && Object.getPrototypeOf(v) === Object.prototype) {
+    for (const [k, x] of Object.entries(v)) out.push([v as never, k]), slots(x, out);
+  }
+  return out;
+}
+
 function big(_k: string, v: unknown) {
   return typeof v === 'bigint' ? `${v}n` : v;
 }
+
+describe.each(fixtures)('%s: encoder errors', (fixture) => {
+  it('name the path of the bad value, and nothing else escapes the encoder', () => {
+    const arb = arbitraries(gen[fixture].schema);
+    const junk = fc.constantFrom<unknown>('junk', -1, 1.5, 256, 2 ** 40, null, undefined, {}, [], 2n ** 70n, 'a\ud800', true, new Date(0), new Uint8Array(1));
+    const g = gen[fixture];
+    const roots = [...g.schema.procedures.flatMap((p) => [
+      p.input && ([p.input, g.mod.procedures[p.path].input!] as const),
+      p.output && ([p.output, g.mod.procedures[p.path].output!] as const),
+    ])].filter((x) => !!x);
+    let caught = 0;
+    for (const [type, codec] of roots) {
+      fc.assert(
+        fc.property(arb(type), fc.nat(), junk, (value, pick, bad) => {
+          const all = slots(value);
+          if (!all.length) return;
+          const [holder, key] = all[pick % all.length];
+          holder[key] = bad;
+          try {
+            codec.encode(value);
+          } catch (e) {
+            caught++;
+            expect(e, signature(type)).toBeInstanceOf(EncodeError);
+            expect((e as EncodeError).path, `${signature(type)}: ${(e as Error).message}`).toBeTypeOf('string');
+          }
+        }),
+        { numRuns: 200 },
+      );
+    }
+    expect(caught).toBeGreaterThan(100);
+  });
+});
 
 describe.each(fixtures)('%s: verifier fuzzing', (fixture) => {
   // Mutated messages either fail verification with VerifyError, or verify and then read completely:
@@ -136,16 +177,26 @@ describe('limits and encoder checks', () => {
     });
     const k = gen.supported.mod.codecs['User'];
     expect(() => k.encode(user({}))).not.toThrow();
-    expect(() => k.encode(user({ id: -1 }))).toThrow('expected u32, got -1');
-    expect(() => k.encode(user({ id: 1.5 }))).toThrow('expected u32, got 1.5');
-    expect(() => k.encode(user({ age: 256 }))).toThrow('expected u8, got 256');
-    expect(() => k.encode(user({ balance: 2n ** 63n }))).toThrow('expected i64');
-    expect(() => k.encode(user({ name: 'a\ud800' }))).toThrow('lone surrogates');
-    expect(() => k.encode(user({ role: 'root' }))).toThrow('expected Role, got "root"');
-    expect(() => k.encode(user({ meta: undefined }))).toThrow('expected User.meta, got undefined');
-    expect(() => k.encode(user({ tags: 'a' }))).toThrow('expected array');
-    expect(() => k.encode(user({ createdAt: 0 }))).toThrow('expected Date, got 0');
-    expect(() => gen.supported.mod.procedures['shapes'].output!.encode([{ kind: 'hexagon' }])).toThrow('expected Shape variant, got "hexagon"');
+    const fails = (patch: object) => {
+      try {
+        k.encode(user(patch));
+      } catch (e) {
+        return `${(e as EncodeError).message} | ${(e as EncodeError).path}`;
+      }
+      return 'encoded';
+    };
+    expect(fails({ id: -1 })).toBe('at id: expected u32, got -1 | id');
+    expect(fails({ id: 1.5 })).toBe('at id: expected u32, got 1.5 | id');
+    expect(fails({ age: 256 })).toBe('at age: expected u8, got 256 | age');
+    expect(fails({ balance: 2n ** 63n })).toBe('at balance: expected i64, got 9223372036854775808n | balance');
+    expect(fails({ name: 'a\ud800' })).toBe('at name: expected a string without lone surrogates, got "a\\ud800" | name');
+    expect(fails({ role: 'root' })).toMatch(/^at role: expected Role \("[a-z]+"( \| "[a-z]+")*\), got "root" \| role$/);
+    expect(fails({ meta: undefined })).toBe('at meta: expected User.meta, got undefined | meta');
+    expect(fails({ tags: 'a' })).toBe('at tags: expected array, got "a" | tags');
+    expect(fails({ tags: ['a', 5] })).toBe('at tags[1]: expected string, got 5 | tags[1]');
+    expect(fails({ createdAt: 0 })).toBe('at createdAt: expected Date, got 0 | createdAt');
+    expect(fails({ manager: user({ manager: user({ age: 300 }) }) })).toBe('at manager.manager.age: expected u8, got 300 | manager.manager.age');
+    expect(() => gen.supported.mod.procedures['shapes'].output!.encode([{ kind: 'circle', r: 1 }, { kind: 'hexagon' }])).toThrow(/^at \[1\]\.kind: expected Shape variant \(.*\), got "hexagon"$/);
   });
 });
 

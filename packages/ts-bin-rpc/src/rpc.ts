@@ -19,6 +19,7 @@ export const STATUS: Readonly<Record<string, number>> = {
   UNSUPPORTED_MEDIA_TYPE: 415,
   TOO_MANY_REQUESTS: 429,
   INTERNAL: 500,
+  BAD_OUTPUT: 500,
   BAD_RESPONSE: 502,
 };
 
