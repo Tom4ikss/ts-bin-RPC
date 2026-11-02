@@ -8,13 +8,15 @@
     "ir": "tbr generate --dry-run --router src/router.ts",
     "check": "tbr check --router src/router.ts",
     "typecheck": "tbr generate --router src/router.ts && tsc -p tsconfig.json",
-    "demo": "node --experimental-strip-types --no-warnings src/demo.ts"
+    "serve": "node --watch --experimental-strip-types --no-warnings src/server.ts",
+    "client": "node --experimental-strip-types --no-warnings src/client.ts"
   },
   "dependencies": {
     "ts-bin-rpc": "workspace:*"
   },
   "devDependencies": {
     "ts-bin-rpc-cli": "workspace:*",
-    "typescript": "7.1.0-beta"
+    "typescript": "7.1.0-beta",
+    "@types/node": "22"
   }
 }
