@@ -3,6 +3,11 @@
 Feasibility benchmarks for a code-first TypeScript RPC with a binary, FlatBuffers-style
 wire format and lazy (zero-copy) reads, compared against `JSON.parse`.
 
+Project documents (in Russian):
+[design](docs/DESIGN.md), [roadmap to alpha](docs/ROADMAP.md),
+[landscape research](reports/Обзор%20TS%20RPC%20и%20бинарных%20форматов.md).
+`spikes/ts71` checks that the TypeScript 7.1 API exposes what the codegen needs.
+
 `codec.mjs` is a hand-written stand-in for what the code generator would emit:
 fixed-size structs, a UTF-8 string heap at the tail, getter-based views over a
 `DataView`, strings memoized on first read, and a struct-of-arrays layout for

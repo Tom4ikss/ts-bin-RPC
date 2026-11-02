@@ -1,0 +1,14 @@
+{
+  "name": "spike-ts71",
+  "private": true,
+  "type": "module",
+  "description": "Checks that the TypeScript 7.1 API exposes what the codegen needs: branded numbers, optionals, unions, routers of plain functions.",
+  "scripts": {
+    "types": "node spike.mjs",
+    "router": "node spike-router.mjs",
+    "client": "tsc -p fixture"
+  },
+  "dependencies": {
+    "typescript": "7.1.0-beta"
+  }
+}
