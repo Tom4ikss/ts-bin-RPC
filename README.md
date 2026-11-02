@@ -1,8 +1,9 @@
 # ts-bin-rpc
 
 Work in progress: a code-first TypeScript RPC with a binary wire format, lazy client-side views,
-zero-copy `TypedArray` columns and tRPC-like DX. Nothing is published yet; this repository currently
-holds the research, the design and the benchmarks that fixed the wire format.
+zero-copy `TypedArray` columns and tRPC-like DX. Nothing is published yet; this repository holds the
+research, the design, the benchmarks that fixed the wire format and the first part of the code
+generator.
 
 Project documents (in Russian):
 [design](docs/DESIGN.md), [wire format v0](docs/FORMAT.md), [roadmap to alpha](docs/ROADMAP.md),
@@ -17,7 +18,8 @@ Project documents (in Russian):
 | `bench/node/` | Node-only experiments: compression, realtime frame sizes, the original exploratory benches |
 | `bench/results/` | latest full runs |
 | `spikes/ts71/` | checks that the TypeScript 7.1 API exposes what the codegen needs |
-| `packages/` | the library, from phase 1 on |
+| `packages/cli/` | `tbr`: reads the router's TypeScript types through TypeScript 7.1, builds the schema IR, maintains `tbr.lock.json` |
+| `packages/ts-bin-rpc/` | the runtime package; for now only the numeric brands (`u8` … `i64`) |
 
 ## Running
 
@@ -31,6 +33,15 @@ node bench/run.mjs strings --runtimes=node,chromium
 node bench/node/compression.mjs      # needs the zstd CLI for the zstd column
 node bench/node/realtime-size.mjs
 pnpm spike:ts71
+pnpm test                            # codegen golden tests
+```
+
+The codegen so far stops at the schema and the lockfile (phase 1):
+
+```sh
+cd packages/cli
+pnpm tbr generate --dry-run --project test/fixtures/supported/tsconfig.json --router router.ts
+pnpm tbr check --project <tsconfig> --router src/router.ts#appRouter
 ```
 
 ## Results (phase 0)

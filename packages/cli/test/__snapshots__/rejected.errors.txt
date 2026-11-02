@@ -1,0 +1,21 @@
+router.ts:9:3  Bad.a: type 'unknown' is not serializable
+router.ts:10:3  Bad.b: type 'any' is not serializable
+router.ts:11:3  Bad.c: functions and methods are not serializable
+router.ts:12:3  Bad.d: tuples are not supported yet; use an object or an array
+router.ts:13:3  Bad.e: index signatures and Record<string, T> are not supported yet ('Record<string, number>')
+router.ts:14:3  Bad.f: 'Map' is not supported (planned after alpha)
+router.ts:15:3  Bad.g: 'Set' is not supported (planned after alpha)
+router.ts:16:3  Bad.h: union of objects needs a discriminant: a field present in every variant with distinct string literal values ('{ x: u32; } | { y: string; }')
+router.ts:17:3  Bad.i: union 'string | number' is not serializable; supported: string literal unions, discriminated unions of objects, T | null, T | undefined
+router.ts:18:3  Bad.j: numeric literal unions are not supported yet ('1 | 2 | 3'); use string literals or a numeric brand
+router.ts:19:3  Bad.k: symbols are not serializable
+router.ts:20:3  Bad.l: type 'object' is not serializable; declare the fields
+router.ts:21:3  Bad.m[]: 'string | null': null/undefined are only allowed on fields and procedure inputs, not inside arrays
+router.ts:22:3  Bad.n: 'Promise' is not supported
+router.ts:23:3  Bad.method: functions and methods are not serializable
+other.ts:1:1  collide:input.b: two different types are named 'Item' (other one at router.ts:4); rename one of them
+router.ts:33:3  overloaded: overloaded procedures are not supported
+router.ts:34:3  tooMany: a procedure takes at most (input, ctx)
+router.ts:35:3  maybe: a procedure result cannot be null or undefined; wrap it in an object with an optional field
+router.ts:36:3  nullInput: a procedure input cannot be null
+router.ts:37:3  version: router property must be a function or a namespace object, got 'number'

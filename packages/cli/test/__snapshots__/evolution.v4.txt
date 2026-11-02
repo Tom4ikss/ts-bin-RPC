@@ -1,0 +1,73 @@
+error    User.nick: 'nick' was removed earlier with type string | undefined (id 5); old peers may still send it. Use another name  (v4.ts:14:3)
+
+{
+  "format": 0,
+  "procedures": {
+    "get": { "input": "object get:input", "output": "object User" },
+    "list": { "input": "object list:input?", "output": "object User[]" },
+    "shapes": { "input": "void", "output": "union Shape[]" },
+    "signUp": { "input": "object NewUser", "output": "object User" }
+  },
+  "objects": {
+    "NewUser": {
+      "fields": {
+        "name": { "id": 0, "type": "string" },
+        "email": { "id": 1, "type": "string" },
+        "invite": { "id": 2, "type": "string | undefined" },
+        "password": { "id": 3, "type": "string" }
+      }
+    },
+    "Shape#circle": {
+      "fields": {
+        "kind": { "id": 0, "type": "const \"circle\"" },
+        "r": { "id": 1, "type": "f64" }
+      }
+    },
+    "Shape#dot": {
+      "fields": {
+        "kind": { "id": 0, "type": "const \"dot\"" }
+      }
+    },
+    "Shape#square": {
+      "fields": {
+        "kind": { "id": 0, "type": "const \"square\"" },
+        "side": { "id": 1, "type": "f64" }
+      }
+    },
+    "User": {
+      "fields": {
+        "id": { "id": 0, "type": "u32" },
+        "name": { "id": 1, "type": "string", "retired": true },
+        "email": { "id": 2, "type": "string" },
+        "age": { "id": 3, "type": "u16" },
+        "role": { "id": 4, "type": "enum Role" },
+        "nick": { "id": 5, "type": "string | undefined", "retired": true },
+        "bio": { "id": 6, "type": "string | undefined" },
+        "fullName": { "id": 7, "type": "string" }
+      }
+    },
+    "get:input": {
+      "fields": {
+        "id": { "id": 0, "type": "u32" }
+      }
+    },
+    "list:input": {
+      "fields": {
+        "limit": { "id": 0, "type": "u32 | undefined" }
+      }
+    }
+  },
+  "enums": {
+    "Role": { "values": ["admin", "user", "guest"] }
+  },
+  "unions": {
+    "Shape": {
+      "discriminant": "kind",
+      "variants": [
+        { "tag": "circle", "object": "Shape#circle" },
+        { "tag": "square", "object": "Shape#square" },
+        { "tag": "dot", "object": "Shape#dot" }
+      ]
+    }
+  }
+}

@@ -1,0 +1,70 @@
+safe     list: procedure added  (v2.ts:28:3)
+safe     NewUser.email: renamed from 'mail', keeps id 1  (v2.ts:21:3)
+safe     NewUser.invite: became optional  (v2.ts:22:3)
+safe     User.email: renamed from 'mail', keeps id 2  (v2.ts:12:3)
+safe     User.bio: 'nick' removed and 'bio' added with the same type; if this is a rename, add /** @renamedFrom nick */ to keep id 5  (v2.ts:15:3)
+safe     list:input: type added  (v2.ts:28:24)
+
+{
+  "format": 0,
+  "procedures": {
+    "create": { "input": "object NewUser", "output": "object User" },
+    "get": { "input": "object get:input", "output": "object User" },
+    "list": { "input": "object list:input?", "output": "object User[]" },
+    "shapes": { "input": "void", "output": "union Shape[]" }
+  },
+  "objects": {
+    "NewUser": {
+      "fields": {
+        "name": { "id": 0, "type": "string" },
+        "email": { "id": 1, "type": "string" },
+        "invite": { "id": 2, "type": "string | undefined" }
+      }
+    },
+    "Shape#circle": {
+      "fields": {
+        "kind": { "id": 0, "type": "const \"circle\"" },
+        "r": { "id": 1, "type": "f64" }
+      }
+    },
+    "Shape#square": {
+      "fields": {
+        "kind": { "id": 0, "type": "const \"square\"" },
+        "side": { "id": 1, "type": "f64" }
+      }
+    },
+    "User": {
+      "fields": {
+        "id": { "id": 0, "type": "u32" },
+        "name": { "id": 1, "type": "string" },
+        "email": { "id": 2, "type": "string" },
+        "age": { "id": 3, "type": "u8" },
+        "role": { "id": 4, "type": "enum Role" },
+        "nick": { "id": 5, "type": "string | undefined", "retired": true },
+        "bio": { "id": 6, "type": "string | undefined" }
+      }
+    },
+    "get:input": {
+      "fields": {
+        "id": { "id": 0, "type": "u32" }
+      }
+    },
+    "list:input": {
+      "fields": {
+        "limit": { "id": 0, "type": "u32 | undefined" }
+      }
+    }
+  },
+  "enums": {
+    "Role": { "values": ["admin", "user"] }
+  },
+  "unions": {
+    "Shape": {
+      "discriminant": "kind",
+      "variants": [
+        { "tag": "circle", "object": "Shape#circle" },
+        { "tag": "square", "object": "Shape#square" }
+      ]
+    }
+  }
+}

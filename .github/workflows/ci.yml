@@ -16,6 +16,8 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
       - name: TypeScript 7.1 API spike
         run: pnpm --filter spike-ts71 run router
       - name: Install Chromium

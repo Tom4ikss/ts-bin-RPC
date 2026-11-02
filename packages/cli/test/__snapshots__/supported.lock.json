@@ -1,0 +1,106 @@
+{
+  "format": 0,
+  "procedures": {
+    "health": { "input": "void", "output": "const \"ok\"" },
+    "ping": { "input": "void", "output": "void" },
+    "series": { "input": "object series:input", "output": "object Series" },
+    "shapes": { "input": "void", "output": "union Shape[]" },
+    "user.get": { "input": "object user.get:input", "output": "object User" },
+    "user.list": { "input": "object user.list:input?", "output": "object Page<User>" },
+    "user.rename": { "input": "object user.rename:input", "output": "void" }
+  },
+  "objects": {
+    "Address": {
+      "fields": {
+        "city": { "id": 0, "type": "string" },
+        "zip": { "id": 1, "type": "string | undefined" },
+        "verified": { "id": 2, "type": "bool | undefined" }
+      }
+    },
+    "Page<User>": {
+      "fields": {
+        "items": { "id": 0, "type": "object User[]" },
+        "total": { "id": 1, "type": "u32" }
+      }
+    },
+    "Series": {
+      "fields": {
+        "ts": { "id": 0, "type": "Float64Array" },
+        "values": { "id": 1, "type": "Float32Array" }
+      }
+    },
+    "Shape#circle": {
+      "fields": {
+        "kind": { "id": 0, "type": "const \"circle\"" },
+        "r": { "id": 1, "type": "f32" }
+      }
+    },
+    "Shape#rect": {
+      "fields": {
+        "kind": { "id": 0, "type": "const \"rect\"" },
+        "w": { "id": 1, "type": "f32" },
+        "h": { "id": 2, "type": "f32" }
+      }
+    },
+    "User": {
+      "fields": {
+        "id": { "id": 0, "type": "u32" },
+        "name": { "id": 1, "type": "string" },
+        "email": { "id": 2, "type": "string" },
+        "age": { "id": 3, "type": "u8" },
+        "score": { "id": 4, "type": "f64" },
+        "balance": { "id": 5, "type": "i64" },
+        "isActive": { "id": 6, "type": "bool" },
+        "role": { "id": 7, "type": "enum Role" },
+        "createdAt": { "id": 8, "type": "timestamp" },
+        "avatar": { "id": 9, "type": "bytes | null" },
+        "address": { "id": 10, "type": "object Address | undefined" },
+        "tags": { "id": 11, "type": "string[]" },
+        "manager": { "id": 12, "type": "object User | null" },
+        "meta": { "id": 13, "type": "object User.meta" }
+      }
+    },
+    "User.meta": {
+      "fields": {
+        "source": { "id": 0, "type": "enum User.meta.source" },
+        "version": { "id": 1, "type": "u32" }
+      }
+    },
+    "series:input": {
+      "fields": {
+        "from": { "id": 0, "type": "timestamp" },
+        "to": { "id": 1, "type": "timestamp" }
+      }
+    },
+    "user.get:input": {
+      "fields": {
+        "id": { "id": 0, "type": "u32" }
+      }
+    },
+    "user.list:input": {
+      "fields": {
+        "limit": { "id": 0, "type": "u32 | undefined" },
+        "role": { "id": 1, "type": "enum Role | undefined" }
+      }
+    },
+    "user.rename:input": {
+      "fields": {
+        "id": { "id": 0, "type": "u32" },
+        "name": { "id": 1, "type": "string" }
+      }
+    }
+  },
+  "enums": {
+    "Role": { "values": ["admin", "guest", "user"] },
+    "User.meta.source": { "values": ["app", "web"] }
+  },
+  "unions": {
+    "Shape": {
+      "discriminant": "kind",
+      "variants": [
+        { "tag": "circle", "object": "Shape#circle" },
+        { "tag": "rect", "object": "Shape#rect" }
+      ]
+    }
+  }
+}

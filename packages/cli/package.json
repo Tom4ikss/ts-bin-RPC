@@ -1,0 +1,22 @@
+{
+  "name": "ts-bin-rpc-cli",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Code generator for ts-bin-rpc: reads TypeScript types, maintains the schema lockfile.",
+  "type": "module",
+  "bin": {
+    "tbr": "./src/cli.ts"
+  },
+  "scripts": {
+    "tbr": "node --experimental-strip-types --no-warnings src/cli.ts",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "typescript": "7.1.0-beta"
+  },
+  "devDependencies": {
+    "ts-bin-rpc": "workspace:*"
+  },
+  "license": "MIT"
+}

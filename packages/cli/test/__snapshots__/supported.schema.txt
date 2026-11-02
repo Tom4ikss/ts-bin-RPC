@@ -1,0 +1,84 @@
+procedure health: () -> const "ok"
+procedure ping: () -> void
+procedure series: object series:input -> object Series
+procedure shapes: () -> union Shape[]
+procedure user.get: object user.get:input -> object User
+procedure user.list: object user.list:input? -> object Page<User>
+procedure user.rename: object user.rename:input -> void
+
+object Address {
+  city: string
+  zip: string | undefined
+  verified: bool | undefined
+}
+
+object Page<User> {
+  items: object User[]
+  total: u32
+}
+
+object Series {
+  ts: Float64Array
+  values: Float32Array
+}
+
+object Shape#circle {
+  kind: const "circle"
+  r: f32
+}
+
+object Shape#rect {
+  kind: const "rect"
+  w: f32
+  h: f32
+}
+
+object User {
+  id: u32
+  name: string
+  email: string (renamed from mail)
+  age: u8
+  score: f64
+  balance: i64
+  isActive: bool
+  role: enum Role
+  createdAt: timestamp
+  avatar: bytes | null
+  address: object Address | undefined
+  tags: string[]
+  manager: object User | null
+  meta: object User.meta
+}
+
+object User.meta {
+  source: enum User.meta.source
+  version: u32
+}
+
+object series:input {
+  from: timestamp
+  to: timestamp
+}
+
+object user.get:input {
+  id: u32
+}
+
+object user.list:input {
+  limit: u32 | undefined
+  role: enum Role | undefined
+}
+
+object user.rename:input {
+  id: u32
+  name: string
+}
+
+enum Role = "admin" | "guest" | "user"
+
+enum User.meta.source = "app" | "web"
+
+union Shape by kind {
+  "circle": object Shape#circle
+  "rect": object Shape#rect
+}

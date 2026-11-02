@@ -3,10 +3,18 @@
   "private": true,
   "type": "module",
   "packageManager": "pnpm@8.15.9",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
+    "test": "pnpm -r --if-present test",
+    "typecheck": "pnpm -r --if-present typecheck",
     "bench:node": "node bench/node/bench.mjs",
     "bench:browser": "pnpm --filter @tbr/bench run browser",
     "spike:ts71": "pnpm --filter spike-ts71 run router"
+  },
+  "devDependencies": {
+    "@types/node": "22",
+    "vitest": "^5.0.5"
   }
 }

@@ -1,0 +1,58 @@
+
+
+{
+  "format": 0,
+  "procedures": {
+    "create": { "input": "object NewUser", "output": "object User" },
+    "get": { "input": "object get:input", "output": "object User" },
+    "shapes": { "input": "void", "output": "union Shape[]" }
+  },
+  "objects": {
+    "NewUser": {
+      "fields": {
+        "name": { "id": 0, "type": "string" },
+        "mail": { "id": 1, "type": "string" },
+        "invite": { "id": 2, "type": "string" }
+      }
+    },
+    "Shape#circle": {
+      "fields": {
+        "kind": { "id": 0, "type": "const \"circle\"" },
+        "r": { "id": 1, "type": "f64" }
+      }
+    },
+    "Shape#square": {
+      "fields": {
+        "kind": { "id": 0, "type": "const \"square\"" },
+        "side": { "id": 1, "type": "f64" }
+      }
+    },
+    "User": {
+      "fields": {
+        "id": { "id": 0, "type": "u32" },
+        "name": { "id": 1, "type": "string" },
+        "mail": { "id": 2, "type": "string" },
+        "age": { "id": 3, "type": "u8" },
+        "role": { "id": 4, "type": "enum Role" },
+        "nick": { "id": 5, "type": "string | undefined" }
+      }
+    },
+    "get:input": {
+      "fields": {
+        "id": { "id": 0, "type": "u32" }
+      }
+    }
+  },
+  "enums": {
+    "Role": { "values": ["admin", "user"] }
+  },
+  "unions": {
+    "Shape": {
+      "discriminant": "kind",
+      "variants": [
+        { "tag": "circle", "object": "Shape#circle" },
+        { "tag": "square", "object": "Shape#square" }
+      ]
+    }
+  }
+}
