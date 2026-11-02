@@ -1,4 +1,4 @@
-import { encodeUsers, UsersView, USER_SIZE } from './codec.mjs';
+import { encodeUsers, UsersView, USER_SIZE } from '../lib/codec.mjs';
 const te = new TextEncoder(), td = new TextDecoder();
 let seed = 42; const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 2 ** 32);
 const users = Array.from({ length: 1000 }, (_, i) => ({ id: i + 1, score: Math.round(rnd() * 1e5) / 100, age: 30, isActive: true,

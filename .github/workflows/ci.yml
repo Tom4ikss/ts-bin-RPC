@@ -1,0 +1,24 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: TypeScript 7.1 API spike
+        run: pnpm --filter spike-ts71 run router
+      - name: Install Chromium
+        run: pnpm --filter @tbr/bench exec playwright install --with-deps chromium
+      - name: Bench smoke (quick)
+        run: node bench/run.mjs core --quick --runtimes=node,chromium

@@ -2,7 +2,7 @@ import { gzipSync, brotliCompressSync } from 'node:zlib';
 import {
   encodeUsers, UsersView, decodeUsersEager,
   encodePointsAoS, PointsAoSView, encodePointsSoA, pointsSoAView,
-} from './codec.mjs';
+} from '../lib/codec.mjs';
 
 const te = new TextEncoder();
 const td = new TextDecoder();

@@ -1,7 +1,7 @@
 // Memoize strings on first read. Two places to keep the cache:
 //   A) on the view object itself (needs the list to hand out the same view each time),
 //   B) in a per-message slot array (views stay throwaway, cache lives with the buffer).
-import { encodeUsers, USER_SIZE } from './codec.mjs';
+import { encodeUsers, USER_SIZE } from '../lib/codec.mjs';
 const te = new TextEncoder(), td = new TextDecoder();
 const str = (u8, dv, slot) => td.decode(u8.subarray(dv.getUint32(slot, true), dv.getUint32(slot, true) + dv.getUint32(slot + 4, true)));
 

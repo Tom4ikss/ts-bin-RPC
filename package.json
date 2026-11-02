@@ -1,0 +1,12 @@
+{
+  "name": "ts-bin-rpc-monorepo",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@8.15.9",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "bench:node": "node bench/node/bench.mjs",
+    "bench:browser": "pnpm --filter @tbr/bench run browser",
+    "spike:ts71": "pnpm --filter spike-ts71 run router"
+  }
+}
