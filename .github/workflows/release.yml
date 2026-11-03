@@ -4,7 +4,8 @@ name: release
 # for example v0.1.0-alpha.0. Both packages must carry that version. Prereleases go to the dist-tag
 # named by their first identifier (alpha, beta, rc), releases to latest.
 #
-# Authentication: an npm trusted publisher for this workflow, or an NPM_TOKEN repository secret.
+# Authentication: npm trusted publishing (OIDC), no token. Each package on npmjs.com has a trusted
+# publisher: GitHub Actions, repository Tom4ikss/ts-bin-RPC, workflow release.yml, environment npm.
 on:
   push:
     tags: ['v*']
@@ -29,7 +30,7 @@ jobs:
           node-version: 22
           cache: pnpm
           registry-url: https://registry.npmjs.org
-      - name: npm with trusted publishing
+      - name: npm with trusted publishing (11.5.1 or later)
         run: npm install -g npm@11
       - run: pnpm install --frozen-lockfile
       - name: Install Chromium
@@ -60,5 +61,3 @@ jobs:
           for f in "$RUNNER_TEMP"/pack/ts-bin-rpc-[0-9]*.tgz "$RUNNER_TEMP"/pack/ts-bin-rpc-cli-*.tgz; do
             npm publish "$f" --provenance --access public --tag "${{ steps.version.outputs.tag }}"
           done
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

@@ -228,7 +228,8 @@ Runtime подрос на `Check.cols`: проверка каталога оку
       В репозитории `exports` указывают на `src/*.ts`, в опубликованном пакете — на `dist/` (`publishConfig`).
       `scripts/pack-smoke.mjs` в CI ставит тарболы в пустой проект и гоняет generate, check, tsc, HTTP и decode.
 - [ ] Публикация из GitHub Actions с `--provenance`, версия `0.1.0-alpha.0`, dist-tag `alpha`.
-      Воркфлоу `release.yml` готов (тег `v*`), ждёт npm-токена или trusted publisher.
+      Воркфлоу `release.yml` готов (тег `v*`), публикует через trusted publishing без токенов.
+      Первая версия публикуется руками: trusted publisher настраивается у существующего пакета.
 - [x] CHANGELOG, политика версий: до 1.0 формат может меняться, но версия формата в заголовке и `check`
       предупреждают об этом.
 - [x] Сделать репозиторий публичным: 2026-11-03, история проверена на внутренние ссылки. Доки на GitHub Pages.

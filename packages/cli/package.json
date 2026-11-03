@@ -28,6 +28,7 @@
     "node": ">=22.6"
   },
   "publishConfig": {
+    "registry": "https://registry.npmjs.org/",
     "access": "public",
     "bin": {
       "tbr": "./dist/cli.js"
