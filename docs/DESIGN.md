@@ -248,8 +248,10 @@ class UserView implements User {          // implements ловит устаре�
 - Вектор tables декодируется в настоящий `Array` из views (сами поля ленивые). Поэтому `map`,
   `filter`, spread массива, `Array.isArray` работают.
 - `toPlain(value)` из `ts-bin-rpc/client` даёт глубокую копию из обычных объектов для spread
-  объекта, `structuredClone`, RSC и мутаций. Spread самого view (`{...user}`) даёт пустой объект,
-  это задокументированное ограничение.
+  объекта, `structuredClone`, RSC и мутаций. Spread самого view (`{...user}`) даёт объект без полей,
+  это задокументированное ограничение. Состояние одиночного view лежит в `#private`, строки
+  массива объектов держат колонки и номер строки под символьными ключами: `Object.keys`,
+  `for...in`, JSON и `structuredClone` их не видят.
 - Опция процедуры `decode: 'eager'` отдаёт обычные объекты вместо views. Это выход для мест, где
   views мешают.
 

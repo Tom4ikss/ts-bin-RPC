@@ -33,8 +33,9 @@ doesn't.
 
 > [!WARNING]
 > **Object spread and `Object.keys` don't see the fields.** The fields are getters on the prototype,
-> so `{ ...user }` and `Object.keys(user)` miss them. For a single object you get `{}`. For an
-> element of an array of objects you get internal bookkeeping properties.
+> so `{ ...user }` gives an object with no fields and `Object.keys(user)` gives `[]`. A spread
+> element of an array of objects also carries two hidden symbol keys that point at the response
+> columns, so the copy keeps the response bytes alive.
 
 ```ts
 setUser({ ...user, name: 'Ada' }); // wrong: loses every field
@@ -44,7 +45,7 @@ setUser({ ...toPlain(user), name: 'Ada' }); // right
 - **Views are read-only.** Assigning a field throws a `TypeError` in strict mode, which is all ES
   modules. To edit, copy with `toPlain` first.
 - **`structuredClone`, `postMessage`, IndexedDB and React Server Components** copy own data
-  properties, so they get the bookkeeping instead of the fields. Pass `toPlain(view)` instead.
+  properties, so they get `{}` instead of the fields. Pass `toPlain(view)` instead.
 - **Don't rely on the identity of `Date` values.** In arrays of objects each read returns a new
   `Date`. Compare with `getTime()`.
 

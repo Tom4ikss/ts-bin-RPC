@@ -128,6 +128,9 @@ class Emitter {
       `import type { ${types.join(', ')} } from ${lit(runtime)};`,
       ...(router ? [`import type { ${router.name} as tbr_router } from ${lit(router.from)};`] : []),
       '',
+      "const S_COLS = /* @__PURE__ */ Symbol('tbr.cols');",
+      "const S_ROW = /* @__PURE__ */ Symbol('tbr.row');",
+      '',
     ];
     return head.join('\n') + '\n' + this.out.join('\n');
   }
@@ -715,7 +718,10 @@ class Emitter {
     const def = this.schema.objects[name];
     // Row state: undeclared string keys assigned in the constructor. Declared `#private` fields are defined
     // and then assigned (two stores per row), symbol keys are slow in V8: both cost 10–30% on numeric reads.
-    L.push(`class R_${x} implements ${T} {`, `  declare readonly $tbrCols: C_${x};`, '  declare readonly $tbrRow: number;', `  constructor(c: C_${x}, i: number) {`, '    this.$tbrCols = c;', '    this.$tbrRow = i;', '  }');
+    // Row state under symbol keys: invisible to Object.keys, JSON and structuredClone, so a row never
+    // exposes or clones the whole column set. Public string keys leaked it; #private cost Firefox up
+    // to 20% on numeric reads, defineProperty 2-10x on every read (bench, 2026-11-03).
+    L.push(`class R_${x} implements ${T} {`, `  declare readonly [S_COLS]: C_${x};`, '  declare readonly [S_ROW]: number;', `  constructor(c: C_${x}, i: number) {`, '    this[S_COLS] = c;', '    this[S_ROW] = i;', '  }');
     for (const f of def.fields) {
       if (f.type.kind === 'const') {
         L.push(`  get ${prop(f.name)}(): ${this.fieldTs(f)} { return ${lit(f.type.value)}; }`);
@@ -728,7 +734,7 @@ class Emitter {
       if (fx) expr = fx.elem(`c.a${k}[i]`);
       else if (f.type.kind === 'object') expr = `c.o${k}().row(c.k${k}(i))`;
       else expr = `c.a${k}.get(i)`;
-      L.push(`  get ${prop(f.name)}(): ${this.fieldTs(f)} {`, '    const c = this.$tbrCols, i = this.$tbrRow;');
+      L.push(`  get ${prop(f.name)}(): ${this.fieldTs(f)} {`, '    const c = this[S_COLS], i = this[S_ROW];');
       if (f.optional) L.push(`    if (c.d${k} < 0 || (c.p${k} >= 0 && !bit(c.r.bytes, c.p${k}, i))) return undefined;`);
       if (f.nullable) L.push(`    if (c.n${k} >= 0 && bit(c.r.bytes, c.n${k}, i)) return null;`);
       L.push(`    return ${expr};`, '  }');
