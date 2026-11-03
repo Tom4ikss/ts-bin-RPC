@@ -6,7 +6,7 @@ carries a format version in its header: a reader rejects a version it does not k
 lockfile and reports breaking changes. The `tbr` command ships in the same package as the runtime,
 so generated code and the runtime that reads it come from one version.
 
-## Unreleased
+## 0.1.0-alpha.2
 
 - Streams: a procedure that returns `stream<T>(setup)`, `channel<T>().subscribe(topic)`, an async
   iterable or a `ReadableStream` sends rows to the client over one HTTP response. The client
