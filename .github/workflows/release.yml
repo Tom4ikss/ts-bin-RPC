@@ -2,7 +2,9 @@ name: release
 
 # Publishes ts-bin-rpc to npm with provenance when a tag v<version> is pushed, for example
 # v0.1.0-alpha.1. The package must carry that version. Prereleases go to the dist-tag
-# named by their first identifier (alpha, beta, rc), releases to latest.
+# named by their first identifier (alpha, beta, rc), releases to latest. Until there is a release
+# without a prerelease identifier, latest follows the newest prerelease too, so that a plain
+# `npm install ts-bin-rpc` gets it.
 #
 # Authentication: npm trusted publishing (OIDC), no token. The package on npmjs.com has a trusted
 # publisher: GitHub Actions, repository Tom4ikss/ts-bin-RPC, workflow release.yml, environment npm.
@@ -46,6 +48,7 @@ jobs:
             *) tag=latest ;;
           esac
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
       - run: pnpm typecheck
       - run: pnpm test
       - name: Tarballs install and run in an empty project
@@ -57,3 +60,14 @@ jobs:
       - name: Publish
         run: |
           npm publish "$RUNNER_TEMP"/pack/ts-bin-rpc-*.tgz --provenance --access public --tag "${{ steps.version.outputs.tag }}"
+      - name: Move latest while there is no stable release
+        if: steps.version.outputs.tag != 'latest'
+        run: |
+          spec="ts-bin-rpc@${{ steps.version.outputs.version }}"
+          # A new version takes a few minutes to become visible after publishing.
+          for i in $(seq 1 30); do
+            [ -n "$(npm view "$spec" version 2>/dev/null)" ] && break
+            sleep 20
+          done
+          stable=$(npm view ts-bin-rpc versions --json | node -p "[].concat(JSON.parse(require('fs').readFileSync(0, 'utf8'))).filter((v) => !v.includes('-')).length")
+          if [ "$stable" = 0 ]; then npm dist-tag add "$spec" latest; else echo "latest stays on the stable release"; fi
