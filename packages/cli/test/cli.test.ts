@@ -119,6 +119,71 @@ describe('stale generated code', () => {
   }, 60_000);
 });
 
+describe('tbr generate --watch', () => {
+  const dir = path.join(import.meta.dirname, '.gen', 'watch');
+  const routerFile = path.join(dir, 'router.ts');
+  const lockFile = path.join(dir, 'tbr.lock.json');
+  const v1 = fs.readFileSync(fixture('evolution', 'v1.ts'), 'utf8');
+  const withField = (field: string) => v1.replace('  nick?: string;\n', `  nick?: string;\n  ${field}\n`);
+
+  it('regenerates on save, against the lockfile it started with', async () => {
+    fs.rmSync(dir, { recursive: true, force: true });
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'tsconfig.json'), JSON.stringify({ compilerOptions: { strict: true, module: 'nodenext', noEmit: true }, include: ['*.ts'] }));
+    fs.writeFileSync(routerFile, v1);
+    expect(tbr('generate', '--project', path.join(dir, 'tsconfig.json'), '--router', 'router.ts').code).toBe(0);
+    let output = '';
+    const stop = new AbortController();
+    const done = run(['generate', '--watch', '--project', path.join(dir, 'tsconfig.json'), '--router', 'router.ts'], (s) => (output += s), { signal: stop.signal });
+    /** Waits for a regeneration whose output contains `text`; returns the output since the previous wait. */
+    let mark = 0;
+    const regenerated = async (text: string) => {
+      const deadline = Date.now() + 10_000;
+      for (;;) {
+        const chunk = output.slice(mark);
+        const at = chunk.indexOf(text);
+        const end = at < 0 ? -1 : chunk.slice(at).search(/^regenerated in \d+ ms.*\n/m);
+        if (end >= 0) {
+          const line = chunk.slice(at + end).indexOf('\n') + at + end + 1;
+          mark += line;
+          return chunk.slice(0, line);
+        }
+        if (Date.now() > deadline) throw new Error(`no regeneration with '${text}' after:\n${chunk}`);
+        await new Promise((r) => setTimeout(r, 10));
+      }
+    };
+    const lockField = (name: string) => (JSON.parse(fs.readFileSync(lockFile, 'utf8')).objects.User.fields as Record<string, { id: number; retired?: true }>)[name];
+    try {
+      while (!output.includes('watching')) await new Promise((r) => setTimeout(r, 10));
+      expect(output).toMatch(/tbr\.lock\.json is up to date/);
+
+      // A field added, then renamed before anything was committed: the first name leaves no trace.
+      fs.writeFileSync(routerFile, withField('nam: string;'));
+      await regenerated('User.nam: field added');
+      fs.writeFileSync(routerFile, withField('nickname: string;'));
+      await regenerated('User.nickname: field added');
+      expect(lockField('nam')).toBeUndefined();
+      expect(fs.readFileSync(path.join(dir, 'tbr.gen.ts'), 'utf8')).toContain('nickname');
+
+      // A type that cannot be sent: reported, and watching goes on.
+      fs.writeFileSync(routerFile, withField('nickname: Map<string, string>;'));
+      expect(await regenerated("'Map' is not supported")).toMatch(/waiting for changes\n$/);
+
+      // A lockfile changed elsewhere (a checkout) becomes the base.
+      const lock = JSON.parse(fs.readFileSync(lockFile, 'utf8'));
+      lock.objects.User.fields.nickname = { id: 42, type: 'string' };
+      fs.writeFileSync(lockFile, JSON.stringify(lock, null, 2) + '\n');
+      await regenerated('changed outside of watch');
+      fs.writeFileSync(routerFile, withField('nickname: string;'));
+      await regenerated('wrote');
+      expect(lockField('nickname').id).toBe(42);
+    } finally {
+      stop.abort();
+    }
+    expect(await done).toBe(0);
+  }, 60_000);
+});
+
 describe('tbr decode', () => {
   const dir = path.join(import.meta.dirname, '.gen', 'decode');
   const project = ['--project', path.join(dir, 'tsconfig.json'), '--router', 'router.ts'];

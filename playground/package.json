@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "gen": "tbr generate --router src/router.ts",
-    "watch": "node --watch-path=src/router.ts --experimental-strip-types --no-warnings ../packages/cli/src/cli.ts generate --router src/router.ts",
+    "watch": "tbr generate --watch --router src/router.ts",
     "ir": "tbr generate --dry-run --router src/router.ts",
     "check": "tbr check --router src/router.ts",
     "typecheck": "tbr generate --router src/router.ts && tsc -p tsconfig.json",

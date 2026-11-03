@@ -6,7 +6,7 @@ charts drawn with [uPlot](https://github.com/leeoniya/uPlot).
 ```sh
 pnpm install            # at the repository root
 cd examples/dashboard
-pnpm dev                # tbr generate, then Vite at http://localhost:5173 with the API at /rpc
+pnpm dev                # Vite at http://localhost:5173, the API at /rpc, tbr generate --watch alongside
 pnpm build && pnpm start   # production: dist/ and the API on http://localhost:3001
 ```
 
@@ -16,7 +16,7 @@ pnpm build && pnpm start   # production: dist/ and the API on http://localhost:3
 | [`src/server/data.ts`](src/server/data.ts) | synthetic metrics, a deterministic function of host, metric and time |
 | [`src/server/handler.ts`](src/server/handler.ts) | `createHandler` with `serverProcedures`, shared by dev and production |
 | [`src/server/main.ts`](src/server/main.ts) | production server: the handler plus static files |
-| [`vite.config.ts`](vite.config.ts) | dev: a plugin serves `/rpc/*` from `handler.ts` through `ssrLoadModule`, so router edits apply on the next call |
+| [`vite.config.ts`](vite.config.ts) | dev: a plugin serves `/rpc/*` from `handler.ts` through `ssrLoadModule` and runs `tbr generate --watch`, so router edits apply on the next call |
 | [`src/client/api.ts`](src/client/api.ts) | `createClient<AppRouter>` with `clientProcedures`; a `fetch` wrapper records response sizes |
 | [`src/client/Chart.tsx`](src/client/Chart.tsx) | uPlot wrapper |
 | [`src/client/App.tsx`](src/client/App.tsx) | the dashboard |
@@ -35,5 +35,6 @@ What to look at:
   `{ signal }` to the call.
 - **Errors.** `range` throws `RpcError('BAD_INPUT', …)`; the client rethrows it with the same code.
 
-After changing types in `router.ts`, run `pnpm gen` (or restart `pnpm dev`): the generated
-`Contract` type fails `pnpm typecheck` until you do.
+Under `pnpm dev`, saving `router.ts` regenerates `src/server/tbr.gen.ts` in ~15 ms and Vite reloads
+both sides. Without the watcher, the generated `Contract` type fails `pnpm typecheck` until you run
+`pnpm gen`.

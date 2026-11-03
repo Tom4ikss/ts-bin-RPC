@@ -73,15 +73,32 @@ export class Ts71Source implements TypeSource {
   private snapshot: Snapshot;
   private checker: Checker;
   private root: string;
+  private project: string;
 
   constructor(tsconfig: string) {
     const abs = path.resolve(tsconfig);
     if (!fs.existsSync(abs)) throw new Error(`${tsconfig} not found: tbr reads the router's types through a TypeScript project (--project <tsconfig>)`);
     this.root = path.dirname(abs);
+    this.project = abs;
     this.api = new API({ cwd: this.root });
     this.snapshot = this.api.createSnapshot({ openProjects: [abs] });
     const project = this.snapshot.getProjects()[0];
     if (!project) throw new Error(`could not load TypeScript project ${abs}`);
+    this.checker = project.checker;
+  }
+
+  /**
+   * Picks up changed, created and deleted files: a new snapshot on top of the current one, so the
+   * compiler reuses what did not change. Types from before the update must not be used after it.
+   */
+  update(files: { changed?: string[]; created?: string[]; deleted?: string[] }) {
+    const abs = (l?: string[]) => l?.map((f) => path.resolve(f));
+    // A fresh snapshot with notifications: Snapshot.update in 7.1.0-beta keeps the old types.
+    const next = this.api.createSnapshot({ openProjects: [this.project], fileNotifications: { changed: abs(files.changed), created: abs(files.created), deleted: abs(files.deleted) } });
+    this.snapshot.dispose();
+    this.snapshot = next;
+    const project = next.getProjects()[0];
+    if (!project) throw new Error('the TypeScript project is gone after an update');
     this.checker = project.checker;
   }
 

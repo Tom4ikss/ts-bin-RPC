@@ -46,6 +46,7 @@ procedure to `tbr.gen.ts` next to the router.
 ```sh
 cd playground
 pnpm gen                             # tbr.lock.json + src/tbr.gen.ts
+pnpm watch                           # the same on every save (tbr generate --watch, ~15 ms)
 pnpm demo
 pnpm ir                              # print the schema IR and the lockfile without writing
 pnpm check                           # classify changes against the lockfile
