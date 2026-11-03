@@ -5,7 +5,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { signature, type IRType } from '../src/ir.ts';
 import { arbitraries } from './arbitrary.ts';
 import { generate, type Generated } from './codegen.ts';
-import { EncodeError, VerifyError } from 'ts-bin-rpc/runtime';
+import { asciiOnly, EncodeError, VerifyError } from 'ts-bin-rpc/runtime';
 
 const fixtures = ['codec', 'supported'];
 const gen: Record<string, Generated> = {};
@@ -153,6 +153,36 @@ describe('limits and encoder checks', () => {
     const wide = { name: 'root', children: Array.from({ length: 500 }, (_, i) => ({ name: `c${i}`, children: [] })) };
     const bytes = nodeCodec().encode(wide);
     expect(() => nodeCodec().view(bytes, { limits: { maxNodes: 100 } })).toThrow(/too many elements/);
+  });
+
+  it('rejects a non-ASCII byte in the ASCII block', () => {
+    const text = gen.codec.mod.procedures['text'].input!;
+    const bytes = text.encode('abcdefghijklmnopqrstuvwxyz0123456789!');
+    const off = new DataView(bytes.buffer, bytes.byteOffset).getUint32(8, true);
+    for (let i = off; i < off + 37; i++) {
+      const bad = bytes.slice();
+      bad[i] |= 0x80;
+      expect(() => text.view(bad)).toThrow('ASCII block holds a non-ASCII byte');
+    }
+  });
+
+  it('asciiOnly finds a high bit at any offset and alignment', () => {
+    const buf = new Uint8Array(64).fill(0x61);
+    for (let off = 0; off < 8; off++) {
+      for (let n = 0; n <= 40; n++) {
+        expect(asciiOnly(buf, off, n)).toBe(true);
+        for (let i = off; i < off + n; i++) {
+          buf[i] = 0xe9;
+          expect(asciiOnly(buf, off, n)).toBe(false);
+          buf[i] = 0x61;
+        }
+        // Bytes just outside the range don't count.
+        if (off > 0) buf[off - 1] = 0xff;
+        buf[off + n] = 0xff;
+        expect(asciiOnly(buf, off, n)).toBe(true);
+        buf.fill(0x61);
+      }
+    }
   });
 
   it('rejects offsets into the header', () => {
