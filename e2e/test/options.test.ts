@@ -64,3 +64,30 @@ describe('createClient', () => {
     expect((await Promise.resolve(api.user)) === api.user).toBe(true);
   });
 });
+
+describe('toNodeListener', () => {
+  it('stays quiet when the client goes away mid-request', async () => {
+    const http = await import('node:http');
+    const net = await import('node:net');
+    const { toNodeListener } = await import('ts-bin-rpc/node');
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const server = http.createServer();
+    const handled = new Promise<void>((resolve) => {
+      const listener = toNodeListener(createHandler(appRouter, { procedures, prefix: '/rpc' }));
+      server.on('request', (req, res) => void listener(req, res).then(resolve));
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    try {
+      const { port } = server.address() as import('node:net').AddressInfo;
+      const socket = net.connect(port, '127.0.0.1');
+      socket.write('POST /rpc/user.get HTTP/1.1\r\nhost: x\r\ncontent-type: application/vnd.tbr\r\ncontent-length: 100\r\n\r\nTB');
+      await new Promise((r) => setTimeout(r, 50));
+      socket.destroy();
+      await handled;
+      expect(error).not.toHaveBeenCalled();
+    } finally {
+      error.mockRestore();
+      server.close();
+    }
+  });
+});

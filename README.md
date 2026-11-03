@@ -22,6 +22,7 @@ Project documents (in Russian):
 | `packages/ts-bin-rpc/` | numeric brands (`u8` … `i64`), `RpcError`, `toPlain`; `/server` (`createHandler`, Fetch API), `/client` (`createClient`), `/node` (adapter for `node:http`), `/runtime` (codec runtime for generated code) |
 | `e2e/` | fixture app tested in process, over HTTP under Node, Bun and Deno, and from Chromium |
 | `playground/` | a router to play with: `pnpm watch` regenerates on save, `pnpm demo` encodes and reads a message |
+| `examples/dashboard/` | Node server and a Vite + React client: a metrics dashboard drawing response columns with uPlot |
 
 ## Running
 
@@ -67,6 +68,8 @@ const user = await api.user.get({ id: 1 }); // a lazy view over the response
 ```
 
 `tbr decode response.bin --proc user.get` prints a captured message as JSON.
+
+A whole app: [`examples/dashboard`](examples/dashboard), `pnpm --filter tbr-example-dashboard dev`.
 
 ## Results (phase 0)
 

@@ -7,3 +7,5 @@ packages/cli/test/.gen/*/
 bench/gen/out/
 playground/src/tbr.gen.ts
 e2e/src/tbr.gen.ts
+examples/*/src/server/tbr.gen.ts
+examples/*/dist/

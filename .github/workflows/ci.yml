@@ -29,6 +29,8 @@ jobs:
           E2E_RUNTIMES: node,bun,deno
       - name: TypeScript 7.1 API spike
         run: pnpm --filter spike-ts71 run router
+      - name: Example dashboard builds
+        run: pnpm --filter tbr-example-dashboard build
       - name: Bundle size budget
         run: node bench/size.mjs --budget
       - name: Bench smoke (quick)

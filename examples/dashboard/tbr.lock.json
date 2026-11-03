@@ -1,0 +1,71 @@
+{
+  "format": 0,
+  "procedures": {
+    "hosts": { "input": "object hosts:input?", "output": "object Host[]" },
+    "overview": { "input": "object OverviewQuery", "output": "object Overview" },
+    "series": { "input": "object SeriesQuery", "output": "object Series" }
+  },
+  "objects": {
+    "Host": {
+      "fields": {
+        "id": { "id": 0, "type": "u16" },
+        "name": { "id": 1, "type": "string" },
+        "region": { "id": 2, "type": "enum Region" },
+        "status": { "id": 3, "type": "enum Status" },
+        "tags": { "id": 4, "type": "string[]" },
+        "cpu": { "id": 5, "type": "f32" },
+        "memory": { "id": 6, "type": "f32" },
+        "rps": { "id": 7, "type": "f32" }
+      }
+    },
+    "Overview": {
+      "fields": {
+        "unit": { "id": 0, "type": "string" },
+        "t": { "id": 1, "type": "Float64Array" },
+        "hosts": { "id": 2, "type": "object Overview.hosts[][]" }
+      }
+    },
+    "Overview.hosts[]": {
+      "fields": {
+        "id": { "id": 0, "type": "u16" },
+        "name": { "id": 1, "type": "string" },
+        "v": { "id": 2, "type": "Float32Array" }
+      }
+    },
+    "OverviewQuery": {
+      "fields": {
+        "kind": { "id": 0, "type": "enum MetricKind" },
+        "region": { "id": 1, "type": "enum Region | undefined" },
+        "from": { "id": 2, "type": "timestamp" },
+        "to": { "id": 3, "type": "timestamp" },
+        "points": { "id": 4, "type": "u32" }
+      }
+    },
+    "Series": {
+      "fields": {
+        "t": { "id": 0, "type": "Float64Array" },
+        "v": { "id": 1, "type": "Float32Array" }
+      }
+    },
+    "SeriesQuery": {
+      "fields": {
+        "host": { "id": 0, "type": "u16" },
+        "kind": { "id": 1, "type": "enum MetricKind" },
+        "from": { "id": 2, "type": "timestamp" },
+        "to": { "id": 3, "type": "timestamp" },
+        "points": { "id": 4, "type": "u32" }
+      }
+    },
+    "hosts:input": {
+      "fields": {
+        "region": { "id": 0, "type": "enum Region | undefined" }
+      }
+    }
+  },
+  "enums": {
+    "MetricKind": { "values": ["cpu", "latency", "memory", "rps"] },
+    "Region": { "values": ["ap-south", "eu-west", "us-east"] },
+    "Status": { "values": ["degraded", "down", "up"] }
+  },
+  "unions": {}
+}

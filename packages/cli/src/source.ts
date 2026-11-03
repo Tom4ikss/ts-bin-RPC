@@ -1,5 +1,6 @@
 // TypeSource: the only module that talks to TypeScript. Backend: TypeScript 7.1 (`typescript/sync`).
 // Everything else consumes the neutral `Desc` shapes below, so a TS 6 backend can be swapped in.
+import fs from 'node:fs';
 import path from 'node:path';
 import { API, TypeFlags, SymbolFlags } from 'typescript/sync';
 import { SyntaxKind } from 'typescript/ast';
@@ -75,6 +76,7 @@ export class Ts71Source implements TypeSource {
 
   constructor(tsconfig: string) {
     const abs = path.resolve(tsconfig);
+    if (!fs.existsSync(abs)) throw new Error(`${tsconfig} not found: tbr reads the router's types through a TypeScript project (--project <tsconfig>)`);
     this.root = path.dirname(abs);
     this.api = new API({ cwd: this.root });
     this.snapshot = this.api.createSnapshot({ openProjects: [abs] });

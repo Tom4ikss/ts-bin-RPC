@@ -46,6 +46,8 @@ export function toNodeListener(
       response.headers.forEach((v, k) => res.setHeader(k, v));
       res.end(new Uint8Array(await response.arrayBuffer()));
     } catch (e) {
+      // The client went away (an aborted fetch, a closed tab): nobody to answer, nothing to report.
+      if (req.destroyed || res.destroyed) return;
       console.error('ts-bin-rpc: request failed:', e);
       if (!res.headersSent) res.writeHead(500);
       res.end();

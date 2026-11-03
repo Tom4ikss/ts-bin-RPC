@@ -4,3 +4,4 @@ packages:
   - spikes/*
   - playground
   - e2e
+  - examples/*

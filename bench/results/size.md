@@ -10,5 +10,7 @@ esbuild 0.28.2, minified ESM, gzip -9. Generated code: the bundle minus the runt
 | playground | server | 28.3 KB | 8.7 KB | 5.5 KB |
 | e2e | client | 34.7 KB | 9.9 KB | 6.1 KB |
 | e2e | server | 33.9 KB | 9.4 KB | 6.2 KB |
+| example dashboard | client | 30.9 KB | 9.1 KB | 5.2 KB |
+| example dashboard | server | 31.7 KB | 9.0 KB | 5.8 KB |
 | cli fixture "supported" | client | 39.7 KB | 11.0 KB | 7.2 KB |
 | cli fixture "supported" | server | 42.8 KB | 11.5 KB | 8.3 KB |

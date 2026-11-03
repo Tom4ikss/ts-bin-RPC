@@ -12,6 +12,7 @@ const root = path.join(import.meta.dirname, '..');
 const schemas = {
   playground: 'playground/src/tbr.gen.ts',
   e2e: 'e2e/src/tbr.gen.ts',
+  'example dashboard': 'examples/dashboard/src/server/tbr.gen.ts',
   'cli fixture "supported"': 'packages/cli/test/.gen/supported.ts',
 };
 
