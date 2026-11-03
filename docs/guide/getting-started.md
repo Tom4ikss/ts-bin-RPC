@@ -5,36 +5,25 @@ description: From a router to a working client in five steps.
 
 # Getting started
 
-This page takes you from an empty folder to a typed client calling a server. You need Node 22 or
-later and pnpm.
+This page takes you from an empty folder to a typed client calling a server. You need Node 22.6
+or later.
 
 ## 1. Install
 
-The packages are not on npm yet. Clone the repository and link them into your project, for example
-as workspace packages:
+The package is published as an alpha:
 
 ```sh
-git clone https://github.com/Tom4ikss/ts-bin-RPC.git
+npm install ts-bin-rpc@alpha
+npm install -D typescript@7.1.0-beta @types/node
 ```
 
-```json
-{
-  "dependencies": { "ts-bin-rpc": "workspace:*" },
-  "devDependencies": { "ts-bin-rpc-cli": "workspace:*", "typescript": "7.1.0-beta" }
-}
-```
-
-- `ts-bin-rpc` is the runtime. It provides `ts-bin-rpc/server`, `ts-bin-rpc/client`,
-  `ts-bin-rpc/node` and the numeric brands.
-- `ts-bin-rpc-cli` provides the `tbr` command.
-
-The packages ship TypeScript sources. Bundlers (Vite, esbuild, webpack) handle them as they are.
-Node runs them with `--experimental-strip-types` (default since Node 23.6) as long as they are linked
-from a workspace: Node does not strip types inside `node_modules`. A build step for npm comes with
-the alpha.
+`ts-bin-rpc` provides `ts-bin-rpc/server`, `ts-bin-rpc/client`, `ts-bin-rpc/node`, the numeric
+brands and the `tbr` command. `tbr` needs TypeScript 7.1, an optional peer dependency: install it
+as a dev dependency, and production installs (`npm ci --omit=dev`) stay without the compiler.
 
 `tbr` reads your types through a TypeScript project, so the folder needs a `tsconfig.json` that
-includes the router. Any strict config works:
+includes the router. Any strict config works. Since TypeScript 6, installed `@types` packages are
+not picked up unless `types` lists them, so a Node server needs `"types": ["node"]`:
 
 ```json
 {
@@ -43,7 +32,8 @@ includes the router. Any strict config works:
     "module": "nodenext",
     "strict": true,
     "noEmit": true,
-    "allowImportingTsExtensions": true
+    "allowImportingTsExtensions": true,
+    "types": ["node"]
   },
   "include": ["src"]
 }

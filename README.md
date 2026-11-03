@@ -6,8 +6,13 @@ views over the response bytes, and numeric arrays arrive as `TypedArray` columns
 
 **Docs:** https://tom4ikss.github.io/ts-bin-RPC/ (sources in [docs/guide](docs/guide/index.md)).
 
-**Status:** pre-alpha, not on npm yet. The format may still change; the
-[getting started](docs/guide/getting-started.md) guide shows how to try it from a checkout.
+**Status:** alpha. The wire format may change before 1.0, see the [changelog](CHANGELOG.md) and
+the [security notes](SECURITY.md).
+
+```sh
+npm install ts-bin-rpc@alpha
+npm install -D typescript@7.1.0-beta   # for the tbr code generator
+```
 
 ```ts
 // server: a router is a plain object of async functions

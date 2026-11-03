@@ -65,6 +65,6 @@ chart.setData([m.t, m.cpu]); // typed arrays over the response bytes, nothing co
   middleware. These are not there yet. See the [FAQ](./faq.md).
 
 > [!WARNING]
-> ts-bin-rpc is pre-alpha. It is not on npm yet, and the format may still change before 1.0.
+> ts-bin-rpc is an alpha: `npm install ts-bin-rpc@alpha`. The wire format may still change before 1.0.
 
 Next: [Getting started](./getting-started.md).
