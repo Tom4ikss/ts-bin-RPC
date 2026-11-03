@@ -13,7 +13,7 @@
   },
   "devDependencies": {
     "playwright": "^1.64.1",
-    "ts-bin-rpc-cli": "workspace:*",
+    "@tbr/cli": "workspace:*",
     "typescript": "7.1.0-beta"
   }
 }

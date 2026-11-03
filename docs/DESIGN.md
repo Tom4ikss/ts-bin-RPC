@@ -128,10 +128,14 @@ tbr decode resp.bin --proc user.get    # --input для тела запроса,
 
 | Пакет | Содержимое | Зависимости |
 |---|---|---|
-| `ts-bin-rpc` | runtime кодека (`/`), `/server`, `/client`, типы брендов | нет |
-| `ts-bin-rpc-cli` | `tbr`: generate, check, decode, rename | `typescript@7.1` |
+| `ts-bin-rpc` | runtime кодека (`/runtime`), `/server`, `/client`, `/node`, типы брендов; бинарь `tbr`: generate, check, decode, rename | `typescript@7.1` — необязательная peer-зависимость, нужна только `tbr` |
 
-CLI ставится в devDependencies: в рантайм-зависимости пользователя TypeScript и Go-бинарь не попадают.
+Один пакет, чтобы версии CLI и рантайма совпадали сами: сгенерированный код и рантайм одной версии.
+TypeScript пользователь ставит в devDependencies, поэтому в продакшен-установку компилятор и его
+Go-бинарь не попадают. Код CLI (около 100 KB) лежит в `dist/cli` и в бандлы не попадает: клиент и
+сервер его не импортируют. В репозитории исходники CLI живут в приватном пакете `packages/cli`
+(`@tbr/cli`); сборка `ts-bin-rpc` компилирует их в свой `dist/cli`. До 0.1.0-alpha.1 CLI
+публиковался отдельно как `ts-bin-rpc-cli`, этот пакет помечен устаревшим.
 Сгенерированные файлы коммитятся. Это переживает смену сборщиков, работает при type stripping в
 Node и Bun и не требует CLI в production-сборке.
 

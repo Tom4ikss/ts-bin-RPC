@@ -15,7 +15,7 @@
     "ts-bin-rpc": "workspace:*"
   },
   "devDependencies": {
-    "ts-bin-rpc-cli": "workspace:*",
+    "@tbr/cli": "workspace:*",
     "typescript": "7.1.0-beta",
     "@types/node": "22"
   }

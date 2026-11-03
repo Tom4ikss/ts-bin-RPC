@@ -3,8 +3,15 @@
 Until 1.0 the wire format and the generated code may change between versions. Every message
 carries a format version in its header: a reader rejects a version it does not know with a
 `VerifyError` instead of misreading it. `tbr check` compares the router with the committed
-lockfile and reports breaking changes. Regenerate codecs with the CLI of the same version as the
-runtime: `ts-bin-rpc` and `ts-bin-rpc-cli` are released together with the same version.
+lockfile and reports breaking changes. The `tbr` command ships in the same package as the runtime,
+so generated code and the runtime that reads it come from one version.
+
+## 0.1.0-alpha.1
+
+- The `tbr` command moved into `ts-bin-rpc`. Replace `ts-bin-rpc-cli` with `ts-bin-rpc` and keep
+  `typescript@7.1.0-beta` as a dev dependency; it is an optional peer dependency of `ts-bin-rpc`.
+  `ts-bin-rpc-cli` is deprecated and gets no new versions.
+- Published from GitHub Actions with npm provenance.
 
 ## 0.1.0-alpha.0
 

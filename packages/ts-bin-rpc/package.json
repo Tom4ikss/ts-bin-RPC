@@ -1,7 +1,7 @@
 {
   "name": "ts-bin-rpc",
-  "version": "0.1.0-alpha.0",
-  "description": "Code-first binary RPC for TypeScript: lazy views over the response bytes, numeric arrays as TypedArray columns.",
+  "version": "0.1.0-alpha.1",
+  "description": "Code-first binary RPC for TypeScript: lazy views over the response bytes, numeric arrays as TypedArray columns, and the tbr code generator.",
   "keywords": [
     "rpc",
     "typescript",
@@ -9,7 +9,8 @@
     "serialization",
     "zero-copy",
     "typed-array",
-    "codegen"
+    "codegen",
+    "cli"
   ],
   "type": "module",
   "sideEffects": false,
@@ -74,12 +75,23 @@
         "types": "./dist/node.d.ts",
         "default": "./dist/node.js"
       }
+    },
+    "bin": {
+      "tbr": "./dist/cli/cli.js"
     }
   },
   "scripts": {
-    "build": "node ../../scripts/build-package.mjs",
-    "prepack": "node ../../scripts/build-package.mjs",
+    "build": "node ../../scripts/build-package.mjs tsconfig.build.json ../cli/tsconfig.build.json",
+    "prepack": "node ../../scripts/build-package.mjs tsconfig.build.json ../cli/tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json"
+  },
+  "peerDependencies": {
+    "typescript": "7.1.0-beta"
+  },
+  "peerDependenciesMeta": {
+    "typescript": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "typescript": "7.1.0-beta",

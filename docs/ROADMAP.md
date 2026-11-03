@@ -223,7 +223,8 @@ Runtime подрос на `Check.cols`: проверка каталога оку
 
 ## Публикация alpha
 
-- [x] Имена: `ts-bin-rpc` (рантайм) и `ts-bin-rpc-cli` (бинарь `tbr`; пакет `tbr` на npm занят).
+- [x] Имя `ts-bin-rpc`, бинарь `tbr` внутри (пакет `tbr` на npm занят). В 0.1.0-alpha.0 CLI вышел отдельным
+      `ts-bin-rpc-cli`, с 0.1.0-alpha.1 он внутри `ts-bin-rpc`, а `ts-bin-rpc-cli` помечен устаревшим.
 - [x] Лицензия (MIT), `package.json`: только ESM, `exports` с подпутями, `sideEffects: false`, `engines`.
       В репозитории `exports` указывают на `src/*.ts`, в опубликованном пакете — на `dist/` (`publishConfig`).
       `scripts/pack-smoke.mjs` в CI ставит тарболы в пустой проект и гоняет generate, check, tsc, HTTP и decode.

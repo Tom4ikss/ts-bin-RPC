@@ -20,7 +20,7 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
-    "ts-bin-rpc-cli": "workspace:*",
+    "@tbr/cli": "workspace:*",
     "typescript": "7.1.0-beta",
     "vite": "^8.3.5"
   }

@@ -1,10 +1,10 @@
 name: release
 
-# Publishes ts-bin-rpc and ts-bin-rpc-cli to npm with provenance when a tag v<version> is pushed,
-# for example v0.1.0-alpha.0. Both packages must carry that version. Prereleases go to the dist-tag
+# Publishes ts-bin-rpc to npm with provenance when a tag v<version> is pushed, for example
+# v0.1.0-alpha.1. The package must carry that version. Prereleases go to the dist-tag
 # named by their first identifier (alpha, beta, rc), releases to latest.
 #
-# Authentication: npm trusted publishing (OIDC), no token. Each package on npmjs.com has a trusted
+# Authentication: npm trusted publishing (OIDC), no token. The package on npmjs.com has a trusted
 # publisher: GitHub Actions, repository Tom4ikss/ts-bin-RPC, workflow release.yml, environment npm.
 on:
   push:
@@ -39,10 +39,8 @@ jobs:
         id: version
         run: |
           version="${GITHUB_REF_NAME#v}"
-          for p in packages/ts-bin-rpc packages/cli; do
-            actual=$(node -p "require('./$p/package.json').version")
-            if [ "$actual" != "$version" ]; then echo "$p is $actual, the tag is $GITHUB_REF_NAME"; exit 1; fi
-          done
+          actual=$(node -p "require('./packages/ts-bin-rpc/package.json').version")
+          if [ "$actual" != "$version" ]; then echo "ts-bin-rpc is $actual, the tag is $GITHUB_REF_NAME"; exit 1; fi
           case "$version" in
             *-*) pre="${version#*-}"; tag="${pre%%.*}" ;;
             *) tag=latest ;;
@@ -55,9 +53,7 @@ jobs:
       - name: Pack
         run: |
           mkdir -p "$RUNNER_TEMP/pack"
-          for p in ts-bin-rpc cli; do (cd packages/$p && pnpm pack --pack-destination "$RUNNER_TEMP/pack"); done
+          cd packages/ts-bin-rpc && pnpm pack --pack-destination "$RUNNER_TEMP/pack"
       - name: Publish
         run: |
-          for f in "$RUNNER_TEMP"/pack/ts-bin-rpc-[0-9]*.tgz "$RUNNER_TEMP"/pack/ts-bin-rpc-cli-*.tgz; do
-            npm publish "$f" --provenance --access public --tag "${{ steps.version.outputs.tag }}"
-          done
+          npm publish "$RUNNER_TEMP"/pack/ts-bin-rpc-*.tgz --provenance --access public --tag "${{ steps.version.outputs.tag }}"
