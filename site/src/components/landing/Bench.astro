@@ -164,7 +164,7 @@ const signed = (v: number) => (v > 0 ? `+${v}%` : v < 0 ? `−${Math.abs(v)}%` :
 					</tbody>
 				</table>
 			</div>
-			<p class="fine"><a href={`${GITHUB_BLOB}/${SOURCE.compression}`}>compression.md</a>. Decompression time is not measured.</p>
+			<p class="fine"><a href={`${GITHUB_BLOB}/${SOURCE.compression}`}>{SOURCE.compression.split('/').pop()}</a>. Decompression time is not measured.</p>
 		</div>
 		<div class="mini">
 			<h3>Client bundle, min + gzip</h3>
@@ -265,8 +265,8 @@ const signed = (v: number) => (v > 0 ? `+${v}%` : v < 0 ? `−${Math.abs(v)}%` :
 		border: 1px solid var(--tbr-border);
 		border-radius: 0.6rem;
 		background: var(--sl-color-black);
-		overflow-x: auto;
-		scrollbar-width: none;
+		/* Eight scenarios don't fit one row next to the size panel: wrap instead of hiding tabs off-screen. */
+		flex-wrap: wrap;
 	}
 	.tabs button {
 		flex: 0 0 auto;

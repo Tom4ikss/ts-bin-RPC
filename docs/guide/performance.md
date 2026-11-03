@@ -12,46 +12,53 @@ some rows. Synthetic data.
 
 ## Reading
 
-1000 users with 8 fields each (numbers, strings, a `Date`, an enum, a string array, nullable bytes),
-generated codecs, speed relative to JSON
-([generated.md](https://github.com/Tom4ikss/ts-bin-RPC/blob/main/bench/results/generated.md)):
+Generated codecs, speed relative to JSON
+([generated.md](https://github.com/Tom4ikss/ts-bin-RPC/blob/main/bench/results/generated.md)).
+Users have 7 fields: three numbers, a boolean and three strings, 30% of names in Cyrillic.
+Products have a 12–52 word description. Points are a `Float64Array` time and three `Float32Array`
+columns, against JSON's best shape for them, an object of four number arrays.
 
 | Reading | Node | Chromium | Firefox | WebKit |
 |---|---|---|---|---|
-| every field | 8.1× | 3.2× | 4.2× | 4.1× |
-| every field, with verification | 5.7× | 2.5× | 3.5× | 3.4× |
-| 2 of 8 fields | 16.7× | 6.4× | 9.0× | 6.0× |
-| numeric fields only | 37× | 19× | 35× | 35× |
-| `decode: 'eager'`, without verification | 7.4× | 2.9× | 3.8× | 4.0× |
-| 10 users, every field | 4.0× | 1.7× | 1.8× | 1.6× |
+| 1000 users, every field | 5.6× | 2.3× | 3.4× | 3.3× |
+| 1000 users, every field, `verify: false` | 8.0× | 2.9× | 4.1× | 4.1× |
+| 1000 users, 2 of 7 fields | 8.8× | 4.1× | 6.0× | 4.7× |
+| 1000 users, numeric fields only | 11× | 5.5× | 11× | 6.1× |
+| 1000 users, `decode: 'eager'`, `verify: false` | 7.0× | 3.0× | 3.6× | 4.0× |
+| 100k points, every value | 137× | 18× | 118× | 22× |
+| 10 users, every field | 2.8× | 1.3× | 1.4× | 1.3× |
+| 500 products with long text | 1.7× | 0.91× | 2.0× | 1.5× |
+| 1 user | 1.5× | 0.94× | 0.66× | 0.83× |
 
-The client verifies every response by default, so the second row is what an app sees.
-`verify: false` gives the first row, for a server you trust completely; see [Views](./views.md#verification).
+The client verifies every response by default, so rows without a note include verification.
+`verify: false` skips it for a server you trust completely; see [Views](./views.md#verification).
 `decode: 'eager'` reads every field into plain objects, so it costs the same whichever fields you
 use later; see [plain objects](./views.md#plain-objects).
 
 Views read only what you touch, and arrays of objects are stored column by column. That is why the
-gap grows when you read fewer fields.
-
-Typed-array columns don't need parsing at all. A series of 100k points reads 145–300× faster than
-the same numbers in a JSON array, because there is nothing to parse
-([core.md](https://github.com/Tom4ikss/ts-bin-RPC/blob/main/bench/results/core.md)).
+gap grows when you read fewer fields. Typed-array columns need no parsing at all: the time in the
+points row is the loop that sums them.
 
 ## Writing
 
-Encoding 1000 users is 1.7–2.4× faster than `JSON.stringify`, across all four runtimes.
+| Encoding | Node | Chromium | Firefox | WebKit |
+|---|---|---|---|---|
+| 1000 users | 2.3× | 1.9× | 1.7× | 1.9× |
+| 500 products with long text | 1.5× | 0.88× | 1.1× | 0.31× |
+| 100k points | 476× | 84× | 150× | 125× |
 
 ## Size
 
-Size after compression, relative to JSON compressed the same way
-([compression.md](https://github.com/Tom4ikss/ts-bin-RPC/blob/main/bench/results/compression.md)):
+Size relative to JSON compressed the same way
+([generated-size.md](https://github.com/Tom4ikss/ts-bin-RPC/blob/main/bench/results/generated-size.md)):
 
-| Payload | gzip-6 | brotli-4 | brotli-6 | zstd-3 |
-|---|---|---|---|---|
-| 1000 users | −8% | −17% | −20% | −7% |
-| 500 products with long text | +5% | −5% | −4% | +2% |
-| 20 users | +5% | +8% | +4% | +6% |
-| 100k points | −21% | −24% | −24% | −27% |
+| Payload | raw | gzip-6 | brotli-4 | brotli-6 | zstd-3 |
+|---|---|---|---|---|---|
+| 1000 users | −52% | −8% | −18% | −19% | −6% |
+| 500 products with long text | −18% | 0% | −9% | −9% | −3% |
+| 20 users | −37% | +10% | +13% | +10% | +9% |
+| 100k points, JSON as number arrays | −51% | −1% | +9% | +12% | +2% |
+| 100k points, JSON as an array of objects | −66% | −21% | −24% | −24% | −27% |
 
 Without compression the binary format is 1.5–2.6× smaller in the dashboard example, against JSON with values rounded to two decimals.
 
@@ -61,11 +68,17 @@ Without compression the binary format is 1.5–2.6× smaller in the dashboard ex
 > The format is built for many objects, numbers and partial reads. It does not try to beat JSON on
 > small text-heavy payloads at any cost.
 
-- **Small, text-heavy responses are a few percent larger** after compression: 20 users, or a
-  product page with long descriptions. Strings are stored much like in JSON, and JSON's
-  repetitive keys compress well.
-- **Tiny messages gain little.** 10 users read 1.6–1.8× faster in browsers, which is a few
-  microseconds in absolute terms.
+- **One small object.** Verifying a message and setting up a view cost more than parsing 150 bytes
+  of JSON: 0.4–0.7 µs against 0.4–0.6 µs. Either way it is under a microsecond.
+- **Long text with verification.** Verification more than doubles the read time of text-heavy
+  rows: in Chromium 51 µs without it and 117 µs with it, against 107 µs for JSON.
+- **Encoding text in WebKit.** JavaScriptCore's `JSON.stringify` is about 3× faster than the
+  generated encoder on the products payload.
+- **Small responses are 9–13% larger** after compression. JSON's repeated keys compress well, and
+  a binary message carries its layout.
+- **Numeric series are no smaller than JSON number arrays** after compression. Numbers rounded to
+  a few decimals compress well as text, while float32 mantissas look like noise to a compressor.
+  Against an array of objects the binary series is 20–27% smaller.
 - **Decompression time is not measured.** Binary messages are often smaller, so there is less to
   decompress, but this has not been checked.
 
@@ -97,6 +110,6 @@ the fixture past 12 KB.
 
 ```sh
 pnpm --filter @tbr/bench gen && node bench/run.mjs generated   # Node, Chromium, Firefox, WebKit
-node bench/run.mjs core --runtimes=node,chromium
+node bench/node/generated-size.mjs                             # sizes; needs the zstd CLI
 node bench/size.mjs
 ```

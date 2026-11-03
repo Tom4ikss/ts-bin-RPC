@@ -40,8 +40,8 @@ chart.setData([m.t, m.cpu]); // typed arrays over the response bytes, nothing co
 - **Types from your code.** No IDL and no schema library. Interfaces, unions, `Date`, typed arrays
   and branded numbers (`u8`, `u32`, `f32`, `i64` …) describe the wire format.
 - **Fast reads.** A response is verified once and then read on demand. With verification on, the
-  default, reading every field of 1000 objects is 2.5–3.5× faster than `JSON.parse` in browsers,
-  and reading two fields of them is 4.1–6.2× faster. Numeric columns arrive as `Float32Array` or
+  default, reading every field of 1000 objects is 2.3–3.4× faster than `JSON.parse` in browsers,
+  and reading two fields of them is 4.1–6.0× faster. Numeric columns arrive as `Float32Array` or
   `Float64Array` with no parsing at all.
 - **Schema evolution.** A committed lockfile gives every field a stable ID. `tbr check` in CI tells
   safe changes from breaking ones before you deploy.

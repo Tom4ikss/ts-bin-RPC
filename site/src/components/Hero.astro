@@ -94,12 +94,12 @@ const range = (id: string, key: 'verified' | 'plain', which: string[] = ['chromi
 					<dd><strong>{range('all', 'verified')}</strong> faster than <code>JSON.parse</code> in browsers, verification included</dd>
 				</div>
 				<div>
-					<dt>Reading 2 of 8 fields</dt>
+					<dt>Reading 2 of 7 fields</dt>
 					<dd><strong>{range('partial', 'verified')}</strong> faster, because untouched fields cost nothing</dd>
 				</div>
 				<div>
 					<dt>Numeric columns</dt>
-					<dd><strong>{range('numbers', 'plain')}</strong> faster with <code>verify: false</code>; typed arrays need no parsing</dd>
+					<dd><strong>{range('series', 'verified')}</strong> faster on 100k points, verification included; typed arrays need no parsing</dd>
 				</div>
 				<div>
 					<dt>Client runtime</dt>
