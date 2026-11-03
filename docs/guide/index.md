@@ -65,7 +65,7 @@ chart.setData([m.t, m.cpu]); // typed arrays over the response bytes, nothing co
   same size as JSON after gzip, sometimes a few percent larger. The gain grows with numbers, with
   many objects, and when you read only some fields.
 - **You need tRPC's ecosystem today:** TanStack Query bindings, WebSocket
-  subscriptions, request batching, middleware. These are not there yet. See the [FAQ](./faq.md).
+  subscriptions, request batching. These are not there yet. See the [FAQ](./faq.md).
 
 > [!WARNING]
 > ts-bin-rpc is an alpha: `npm install ts-bin-rpc@alpha`. The wire format may still change before 1.0.

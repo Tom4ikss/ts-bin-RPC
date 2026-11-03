@@ -6,6 +6,13 @@ carries a format version in its header: a reader rejects a version it does not k
 lockfile and reports breaking changes. The `tbr` command ships in the same package as the runtime,
 so generated code and the runtime that reads it come from one version.
 
+## Unreleased
+
+- Middleware: `use([...], router)` runs a chain around the procedures of a router or namespace.
+  `middleware(fn)` derives the context, `around(fn)` wraps the rest of the chain with `next()`.
+  Types follow the chain: procedures declare the context they get, callers give the one the chain
+  needs. Chains are composed once at startup. See the [middleware guide](docs/guide/middleware.md).
+
 ## 0.1.0-alpha.2
 
 - Streams: a procedure that returns `stream<T>(setup)`, `channel<T>().subscribe(topic)`, an async

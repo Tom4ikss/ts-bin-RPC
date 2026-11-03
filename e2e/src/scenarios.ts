@@ -64,6 +64,25 @@ export async function scenarios(origin: string, fetchFn: typeof fetch = globalTh
   same('ctx without input', await signedIn.whoami(), { user: 'ann' });
   same('per-call headers', await api.whoami({ headers: { authorization: 'Bearer bob' } }), { user: 'bob' });
   same('ctx from no headers', (await api.whoami()).user, null);
+
+  // Middleware
+  await api.audit();
+  await rejects('middleware: authed refuses', api.account.me(), rpcError('UNAUTHORIZED', 401));
+  same('middleware: derived ctx', await signedIn.account.me(), { name: 'ann' });
+  same('middleware: input reaches the procedure', toPlain(await signedIn.account.deposit({ amount: 5 })), { user: 'ann', amount: 5 });
+  await rejects('middleware: procedure errors pass through', signedIn.account.deposit({ amount: 0 }), rpcError('BAD_INPUT', 400));
+  same('middleware: nested use, next(ctx)', await signedIn.account.trace.get(), { trace: 'ann@account.trace.get' });
+  const venues: string[] = [];
+  await new Promise<void>((end, error) => signedIn.account.ticks.subscribe({ n: 3 }, { row: (t) => venues.push(t.venue!), end, error }));
+  same('middleware: streams', venues, ['ann', 'ann', 'ann']);
+  same('middleware: around sees every outcome', (await api.audit()).calls, [
+    'account.me UNAUTHORIZED',
+    'account.me ok',
+    'account.deposit ok',
+    'account.deposit BAD_INPUT',
+    'account.trace.get ok',
+    'account.ticks ok',
+  ]);
   await rejects('internal errors stay on the server', api.crash(), (e) => rpcError('INTERNAL', 500)(e) && !(e as Error).message.includes('secret'));
   await rejects('encoder checks ranges before sending', api.user.get({ id: -1 }), (e) => e instanceof EncodeError);
   const aborted = new AbortController();

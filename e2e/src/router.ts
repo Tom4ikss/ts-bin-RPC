@@ -1,6 +1,6 @@
 // Fixture app for end-to-end tests: every kind of procedure the protocol distinguishes.
 import { RpcError, type f32, type u32, type u64 } from 'ts-bin-rpc';
-import { channel, stream } from 'ts-bin-rpc/server';
+import { around, channel, middleware, stream, use, type Call } from 'ts-bin-rpc/server';
 
 export interface Ctx {
   user: string | null;
@@ -41,6 +41,27 @@ const tick = (seq: number, venue?: string): Tick => ({ seq, price: 100 + seq / 4
 const streams = { running: 0, cleaned: 0 };
 const quotes = channel<Tick>({ window: 5 });
 
+/** The context behind `authed`: a signed-in user. */
+export type Authed = Ctx & { user: string };
+const authed = middleware(({ ctx }: Call<Ctx>): Authed => {
+  if (!ctx.user) throw new RpcError('UNAUTHORIZED', 'sign in first');
+  return { ...ctx, user: ctx.user };
+});
+/** What `audited` saw of each call, oldest first. */
+const audit: string[] = [];
+const audited = around(async ({ path }, next) => {
+  try {
+    const result = await next();
+    audit.push(`${path} ok`);
+    return result;
+  } catch (e) {
+    audit.push(`${path} ${e instanceof RpcError ? e.code : 'error'}`);
+    throw e;
+  }
+});
+/** Passes a context of its own on: as a transaction would. */
+const traced = around<Authed, Authed & { trace: string }>(async ({ ctx, path }, next) => next({ ...ctx, trace: `${ctx.user}@${path}` }));
+
 export const appRouter = {
   user: {
     get: async (input: { id: u32 }): Promise<User> => {
@@ -72,6 +93,23 @@ export const appRouter = {
   crash: async (): Promise<string> => {
     throw new Error('secret stack details');
   },
+  /** Procedures behind middleware: `audited` around all, `authed` for each. */
+  account: use([audited, authed], {
+    me: async (_: void, ctx: Authed): Promise<{ name: string }> => ({ name: ctx.user }),
+    deposit: async (input: { amount: u32 }, ctx: Authed): Promise<{ user: string; amount: u32 }> => {
+      if (input.amount === 0) throw new RpcError('BAD_INPUT', 'nothing to deposit');
+      return { user: ctx.user, amount: input.amount };
+    },
+    trace: use([traced], {
+      get: async (_: void, ctx: Authed & { trace: string }): Promise<{ trace: string }> => ({ trace: ctx.trace }),
+    }),
+    ticks: async (input: { n: u32 }, ctx: Authed) => stream<Tick>((emit, { end }) => {
+      for (let i = 0; i < input.n; i++) emit(tick(i, ctx.user));
+      end();
+    }),
+  }),
+  /** Reads and clears what `audited` saw. */
+  audit: async (): Promise<{ calls: string[] }> => ({ calls: audit.splice(0) }),
   stream: {
     /** `n` ticks, `burst` at a time every millisecond, then the end. */
     ticks: async (input: { n: u32; burst?: u32 }) => {

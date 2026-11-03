@@ -5,10 +5,12 @@ import { CONTENT_TYPE, RpcError, SCHEMA_HEADER, type ServerEntry, type ServerPro
 import type { AnyProcedure, AnyRouter } from './router.ts';
 import { STREAM_CONTENT_TYPE } from './frames.ts';
 import { Sink, toSource } from './stream-server.ts';
+import { compose, unwrap } from './middleware.ts';
 import type { Encoder } from './runtime.ts';
 
 export { stream, channel, type Channel, type StreamOptions, type BatchOptions, type SubscriberOptions, type StreamControl, type StreamSetup } from './stream-server.ts';
 export type { Stream } from './router.ts';
+export { use, middleware, around, type Call, type Middleware, type Keep, type WithContext, type ContextMismatch } from './middleware.ts';
 
 type CtxUnion<R> = {
   [K in keyof R]: R[K] extends AnyProcedure ? (Parameters<R[K]> extends [unknown, infer C, ...unknown[]] ? C : never) : CtxUnion<R[K]>;
@@ -62,7 +64,9 @@ export function createHandler<R extends AnyRouter>(router: R, options: HandlerOp
       if (typeof value === 'function') {
         const proc = procedures[p];
         if (!proc) throw new Error(`procedure '${p}' is missing from the generated code; run tbr generate`);
-        routes.set(p, { fn: value, self: node, proc });
+        // Middleware of nested use() is flattened and composed once, here, with the full path.
+        const { chain, fn, self } = unwrap(value, node);
+        routes.set(p, { fn: chain.length ? compose(chain, fn, self, p) : fn, self, proc });
       } else if (value !== null && typeof value === 'object') walk(value, p + '.');
     }
   };

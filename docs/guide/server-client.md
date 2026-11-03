@@ -45,7 +45,8 @@ side only throws an error that tells you to run `tbr generate`.
 
 The second parameter of every procedure is the context, and its type comes from the procedures. If
 `context` throws an `RpcError`, for example `UNAUTHORIZED`, the client gets that error and the
-procedure does not run.
+procedure does not run. To check or extend the context for a part of the router, see
+[Middleware](./middleware.md).
 
 ## Client
 

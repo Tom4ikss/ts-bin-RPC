@@ -1,6 +1,11 @@
 {
   "format": 0,
   "procedures": {
+    "account.deposit": { "input": "object account.deposit:input", "output": "object account.deposit:output" },
+    "account.me": { "input": "void", "output": "object account.me:output" },
+    "account.ticks": { "input": "object account.ticks:input", "output": "stream object Tick" },
+    "account.trace.get": { "input": "void", "output": "object account.trace.get:output" },
+    "audit": { "input": "void", "output": "object audit:output" },
     "crash": { "input": "void", "output": "string" },
     "echo": { "input": "object echo:input", "output": "object echo:output" },
     "events": { "input": "void", "output": "union Event[]" },
@@ -49,6 +54,37 @@
         "createdAt": { "id": 4, "type": "timestamp" },
         "tags": { "id": 5, "type": "string[]" },
         "manager": { "id": 6, "type": "object User | null | undefined" }
+      }
+    },
+    "account.deposit:input": {
+      "fields": {
+        "amount": { "id": 0, "type": "u32" }
+      }
+    },
+    "account.deposit:output": {
+      "fields": {
+        "user": { "id": 0, "type": "string" },
+        "amount": { "id": 1, "type": "u32" }
+      }
+    },
+    "account.me:output": {
+      "fields": {
+        "name": { "id": 0, "type": "string" }
+      }
+    },
+    "account.ticks:input": {
+      "fields": {
+        "n": { "id": 0, "type": "u32" }
+      }
+    },
+    "account.trace.get:output": {
+      "fields": {
+        "trace": { "id": 0, "type": "string" }
+      }
+    },
+    "audit:output": {
+      "fields": {
+        "calls": { "id": 0, "type": "string[]" }
       }
     },
     "echo:input": {

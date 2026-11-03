@@ -20,15 +20,17 @@ const files = {
     include: ['src'],
   }),
   'src/router.ts': `import { RpcError, type u32, type f32 } from 'ts-bin-rpc';
-import { stream } from 'ts-bin-rpc/server';
+import { around, stream, use } from 'ts-bin-rpc/server';
+export const seen: string[] = [];
+const logged = around(async ({ path }, next) => (seen.push(path), next()));
 export interface User { id: u32; name: string; role: 'admin' | 'user'; createdAt: Date; tags: string[] }
 export const appRouter = {
-  user: {
+  user: use([logged], {
     get: async (input: { id: u32 }): Promise<User> => {
       if (input.id !== 1) throw new RpcError('NOT_FOUND', \`no user \${input.id}\`);
       return { id: 1 as u32, name: 'Ада', role: 'admin', createdAt: new Date(0), tags: ['founder'] };
     },
-  },
+  }),
   series: async (): Promise<{ t: Float64Array; v: Float32Array; peak: f32 }> => ({ t: new Float64Array([1, 2]), v: new Float32Array([0.5, 1.5]), peak: 1.5 as f32 }),
   count: async (input: { n: u32 }) =>
     stream<{ i: u32 }>((emit, { end }) => {
@@ -43,7 +45,7 @@ import { createHandler } from 'ts-bin-rpc/server';
 import { toNodeListener } from 'ts-bin-rpc/node';
 import { createClient } from 'ts-bin-rpc/client';
 import { toPlain } from 'ts-bin-rpc';
-import { appRouter } from './router.ts';
+import { appRouter, seen } from './router.ts';
 import { clientProcedures, procedures, serverProcedures } from './tbr.gen.ts';
 
 const server = http.createServer(toNodeListener(createHandler(appRouter, { procedures: serverProcedures, prefix: '/rpc' })));
@@ -67,7 +69,7 @@ await new Promise<void>((end, error) =>
 );
 server.close();
 fs.writeFileSync('user.bin', procedures['user.get'].output!.encode(toPlain(user)));
-console.log(JSON.stringify({ user: toPlain(user), t: t instanceof Float64Array, v: Array.from(v), error, counted, column }));
+console.log(JSON.stringify({ user: toPlain(user), t: t instanceof Float64Array, v: Array.from(v), error, counted, column, seen }));
 `,
 };
 for (const [name, text] of Object.entries(files)) {
@@ -81,7 +83,7 @@ run('npx', ['tbr', 'generate']);
 run('npx', ['tbr', 'check']);
 run('npx', ['tsc', '-p', '.']);
 const result = JSON.parse(run('node', ['--experimental-strip-types', '--no-warnings', 'src/main.ts']));
-const expected = { user: { id: 1, name: 'Ада', role: 'admin', createdAt: '1970-01-01T00:00:00.000Z', tags: ['founder'] }, t: true, v: [0.5, 1.5], error: 'NOT_FOUND', counted: [0, 1, 2, 3, 4], column: true };
+const expected = { user: { id: 1, name: 'Ада', role: 'admin', createdAt: '1970-01-01T00:00:00.000Z', tags: ['founder'] }, t: true, v: [0.5, 1.5], error: 'NOT_FOUND', counted: [0, 1, 2, 3, 4], column: true, seen: ['user.get', 'user.get'] };
 if (JSON.stringify(result) !== JSON.stringify(expected)) throw new Error(`unexpected result: ${JSON.stringify(result)}`);
 const decoded = JSON.parse(run('npx', ['tbr', 'decode', 'user.bin', '--proc', 'user.get']));
 if (decoded.name !== 'Ада') throw new Error(`tbr decode printed ${JSON.stringify(decoded)}`);
