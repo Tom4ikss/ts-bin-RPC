@@ -570,20 +570,33 @@ class Emitter {
 
     // Table view
     const memo = (t: IRType) => !this.fixed(t) || (t.kind === 'scalar' && t.scalar === 'timestamp');
+    // Typed arrays are views over the response and cost one allocation, so they are created up front as
+    // read-only, non-enumerable own properties instead of memoized getters. A getter in a hot loop
+    // (`for (...) s.t[i]`) is not hoisted: 13–25x slower than a property in Firefox and WebKit.
+    const own = (t: IRType) => t.kind === 'typedArray' || t.kind === 'bytes';
+    const slot = (f: Field, wf: { size: number }) => {
+      const val = this.readSlot(f.type, 'p');
+      if (f.optional && f.nullable) return `p === 0 ? undefined : r.bytes[p + ${wf.size}] === 0 ? null : ${val}`;
+      if (f.optional) return `p === 0 ? undefined : ${val}`;
+      if (f.nullable) return `p === 0 ? null : ${val}`;
+      return val;
+    };
     L.push(`class V_${x} implements ${T} {`, '  readonly #r: Reader;', '  readonly #o: number;', '  readonly #vt: number;');
-    for (const wf of fields) if (memo(wf.f.type) && wf.f.type.kind !== 'const') L.push(`  #m${wf.k}: ${this.fieldTs(wf.f)} | typeof UNSET = UNSET;`);
-    L.push('  constructor(r: Reader, o: number) {', '    this.#r = r;', '    this.#o = o;', '    this.#vt = r.vt(o);', '  }');
+    for (const wf of fields) if (memo(wf.f.type) && !own(wf.f.type) && wf.f.type.kind !== 'const') L.push(`  #m${wf.k}: ${this.fieldTs(wf.f)} | typeof UNSET = UNSET;`);
+    for (const wf of fields) if (own(wf.f.type)) L.push(`  declare readonly ${prop(wf.f.name)}: ${this.fieldTs(wf.f)};`);
+    const owned = fields.filter((wf) => own(wf.f.type));
+    L.push('  constructor(r: Reader, o: number) {', '    this.#r = r;', '    this.#o = o;', '    this.#vt = r.vt(o);');
+    if (owned.length) L.push('    let p = 0;');
+    for (const wf of owned) L.push(`    p = r.at(o, this.#vt, ${wf.id});`, `    Object.defineProperty(this, ${lit(wf.f.name)}, { value: ${slot(wf.f, wf)} });`);
+    L.push('  }');
     for (const f of def.fields) {
+      if (own(f.type)) continue;
       if (f.type.kind === 'const') {
         L.push(`  get ${prop(f.name)}(): ${this.fieldTs(f)} { return ${lit(f.type.value)}; }`);
         continue;
       }
       const wf = fields.find((w) => w.f === f)!;
-      const val = this.readSlot(f.type, 'p');
-      let expr = val;
-      if (f.optional && f.nullable) expr = `p === 0 ? undefined : r.bytes[p + ${wf.size}] === 0 ? null : ${val}`;
-      else if (f.optional) expr = `p === 0 ? undefined : ${val}`;
-      else if (f.nullable) expr = `p === 0 ? null : ${val}`;
+      const expr = slot(f, wf);
       const body = [`    const r = this.#r, p = r.at(this.#o, this.#vt, ${wf.id});`];
       if (memo(f.type)) body.unshift(`    const c = this.#m${wf.k};`, '    if (c !== UNSET) return c;'), body.push(`    return (this.#m${wf.k} = ${expr});`);
       else body.push(`    return ${expr};`);

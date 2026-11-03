@@ -50,6 +50,11 @@ describe('createClient', () => {
       expect(isPlain(user)).toBe(false);
       expect(() => Object.assign(user, { name: 'x' })).toThrow(TypeError);
       expect(isPlain((await make().user.list())[0])).toBe(false);
+      // Typed arrays are read-only own properties over the response, hidden like the getters.
+      const series = await make().series({ n: 4 });
+      expect([isPlain(series), JSON.stringify({ ...series }), owns(series.t), series.t.length]).toEqual([false, '{}', false, 4]);
+      expect(() => Object.assign(series, { t: new Float64Array() })).toThrow(TypeError);
+      expect(series.t).toBe(series.t);
     });
 
     it("returns plain objects with decode: 'eager'", async () => {

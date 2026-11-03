@@ -32,8 +32,8 @@ doesn't.
 ## What does not
 
 > [!WARNING]
-> **Object spread and `Object.keys` don't see the fields.** The fields are getters on the prototype,
-> so `{ ...user }` gives an object with no fields and `Object.keys(user)` gives `[]`. A spread
+> **Object spread and `Object.keys` don't see the fields.** The fields are getters on the prototype
+> (typed arrays are non-enumerable own properties), so `{ ...user }` gives an object with no fields and `Object.keys(user)` gives `[]`. A spread
 > element of an array of objects also carries two hidden symbol keys that point at the response
 > columns, so the copy keeps the response bytes alive.
 
@@ -84,8 +84,10 @@ field is read, even the ones you never touch. See [Performance](./performance.md
 
 ## Typed arrays share the response
 
-A `Float32Array` field is a view over the response buffer, which is why reading it is free. Two
-consequences:
+A `Float32Array` field is a view over the response buffer, which is why reading it is free. It is
+a read-only property created with the view, not a getter, so a loop like
+`for (let i = 0; i < s.t.length; i++) sum += s.t[i]` runs as fast as over a plain object. Two
+consequences of sharing the buffer:
 
 - **Writing into it changes the response.** Fine if that's what you want; otherwise `slice()` it.
 - **It keeps the whole response alive.** If you keep one small typed array from a large response,
