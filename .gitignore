@@ -11,3 +11,4 @@ examples/*/src/server/tbr.gen.ts
 examples/*/dist/
 site/dist/
 site/.astro/
+packages/*/dist/

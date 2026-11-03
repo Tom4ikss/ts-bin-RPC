@@ -1,0 +1,64 @@
+name: release
+
+# Publishes ts-bin-rpc and ts-bin-rpc-cli to npm with provenance when a tag v<version> is pushed,
+# for example v0.1.0-alpha.0. Both packages must carry that version. Prereleases go to the dist-tag
+# named by their first identifier (alpha, beta, rc), releases to latest.
+#
+# Authentication: an npm trusted publisher for this workflow, or an NPM_TOKEN repository secret.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: npm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+      - name: npm with trusted publishing
+        run: npm install -g npm@11
+      - run: pnpm install --frozen-lockfile
+      - name: Install Chromium
+        run: pnpm --filter @tbr/bench exec playwright install --with-deps chromium
+      - name: Versions match the tag
+        id: version
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          for p in packages/ts-bin-rpc packages/cli; do
+            actual=$(node -p "require('./$p/package.json').version")
+            if [ "$actual" != "$version" ]; then echo "$p is $actual, the tag is $GITHUB_REF_NAME"; exit 1; fi
+          done
+          case "$version" in
+            *-*) pre="${version#*-}"; tag="${pre%%.*}" ;;
+            *) tag=latest ;;
+          esac
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+      - run: pnpm typecheck
+      - run: pnpm test
+      - name: Tarballs install and run in an empty project
+        run: node scripts/pack-smoke.mjs
+      - name: Pack
+        run: |
+          mkdir -p "$RUNNER_TEMP/pack"
+          for p in ts-bin-rpc cli; do (cd packages/$p && pnpm pack --pack-destination "$RUNNER_TEMP/pack"); done
+      - name: Publish
+        run: |
+          for f in "$RUNNER_TEMP"/pack/ts-bin-rpc-[0-9]*.tgz "$RUNNER_TEMP"/pack/ts-bin-rpc-cli-*.tgz; do
+            npm publish "$f" --provenance --access public --tag "${{ steps.version.outputs.tag }}"
+          done
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
