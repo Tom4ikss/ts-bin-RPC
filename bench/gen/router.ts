@@ -1,5 +1,5 @@
 // Contract of the generated-code benchmark: the same users as bench/lib/data.mjs.
-import type { u8, u32 } from 'ts-bin-rpc';
+import type { f32, u8, u32 } from 'ts-bin-rpc';
 
 export interface User {
   id: u32;
@@ -29,9 +29,19 @@ export interface Series {
   v: Float32Array;
 }
 
+/** One trade in a market feed: the unit of a stream. */
+export interface Tick {
+  t: number;
+  price: f32;
+  size: u32;
+  side: 'buy' | 'sell';
+}
+
 export const appRouter = {
   users: async (): Promise<User[]> => [],
   user: async (): Promise<User> => null!,
   products: async (): Promise<Product[]> => [],
   series: async (): Promise<Series> => null!,
+  tick: async (): Promise<Tick> => null!,
+  ticks: async (): Promise<Tick[]> => [],
 };
