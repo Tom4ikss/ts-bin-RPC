@@ -19,10 +19,12 @@ export function onCall(listener: (s: CallStats) => void): () => void {
   return () => void listeners.delete(listener);
 }
 
-/** fetch that reports the response size and time; the client reads the buffered body as usual. */
+/** fetch that reports the response size and time of calls; the client reads the buffered body as usual. */
 const measuredFetch: typeof fetch = async (input, init) => {
   const start = performance.now();
   const res = await fetch(input, init);
+  // Streams are read as they arrive; only calls are measured.
+  if (res.headers.get('content-type')?.startsWith('application/vnd.tbr-stream')) return res;
   const body = await res.arrayBuffer();
   const stats = { path: new URL(String(input), location.href).pathname.replace(/^\/rpc\//, ''), bytes: body.byteLength, ms: performance.now() - start };
   for (const l of listeners) l(stats);

@@ -20,6 +20,7 @@ const files = {
     include: ['src'],
   }),
   'src/router.ts': `import { RpcError, type u32, type f32 } from 'ts-bin-rpc';
+import { stream } from 'ts-bin-rpc/server';
 export interface User { id: u32; name: string; role: 'admin' | 'user'; createdAt: Date; tags: string[] }
 export const appRouter = {
   user: {
@@ -29,6 +30,11 @@ export const appRouter = {
     },
   },
   series: async (): Promise<{ t: Float64Array; v: Float32Array; peak: f32 }> => ({ t: new Float64Array([1, 2]), v: new Float32Array([0.5, 1.5]), peak: 1.5 as f32 }),
+  count: async (input: { n: u32 }) =>
+    stream<{ i: u32 }>((emit, { end }) => {
+      for (let i = 0; i < input.n; i++) emit({ i: i as u32 });
+      end();
+    }),
 };
 `,
   'src/main.ts': `import fs from 'node:fs';
@@ -47,9 +53,21 @@ const api = createClient<typeof appRouter>({ url: \`http://localhost:\${port}/rp
 const user = await api.user.get({ id: 1 });
 const { t, v } = await api.series();
 const error = await api.user.get({ id: 2 }).catch((e: { code: string }) => e.code);
+const counted: number[] = [];
+let column = false;
+await new Promise<void>((end, error) =>
+  api.count.subscribe({ n: 5 }, {
+    batch: (b) => {
+      column ||= b.columns.i instanceof Uint32Array;
+      for (const r of b) counted.push(r.i);
+    },
+    end,
+    error,
+  }),
+);
 server.close();
 fs.writeFileSync('user.bin', procedures['user.get'].output!.encode(toPlain(user)));
-console.log(JSON.stringify({ user: toPlain(user), t: t instanceof Float64Array, v: Array.from(v), error }));
+console.log(JSON.stringify({ user: toPlain(user), t: t instanceof Float64Array, v: Array.from(v), error, counted, column }));
 `,
 };
 for (const [name, text] of Object.entries(files)) {
@@ -63,7 +81,7 @@ run('npx', ['tbr', 'generate']);
 run('npx', ['tbr', 'check']);
 run('npx', ['tsc', '-p', '.']);
 const result = JSON.parse(run('node', ['--experimental-strip-types', '--no-warnings', 'src/main.ts']));
-const expected = { user: { id: 1, name: 'Ада', role: 'admin', createdAt: '1970-01-01T00:00:00.000Z', tags: ['founder'] }, t: true, v: [0.5, 1.5], error: 'NOT_FOUND' };
+const expected = { user: { id: 1, name: 'Ада', role: 'admin', createdAt: '1970-01-01T00:00:00.000Z', tags: ['founder'] }, t: true, v: [0.5, 1.5], error: 'NOT_FOUND', counted: [0, 1, 2, 3, 4], column: true };
 if (JSON.stringify(result) !== JSON.stringify(expected)) throw new Error(`unexpected result: ${JSON.stringify(result)}`);
 const decoded = JSON.parse(run('npx', ['tbr', 'decode', 'user.bin', '--proc', 'user.get']));
 if (decoded.name !== 'Ада') throw new Error(`tbr decode printed ${JSON.stringify(decoded)}`);

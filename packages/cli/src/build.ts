@@ -63,12 +63,14 @@ class Builder {
 
     let output: IRType | null = null;
     const ret = this.src.describe(entry.returns);
-    if (ret.k !== 'void' && ret.k !== 'undefined') {
-      const r = this.slot(entry.returns, { path: `${entry.path} → output`, anon: `${entry.path}:output`, location: entry.location });
-      if (r && (r.optional || r.nullable)) this.fail(ctx, 'a procedure result cannot be null or undefined; wrap it in an object with an optional field');
+    if (entry.stream && (ret.k === 'void' || ret.k === 'undefined')) this.fail(ctx, 'a stream needs a row type: Stream<T>');
+    else if (ret.k !== 'void' && ret.k !== 'undefined') {
+      const what = entry.stream ? 'row' : 'output';
+      const r = this.slot(entry.returns, { path: `${entry.path} → ${what}`, anon: `${entry.path}:${what}`, location: entry.location });
+      if (r && (r.optional || r.nullable)) this.fail(ctx, entry.stream ? 'stream rows cannot be null or undefined' : 'a procedure result cannot be null or undefined; wrap it in an object with an optional field');
       output = r?.type ?? null;
     }
-    const proc: Procedure = { path: entry.path, input, inputOptional, output, location: entry.location };
+    const proc: Procedure = { path: entry.path, input, inputOptional, output, ...(entry.stream && { stream: true }), location: entry.location };
     this.schema.procedures.push(proc);
   }
 

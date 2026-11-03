@@ -6,7 +6,7 @@ export function printSchema(s: Schema): string {
   const out: string[] = [];
   for (const p of s.procedures) {
     const input = p.input ? `${signature(p.input)}${p.inputOptional ? '?' : ''}` : '()';
-    out.push(`procedure ${p.path}: ${input} -> ${p.output ? signature(p.output) : 'void'}`);
+    out.push(`procedure ${p.path}: ${input} -> ${p.stream ? 'stream ' : ''}${p.output ? signature(p.output) : 'void'}`);
   }
   for (const name of Object.keys(s.objects).sort()) {
     out.push('', `object ${name} {`);

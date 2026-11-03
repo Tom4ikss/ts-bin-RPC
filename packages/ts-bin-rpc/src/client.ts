@@ -1,6 +1,7 @@
 // createClient<AppRouter>: a proxy whose calls POST the encoded input and return views over the response.
-import { decodeError, FLAG_ERROR, toPlain, VerifyError, type Limits } from './runtime.ts';
-import { codeForStatus, CONTENT_TYPE, RpcError, SCHEMA_HEADER, type ClientProcedures } from './rpc.ts';
+import { FLAG_ERROR, toPlain, VerifyError, type Limits } from './runtime.ts';
+import { codeForStatus, CONTENT_TYPE, readError, RpcError, SCHEMA_HEADER, type ClientEntry, type ClientProcedures } from './rpc.ts';
+import type { StreamEnv } from './stream-client.ts';
 import type { CallOptions, Client, DecodeMode, ProcedurePath } from './router.ts';
 
 export interface ClientOptions<R = unknown> {
@@ -28,7 +29,6 @@ export interface ClientOptions<R = unknown> {
   debug?: boolean;
 }
 
-const decoder = new TextDecoder();
 
 // Not @types/node: the client runs in browsers, where bundlers replace this expression.
 declare const process: { env: { NODE_ENV?: string } };
@@ -46,18 +46,24 @@ export function createClient<R>(options: ClientOptions<R>): Client<R> {
   const decode = options.decode as DecodeMode | Readonly<Record<string, DecodeMode | undefined>> | undefined;
   const base = options.url.replace(/\/+$/, '');
   const warned = new Set<string>();
+  const modeOf = (path: string, opts: CallOptions) => opts.decode ?? (typeof decode === 'string' ? decode : decode?.[path]);
 
-  async function call(path: string, args: unknown[]): Promise<unknown> {
-    const proc = procedures[path];
-    if (!proc) throw new RpcError('NOT_FOUND', `procedure '${path}' is not in the generated code; run tbr generate`);
-    const [input, opts = {}] = (proc.input ? args : [undefined, args[0]]) as [unknown, CallOptions | undefined];
-    opts.signal?.throwIfAborted();
-    const body = proc.input && !(input === undefined && proc.inputOptional) ? proc.input.encode(input) : new Uint8Array(0);
-
+  async function requestHeaders(proc: ClientEntry, opts: CallOptions): Promise<Headers> {
     const headers = new Headers(typeof options.headers === 'function' ? await options.headers() : options.headers);
     if (opts.headers) new Headers(opts.headers).forEach((v, k) => headers.set(k, v));
     headers.set('content-type', CONTENT_TYPE);
     headers.set(SCHEMA_HEADER, proc.hash);
+    return headers;
+  }
+
+  async function call(path: string, args: unknown[]): Promise<unknown> {
+    const proc = procedures[path];
+    if (!proc) throw new RpcError('NOT_FOUND', `procedure '${path}' is not in the generated code; run tbr generate`);
+    if (proc.stream) throw new TypeError(`'${path}' is a stream: call ${path}.subscribe()`);
+    const [input, opts = {}] = (proc.input ? args : [undefined, args[0]]) as [unknown, CallOptions | undefined];
+    opts.signal?.throwIfAborted();
+    const body = proc.input && !(input === undefined && proc.inputOptional) ? proc.input.encode(input) : new Uint8Array(0);
+    const headers = await requestHeaders(proc, opts);
 
     const t0 = debug ? performance.now() : 0;
     const fetchFn = options.fetch ?? globalThis.fetch;
@@ -72,7 +78,7 @@ export function createClient<R>(options: ClientOptions<R>): Client<R> {
       error = readError(bytes, res.status);
     } else if (proc.output) {
       try {
-        const mode = opts.decode ?? (typeof decode === 'string' ? decode : decode?.[path]);
+        const mode = modeOf(path, opts);
         result = mode === 'eager' ? proc.output.decode(bytes, { verify, limits }) : proc.output.view(bytes, { verify, limits });
       } catch (e) {
         if (!(e instanceof VerifyError)) throw e;
@@ -108,27 +114,24 @@ export function createClient<R>(options: ClientOptions<R>): Client<R> {
         return child;
       },
       apply(_, __, args) {
+        // `x.subscribe(...)` of a streaming procedure `x`; a procedure named `subscribe` wins.
+        const parent = path.endsWith('.subscribe') && !procedures[path] ? procedures[path.slice(0, -10)] : undefined;
+        if (parent?.stream) {
+          if (!parent.subscribe) throw new TypeError(`'${path}': these procedures have no stream client; pass clientProcedures or procedures`);
+          return parent.subscribe(streams, path.slice(0, -10), parent, args);
+        }
         return call(path, args);
       },
     });
   };
+  const streams: StreamEnv = {
+    url: base,
+    fetch: (input, init) => (options.fetch ?? globalThis.fetch)(input, init),
+    headers: requestHeaders,
+    mode: modeOf,
+    verify,
+    limits,
+    debug,
+  };
   return proxy('') as Client<R>;
-}
-
-function readError(bytes: Uint8Array, status: number): RpcError {
-  let e;
-  try {
-    e = decodeError(bytes);
-  } catch (cause) {
-    return new RpcError('BAD_RESPONSE', `HTTP ${status}: malformed error response`, undefined, { status, cause });
-  }
-  let data: unknown;
-  if (e.data) {
-    try {
-      data = JSON.parse(decoder.decode(e.data));
-    } catch {
-      data = undefined;
-    }
-  }
-  return new RpcError(e.code, e.message, data, { status });
 }

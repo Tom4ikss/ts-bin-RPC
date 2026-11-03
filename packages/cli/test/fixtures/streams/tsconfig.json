@@ -1,0 +1,11 @@
+{
+  "compilerOptions": {
+    "target": "es2023",
+    "module": "nodenext",
+    "strict": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "skipLibCheck": true
+  },
+  "files": ["s1.ts", "s2.ts"]
+}

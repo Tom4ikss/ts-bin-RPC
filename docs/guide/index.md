@@ -47,7 +47,10 @@ chart.setData([m.t, m.cpu]); // typed arrays over the response bytes, nothing co
   safe changes from breaking ones before you deploy.
 - **Stale code cannot slip through.** If you change a type and forget to regenerate, `tsc` fails.
   `tbr generate --watch` regenerates in about 15 ms per save.
-- **Small client.** About 9 KB gzip for a real app, of which the runtime is 4.0 KB. The client
+- **Streams.** A procedure can return a stream of rows. They arrive in batches over one HTTP
+  response, with typed-array columns per batch, and need 2× less main-thread time than NDJSON
+  at 20 000 rows/s. See [Streams](./streams.md).
+- **Small client.** About 10 KB gzip for a real app, of which the runtime is 4.2 KB. The client
   bundle holds only input encoders and output decoders.
 - **Any runtime.** The server is a Fetch API handler (Node, Bun, Deno, Workers). No `eval`, so
   strict CSP works.
@@ -61,8 +64,8 @@ chart.setData([m.t, m.cpu]); // typed arrays over the response bytes, nothing co
 - **The payloads are small and mostly text.** Twenty users with names and emails are about the
   same size as JSON after gzip, sometimes a few percent larger. The gain grows with numbers, with
   many objects, and when you read only some fields.
-- **You need tRPC's ecosystem today:** TanStack Query bindings, subscriptions, batching,
-  middleware. These are not there yet. See the [FAQ](./faq.md).
+- **You need tRPC's ecosystem today:** TanStack Query bindings, WebSocket
+  subscriptions, request batching, middleware. These are not there yet. See the [FAQ](./faq.md).
 
 > [!WARNING]
 > ts-bin-rpc is an alpha: `npm install ts-bin-rpc@alpha`. The wire format may still change before 1.0.

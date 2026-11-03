@@ -1,6 +1,7 @@
 // Protocol pieces shared by the server and the client (DESIGN §10): errors, statuses, headers and the
 // procedure table that generated code exports.
-import type { Decoder, Encoder } from './runtime.ts';
+import { decodeError, type Decoder, type Encoder } from './runtime.ts';
+import type { subscribe } from './stream-client.ts';
 
 export const CONTENT_TYPE = 'application/vnd.tbr';
 /** Request: the client's hash of the procedure's contract. Response: the server's. */
@@ -47,6 +48,10 @@ interface Entry<In, Out> {
   input: In | null;
   inputOptional: boolean;
   output: Out | null;
+  /** A streaming procedure: output is the codec of a batch, `T[]`. */
+  stream?: boolean;
+  /** Of a streaming procedure in the client table: opens subscriptions. */
+  subscribe?: typeof subscribe;
   /** Hash of the contract: the lockfile entries of every type the procedure reaches. */
   hash: string;
 }
@@ -64,4 +69,23 @@ export type ServerProcedures = { readonly [path: string]: ServerEntry };
 export function codeForStatus(status: number): string {
   for (const code in STATUS) if (STATUS[code] === status) return code;
   return status >= 500 ? 'INTERNAL' : 'BAD_RESPONSE';
+}
+
+/** An error envelope: of an HTTP response with its status, or of a stream frame (status from the code). */
+export function readError(bytes: Uint8Array, status?: number): RpcError {
+  let e;
+  try {
+    e = decodeError(bytes);
+  } catch (cause) {
+    return new RpcError('BAD_RESPONSE', `${status ? `HTTP ${status}` : 'stream'}: malformed error`, undefined, { status: status ?? 502, cause });
+  }
+  let data: unknown;
+  if (e.data) {
+    try {
+      data = JSON.parse(new TextDecoder().decode(e.data));
+    } catch {
+      data = undefined;
+    }
+  }
+  return new RpcError(e.code, e.message, data, { status });
 }

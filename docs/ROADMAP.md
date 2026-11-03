@@ -238,9 +238,21 @@ Runtime подрос на `Check.cols`: проверка каталога оку
 
 ## Фаза 5 — стриминг
 
-Дизайн — [DESIGN §14](DESIGN.md#14-стриминг-дизайн-не-реализован). Замер до кода
+Дизайн — [DESIGN §14](DESIGN.md#14-стриминг). Замер до кода
 ([stream.md](../bench/results/stream.md)): кадр на каждое сообщение в браузерах не быстрее NDJSON
 (0.63–0.96×), батчи по 32 строки — в 6–16 раз быстрее. Батчинг по умолчанию, окно 16 мс.
+
+**Статус: выполнена 2026-11-04.** Код — `frames.ts`, `stream-server.ts`, `stream-client.ts` в
+[`packages/ts-bin-rpc/src`](../packages/ts-bin-rpc/src), тесты — [`e2e/test/stream.test.ts`](../e2e/test/stream.test.ts),
+сценарии в [`e2e/src/scenarios.ts`](../e2e/src/scenarios.ts), кадры и кодоген в `packages/cli/test`.
+Руководство — [guide/streams.md](guide/streams.md). Что изменилось по сравнению с планом:
+- Клиент потоков не входит в рантайм `createClient`: сгенерированный код кладёт `subscribe` в
+  таблицу клиента, если у роутера есть потоки. Иначе клиентский рантайм вырос бы с 4.0 до 5.5 КБ.
+- `end` и `signal` приходят вторым аргументом setup; обрыв без кадра конца — ошибка `DISCONNECTED`.
+- Бенч 5.8 ([stream-transport.md](../bench/results/stream-transport.md)): окно 16 мс в 1.9–4.6
+  раза дешевле NDJSON по main thread ценой ~10 мс задержки; `window: 0` по задержке и CPU как NDJSON,
+  по байтам в 3 раза меньше при 20 000 тиков/с.
+- Пример 5.9 — живой график в [`examples/dashboard`](../examples/dashboard), а не отдельное приложение.
 
 | # | Задача | Размер |
 |---|---|---|

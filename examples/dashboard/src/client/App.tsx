@@ -4,6 +4,7 @@ import type uPlot from 'uplot';
 import type { Host, MetricKind, Overview, Series } from '../server/router.ts';
 import { api, onCall, type CallStats } from './api.ts';
 import { Chart } from './Chart.tsx';
+import { Live } from './Live.tsx';
 
 const RANGES = [
   { label: '15m', ms: 15 * 60_000 },
@@ -120,6 +121,8 @@ export function App() {
         </h2>
         {overviewData && <Chart data={overviewData} series={overviewSeries} unit={kind.unit} />}
       </section>
+
+      {hosts.length > 0 && <Live hosts={hosts.filter((h) => h.status !== 'down')} colors={COLORS} />}
 
       <div className="grid">
         <section>

@@ -83,7 +83,9 @@ export function catalog(dv: DataView, vec: number, spec: readonly number[]): Int
 }
 
 export type { u8, i8, u16, i16, u32, i32, f32, f64, u64, i64 } from './brands.ts';
-export type { Expect, Same, InputOf, InputOptional, OutputOf, ProcedurePath } from './router.ts';
+export type { Expect, Same, InputOf, InputOptional, OutputOf, ProcedurePath, StreamItemOf, Columns } from './router.ts';
+export { subscribe } from './stream-client.ts';
+import type { Columns } from './router.ts';
 
 /** `console.log(view)` in Node prints the plain value instead of view internals. */
 export const INSPECT: unique symbol = Symbol.for('nodejs.util.inspect.custom') as never;
@@ -103,6 +105,17 @@ export function toPlain<T>(v: T): T {
 
 /** Memo slot marker for lazily computed view fields whose value may itself be `undefined`. */
 export const UNSET: unique symbol = Symbol('unset');
+
+/** Column set behind an array of row views: generated code registers it when it reads a vector of objects. */
+export const COLUMN_SETS: WeakMap<object, { columns(): Record<string, ArrayBufferView | undefined> }> = new WeakMap();
+
+/**
+ * Required numeric, boolean and Date fields of an array of row views as typed arrays over the
+ * message, without copying. `undefined` for arrays that are not views (plain objects, toPlain).
+ */
+export function columnsOf<T>(rows: readonly T[]): Partial<Columns<T>> | undefined {
+  return COLUMN_SETS.get(rows)?.columns() as Partial<Columns<T>> | undefined;
+}
 
 export type TypedArray =
   | Uint8Array | Int8Array | Uint16Array | Int16Array | Uint32Array | Int32Array

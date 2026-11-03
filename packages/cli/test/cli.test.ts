@@ -73,6 +73,39 @@ describe('tbr generate / check', () => {
   });
 });
 
+describe('streams', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tbr-'));
+  const lock = path.join(dir, 'tbr.lock.json');
+  const gen = path.join(dir, 'tbr.gen.ts');
+  const at = (step: string) => ['--project', fixture('streams', 'tsconfig.json'), '--router', `${step}.ts`, '--lock', lock, '--out', gen];
+
+  it('finds Stream<T>, async generators, async iterables and ReadableStream, with or without a promise', () => {
+    const r = tbr('generate', ...at('s1'));
+    expect(r.code).toBe(0);
+    const locked = JSON.parse(fs.readFileSync(lock, 'utf8')).procedures;
+    expect(locked).toMatchObject({
+      feed: { input: 'object feed:input', output: 'stream object Tick' },
+      plain: { output: 'stream object Tick' },
+      generator: { output: 'stream object generator:row' },
+      iterable: { output: 'stream string' },
+      web: { output: 'stream object Tick' },
+      last: { output: 'object Tick' },
+    });
+    const code = fs.readFileSync(gen, 'utf8');
+    expect(code).toMatch(/"feed": \{[^}]*stream: true/);
+    expect(code).toContain('StreamItemOf');
+    expect(tbr('generate', '--dry-run', ...at('s1')).output).toContain('procedure feed: object feed:input -> stream object Tick');
+  });
+
+  it('turning a stream into a call, or a call into a stream, is breaking', () => {
+    const r = tbr('check', ...at('s2'));
+    expect(r.code).toBe(1);
+    expect(r.output).toContain('output changed: stream object Tick -> object Tick[]');
+    expect(r.output).toContain('output changed: object Tick -> stream object Tick');
+    expect(r.output).toContain('the contract has breaking changes');
+  });
+});
+
 describe('stale generated code', () => {
   // A project inside the package, so that the generated file resolves ts-bin-rpc.
   const dir = path.join(import.meta.dirname, '.gen', 'stale');

@@ -1,5 +1,6 @@
 // Fixture app for end-to-end tests: every kind of procedure the protocol distinguishes.
-import { RpcError, type u32, type u64 } from 'ts-bin-rpc';
+import { RpcError, type f32, type u32, type u64 } from 'ts-bin-rpc';
+import { channel, stream } from 'ts-bin-rpc/server';
 
 export interface Ctx {
   user: string | null;
@@ -25,6 +26,20 @@ const users: User[] = [
   { id: 2, name: 'Bob', role: 'user', balance: 0n, createdAt: new Date(Date.UTC(2021, 5, 1)), tags: [], manager: boss },
   { id: 3, name: 'Chloé', role: 'user', balance: 42n, createdAt: new Date(Date.UTC(2022, 2, 3)), tags: ['ops', 'oncall'] },
 ];
+
+/** A row of the streaming procedures. */
+export interface Tick {
+  seq: u32;
+  price: f32;
+  side: 'buy' | 'sell';
+  venue?: string;
+}
+
+const tick = (seq: number, venue?: string): Tick => ({ seq, price: 100 + seq / 4, side: seq % 2 ? 'sell' : 'buy', ...(venue && { venue }) });
+
+/** Streams of `forever` that are running and that have run their cleanup: tests watch disconnects. */
+const streams = { running: 0, cleaned: 0 };
+const quotes = channel<Tick>({ window: 5 });
 
 export const appRouter = {
   user: {
@@ -56,5 +71,54 @@ export const appRouter = {
   echo: async (input: { text: string; bytes: Uint8Array }): Promise<{ text: string; bytes: Uint8Array }> => input,
   crash: async (): Promise<string> => {
     throw new Error('secret stack details');
+  },
+  stream: {
+    /** `n` ticks, `burst` at a time every millisecond, then the end. */
+    ticks: async (input: { n: u32; burst?: u32 }) => {
+      if (input.n > 100_000) throw new RpcError('BAD_INPUT', 'at most 100000 ticks');
+      return stream<Tick>(
+        (emit, { end }) => {
+          let seq = 0;
+          const timer = setInterval(() => {
+            for (let k = 0; k < (input.burst ?? 10) && seq < input.n; k++) emit(tick(seq++));
+            if (seq >= input.n) end();
+          }, 1);
+          return () => clearInterval(timer);
+        },
+        { window: 5 },
+      );
+    },
+    /** One tick, then an error from the source. */
+    failing: async () =>
+      stream<Tick>((emit, { end }) => {
+        emit(tick(0));
+        const timer = setTimeout(() => end(new RpcError('UPSTREAM', 'feed lost', { retryIn: 5 })), 20);
+        return () => clearTimeout(timer);
+      }),
+    /** Never ends; counts running streams and cleanups. */
+    forever: async () =>
+      stream<Tick>((emit) => {
+        streams.running++;
+        let seq = 0;
+        const timer = setInterval(() => emit(tick(seq++)), 2);
+        return () => {
+          clearInterval(timer);
+          streams.running--;
+          streams.cleaned++;
+        };
+      }),
+    stats: async (): Promise<{ running: u32; cleaned: u32 }> => ({ ...streams }),
+    /** A topic of the `quotes` channel. */
+    quotes: (input: { symbol: string }) => quotes.subscribe(input.symbol),
+    /** Publishes `n` ticks to a topic; answers how many subscribers it had. */
+    publish: async (input: { symbol: string; n: u32 }): Promise<{ subscribers: u32 }> => {
+      const subscribers = quotes.subscribers(input.symbol);
+      for (let i = 0; i < input.n; i++) quotes.publish(input.symbol, tick(i, input.symbol));
+      return { subscribers };
+    },
+    /** An async generator streams too. */
+    countdown: async function* (input: { from: u32 }) {
+      for (let i = input.from; i > 0; i--) yield { left: i as u32 };
+    },
   },
 };

@@ -93,8 +93,80 @@ export async function scenarios(origin: string, fetchFn: typeof fetch = globalTh
   const res = await raw('whoami', { headers: { ...headers, 'x-tbr-schema': 'other' } });
   same('schema mismatch only warns by default', [res.status, res.headers.get('x-tbr-schema')], [200, procedures.whoami.hash]);
 
+  // Streams
+  {
+    const rows: number[] = [];
+    let batches = 0;
+    let columnsOk = true;
+    await new Promise<void>((resolve, reject) => {
+      api.stream.ticks.subscribe({ n: 200 }, {
+        row: (t) => rows.push(t.seq),
+        batch: (b) => {
+          batches++;
+          const c = b.columns;
+          columnsOk &&= c.price instanceof Float32Array && c.seq instanceof Uint32Array && c.price.length === b.length && c.seq[0] === b[0].seq && !('side' in c);
+        },
+        end: resolve,
+        error: reject,
+      });
+    });
+    same('stream: every row in order', rows, Array.from({ length: 200 }, (_, i) => i));
+    check('stream: rows come in several batches', batches > 1 && batches < 200, batches);
+    check('stream: batch columns are typed arrays', columnsOk);
+
+    const seen: number[] = [];
+    for await (const t of api.stream.ticks.subscribe({ n: 30, burst: 30 })) seen.push(t.seq);
+    same('stream: for await', seen.length, 30);
+
+    const left: number[] = [];
+    for await (const x of api.stream.countdown.subscribe({ from: 3 })) left.push(x.left);
+    same('stream: async generator', left, [3, 2, 1]);
+
+    const failed = await new Promise<unknown>((resolve) => {
+      const got: number[] = [];
+      api.stream.failing.subscribe({ row: (t) => got.push(t.seq), error: (e) => resolve([got, e.code, e.message, e.data]), end: () => resolve('ended') });
+    });
+    same('stream: error after rows', failed, [[0], 'UPSTREAM', 'feed lost', { retryIn: 5 }]);
+
+    const early = await new Promise<unknown>((resolve) => api.stream.ticks.subscribe({ n: 200_000 }, { error: (e) => resolve([e.code, e.status]), end: () => resolve('ended') }));
+    same('stream: error before the first frame', early, ['BAD_INPUT', 400]);
+
+    // Stopping reaches the server: the source's cleanup runs.
+    const before = (await api.stream.stats()).cleaned;
+    let got = 0;
+    const sub = api.stream.forever.subscribe(() => got++);
+    while (got < 5) await sleep(5);
+    sub.stop();
+    let cleaned = before;
+    for (let i = 0; i < 200 && cleaned === before; i++) {
+      await sleep(10);
+      cleaned = (await api.stream.stats()).cleaned;
+    }
+    check('stream: stop() runs the server cleanup', cleaned > before, cleaned);
+    let after = 0;
+    for await (const _ of api.stream.forever.subscribe()) if (++after === 3) break;
+    for (let i = 0; i < 200 && (await api.stream.stats()).running > 0; i++) await sleep(10);
+    same('stream: break in for await stops it', (await api.stream.stats()).running, 0);
+
+    // A channel: one encode per batch, every subscriber of the topic gets it.
+    const a: string[] = [], b: string[] = [], c: string[] = [];
+    const subs = [
+      api.stream.quotes.subscribe({ symbol: 'BTC' }, (t) => a.push(`${t.venue}${t.seq}`)),
+      api.stream.quotes.subscribe({ symbol: 'BTC' }, (t) => b.push(`${t.venue}${t.seq}`)),
+      api.stream.quotes.subscribe({ symbol: 'ETH' }, (t) => c.push(`${t.venue}${t.seq}`)),
+    ];
+    for (let i = 0; i < 200 && (await api.stream.publish({ symbol: 'BTC', n: 0 })).subscribers < 2; i++) await sleep(10);
+    same('channel: subscribers', (await api.stream.publish({ symbol: 'BTC', n: 40 })).subscribers, 2);
+    for (let i = 0; i < 200 && (a.length < 40 || b.length < 40); i++) await sleep(10);
+    same('channel: every subscriber gets the topic', [a.length, b.length, a[39], b[0]], [40, 40, 'BTC39', 'BTC0']);
+    same('channel: other topics stay quiet', c.length, 0);
+    subs.forEach((s) => s.stop());
+  }
+
   return report;
 }
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 function show(v: unknown): string {
   return JSON.stringify(v, (_, x) => (typeof x === 'bigint' ? `${x}n` : x === undefined ? '<undefined>' : x)) ?? '<undefined>';

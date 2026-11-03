@@ -98,7 +98,8 @@ export function updateLock(prev: Lock, schema: Schema): { lock: Lock; changes: C
 
   // Procedures
   for (const p of schema.procedures) {
-    const sig = { input: p.input ? signature(p.input) + (p.inputOptional ? '?' : '') : 'void', output: p.output ? signature(p.output) : 'void' };
+    const out = p.output ? signature(p.output) : 'void';
+    const sig = { input: p.input ? signature(p.input) + (p.inputOptional ? '?' : '') : 'void', output: p.stream ? `stream ${out}` : out };
     next.procedures[p.path] = sig;
     const old = prev.procedures[p.path];
     if (!old) add('safe', p.path, 'procedure added', p.location);

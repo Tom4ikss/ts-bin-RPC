@@ -151,6 +151,8 @@ ts-bin-rpc: procedure 'user.list' returned an invalid value at [17].manager.age:
 - **Requests and responses use `content-type: application/vnd.tbr`.** The server refuses anything
   else with 415. Browsers cannot send this content type from a form or a "simple" cross-origin
   request, which protects against CSRF.
+- **A stream procedure answers with `content-type: application/vnd.tbr-stream`**, a sequence of
+  frames over one response; see [Streams](./streams.md#wire).
 - **Errors are a fixed envelope** with a flag in the header, so the client reads them without
   knowing the procedure.
 - **The `x-tbr-schema` header** carries a hash of the procedure's contract in both directions. The

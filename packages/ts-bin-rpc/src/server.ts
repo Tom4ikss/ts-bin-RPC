@@ -3,6 +3,12 @@
 import { DEFAULT_LIMITS, EncodeError, encodeError, VerifyError, type Limits } from './runtime.ts';
 import { CONTENT_TYPE, RpcError, SCHEMA_HEADER, type ServerEntry, type ServerProcedures } from './rpc.ts';
 import type { AnyProcedure, AnyRouter } from './router.ts';
+import { STREAM_CONTENT_TYPE } from './frames.ts';
+import { Sink, toSource } from './stream-server.ts';
+import type { Encoder } from './runtime.ts';
+
+export { stream, channel, type Channel, type StreamOptions, type BatchOptions, type SubscriberOptions, type StreamControl, type StreamSetup } from './stream-server.ts';
+export type { Stream } from './router.ts';
 
 type CtxUnion<R> = {
   [K in keyof R]: R[K] extends AnyProcedure ? (Parameters<R[K]> extends [unknown, infer C, ...unknown[]] ? C : never) : CtxUnion<R[K]>;
@@ -105,6 +111,20 @@ export function createHandler<R extends AnyRouter>(router: R, options: HandlerOp
 
       const ctx = context ? await context(request) : undefined;
       const result = await route.fn.call(route.self, input, ctx);
+      if (proc.stream) {
+        const source = toSource(result);
+        if (!source || !proc.output) {
+          onError(new TypeError(`streaming procedure returned ${result === null ? 'null' : typeof result}, not stream(), channel().subscribe() or an async iterable`), { path, request });
+          return fail(new RpcError('BAD_OUTPUT', 'the procedure returned a value that does not match its declared type'), {}, proc);
+        }
+        const sink = new Sink(request.signal);
+        source.start({ encoder: proc.output as Encoder<unknown[]>, sink, report: (e) => onError(e, { path, request }) });
+        // no-transform and X-Accel-Buffering keep proxies (nginx, CDNs) from buffering the frames.
+        return new Response(sink.readable, {
+          status: 200,
+          headers: headers(proc, { 'content-type': STREAM_CONTENT_TYPE, 'cache-control': 'no-store, no-transform', 'x-accel-buffering': 'no' }),
+        });
+      }
       let body = new Uint8Array(0);
       if (proc.output) {
         try {

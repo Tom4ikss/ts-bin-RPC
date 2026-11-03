@@ -1,5 +1,6 @@
 // The dashboard's API. `pnpm gen` turns these types into tbr.lock.json and src/server/tbr.gen.ts.
-import { RpcError, type f32, type u16, type u32 } from 'ts-bin-rpc';
+import { RpcError, type f32, type f64, type u16, type u32 } from 'ts-bin-rpc';
+import { stream } from 'ts-bin-rpc/server';
 import { HOSTS, KINDS, sample, series, timeline } from './data.ts';
 
 export type Region = 'eu-west' | 'us-east' | 'ap-south';
@@ -48,6 +49,22 @@ export interface Overview {
   hosts: { id: u16; name: string; v: Float32Array }[];
 }
 
+/** Metrics of one host at one moment, a row of the live stream. */
+export interface Sample {
+  host: u16;
+  /** ms since the epoch. */
+  t: f64;
+  cpu: f32;
+  rps: f32;
+  latency: f32;
+}
+
+export interface LiveQuery {
+  region?: Region;
+  /** Milliseconds between samples. Default: 100. */
+  every?: u16;
+}
+
 const MAX_POINTS = 500_000;
 
 function range(q: { from: Date; to: Date; points: u32 }): Float64Array {
@@ -86,6 +103,25 @@ export const appRouter = {
     const t = range(input);
     const hosts = HOSTS.filter((h) => !input.region || h.region === input.region);
     return { unit: KINDS[input.kind].unit, t, hosts: hosts.map((h) => ({ id: h.id, name: h.name, v: series(h, input.kind, t) })) };
+  },
+
+  /** A sample of every host each `every` ms, until the client stops. Rows go out in batches. */
+  live: async (input: LiveQuery) => {
+    const every = input.every ?? 100;
+    if (every < 20) throw new RpcError('BAD_INPUT', '`every` must be at least 20 ms');
+    const hosts = HOSTS.filter((h) => !input.region || h.region === input.region);
+    return stream<Sample>((emit) => {
+      const timer = setInterval(() => {
+        const t = Date.now();
+        // Jitter below a second: the synthetic metrics change once a second.
+        const j = () => (Math.random() - 0.5) * 4;
+        for (const h of hosts) {
+          if (h.down) continue;
+          emit({ host: h.id, t, cpu: sample(h, 'cpu', t) + j(), rps: sample(h, 'rps', t) + 10 * j(), latency: sample(h, 'latency', t) + j() });
+        }
+      }, every);
+      return () => clearInterval(timer);
+    });
   },
 };
 

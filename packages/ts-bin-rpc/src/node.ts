@@ -2,6 +2,7 @@
 // Node's http/https/http2-compat servers speak (req, res), not Fetch: this adapts a Fetch handler.
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { DEFAULT_LIMITS } from './runtime.ts';
+import { STREAM_CONTENT_TYPE } from './frames.ts';
 
 export interface NodeListenerOptions {
   /** Requests with a larger body are answered 413 before the handler runs. Default: 64 MB. */
@@ -40,11 +41,28 @@ export function toNodeListener(
       }
       const method = req.method ?? 'GET';
       const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`);
-      const response = await handler(new Request(url, { method, headers, body: method === 'GET' || method === 'HEAD' ? undefined : body }));
+      // request.signal aborts when the client goes away: streaming procedures stop their sources.
+      const abort = new AbortController();
+      res.once('close', () => abort.abort());
+      const response = await handler(new Request(url, { method, headers, body: method === 'GET' || method === 'HEAD' ? undefined : body, signal: abort.signal }));
 
       res.statusCode = response.status;
       response.headers.forEach((v, k) => res.setHeader(k, v));
-      res.end(new Uint8Array(await response.arrayBuffer()));
+      if (!response.body || response.headers.get('content-type') !== STREAM_CONTENT_TYPE) {
+        res.end(new Uint8Array(await response.arrayBuffer()));
+        return;
+      }
+      // A stream: headers now, so the client's fetch resolves before the first frame, then each chunk
+      // as it comes, waiting for 'drain' when the socket is full.
+      res.flushHeaders();
+      const reader = response.body.getReader();
+      res.once('close', () => void reader.cancel().catch(() => {}));
+      for (;;) {
+        const r = await reader.read();
+        if (r.done || res.destroyed) break;
+        if (!res.write(r.value)) await new Promise<void>((ok) => { res.once('drain', ok); res.once('close', ok); });
+      }
+      res.end();
     } catch (e) {
       // The client went away (an aborted fetch, a closed tab): nobody to answer, nothing to report.
       if (req.destroyed || res.destroyed) return;

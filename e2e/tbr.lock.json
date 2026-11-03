@@ -5,6 +5,13 @@
     "echo": { "input": "object echo:input", "output": "object echo:output" },
     "events": { "input": "void", "output": "union Event[]" },
     "series": { "input": "object series:input", "output": "object series:output" },
+    "stream.countdown": { "input": "object stream.countdown:input", "output": "stream object stream.countdown:row" },
+    "stream.failing": { "input": "void", "output": "stream object Tick" },
+    "stream.forever": { "input": "void", "output": "stream object Tick" },
+    "stream.publish": { "input": "object stream.publish:input", "output": "object stream.publish:output" },
+    "stream.quotes": { "input": "object stream.quotes:input", "output": "stream object Tick" },
+    "stream.stats": { "input": "void", "output": "object stream.stats:output" },
+    "stream.ticks": { "input": "object stream.ticks:input", "output": "stream object Tick" },
     "user.get": { "input": "object user.get:input", "output": "object User" },
     "user.list": { "input": "object user.list:input?", "output": "object User[]" },
     "user.rename": { "input": "object user.rename:input", "output": "void" },
@@ -23,6 +30,14 @@
         "type": { "id": 0, "type": "const \"login\"" },
         "at": { "id": 1, "type": "timestamp" },
         "user": { "id": 2, "type": "string" }
+      }
+    },
+    "Tick": {
+      "fields": {
+        "seq": { "id": 0, "type": "u32" },
+        "price": { "id": 1, "type": "f32" },
+        "side": { "id": 2, "type": "enum Tick.side" },
+        "venue": { "id": 3, "type": "string | undefined" }
       }
     },
     "User": {
@@ -59,6 +74,44 @@
         "v": { "id": 1, "type": "Float32Array" }
       }
     },
+    "stream.countdown:input": {
+      "fields": {
+        "from": { "id": 0, "type": "u32" }
+      }
+    },
+    "stream.countdown:row": {
+      "fields": {
+        "left": { "id": 0, "type": "u32" }
+      }
+    },
+    "stream.publish:input": {
+      "fields": {
+        "symbol": { "id": 0, "type": "string" },
+        "n": { "id": 1, "type": "u32" }
+      }
+    },
+    "stream.publish:output": {
+      "fields": {
+        "subscribers": { "id": 0, "type": "u32" }
+      }
+    },
+    "stream.quotes:input": {
+      "fields": {
+        "symbol": { "id": 0, "type": "string" }
+      }
+    },
+    "stream.stats:output": {
+      "fields": {
+        "running": { "id": 0, "type": "u32" },
+        "cleaned": { "id": 1, "type": "u32" }
+      }
+    },
+    "stream.ticks:input": {
+      "fields": {
+        "n": { "id": 0, "type": "u32" },
+        "burst": { "id": 1, "type": "u32 | undefined" }
+      }
+    },
     "user.get:input": {
       "fields": {
         "id": { "id": 0, "type": "u32" }
@@ -83,7 +136,8 @@
     }
   },
   "enums": {
-    "Role": { "values": ["admin", "user"] }
+    "Role": { "values": ["admin", "user"] },
+    "Tick.side": { "values": ["buy", "sell"] }
   },
   "unions": {
     "Event": {

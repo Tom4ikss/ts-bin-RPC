@@ -30,8 +30,18 @@ const user = await api.user.get({ id: 1 }); // a view: fields are read from the 
 const { t, cpu } = await api.metrics();     // Float64Array and Float32Array over the response
 ```
 
+Procedures can also stream rows: return `stream<T>(…)` and subscribe on the client. Rows arrive
+in batches over one HTTP response, with typed-array columns per batch
+([guide](docs/guide/streams.md)).
+
+```ts
+ticks: async (input: { symbol: string }) => stream<Tick>((emit) => feed.on(input.symbol, emit)),
+
+const sub = api.ticks.subscribe({ symbol: 'BTC' }, { batch: (b) => chart.append(b.columns.price!) });
+```
+
 A whole app: [`examples/dashboard`](examples/dashboard), a Node server and a Vite + React client
-drawing response columns with uPlot.
+drawing response columns with uPlot, with a live chart over a stream.
 
 ## Benchmarks
 
@@ -95,8 +105,9 @@ compress well as text, while float32 mantissas look like noise to a compressor.
 
 ### Bundle
 
-The client runtime is 4.0 KB min + gzip, and the client bundle of the dashboard example, codecs
-and runtime, is 9.3 KB ([size.md](bench/results/size.md)). CI fails if the runtime grows past 5 KB.
+The client runtime is 4.2 KB min + gzip. The stream client adds 1.4 KB, only when the router has
+stream procedures. The client bundle of the dashboard example, codecs, runtime and the stream
+client, is 11.4 KB ([size.md](bench/results/size.md)). CI fails if the runtime grows past 5 KB.
 
 ### Caveats
 

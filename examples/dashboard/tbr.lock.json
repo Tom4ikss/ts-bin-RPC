@@ -2,6 +2,7 @@
   "format": 0,
   "procedures": {
     "hosts": { "input": "object hosts:input?", "output": "object Host[]" },
+    "live": { "input": "object LiveQuery", "output": "stream object Sample" },
     "overview": { "input": "object OverviewQuery", "output": "object Overview" },
     "series": { "input": "object SeriesQuery", "output": "object Series" }
   },
@@ -16,6 +17,12 @@
         "cpu": { "id": 5, "type": "f32" },
         "memory": { "id": 6, "type": "f32" },
         "rps": { "id": 7, "type": "f32" }
+      }
+    },
+    "LiveQuery": {
+      "fields": {
+        "region": { "id": 0, "type": "enum Region | undefined" },
+        "every": { "id": 1, "type": "u16 | undefined" }
       }
     },
     "Overview": {
@@ -39,6 +46,15 @@
         "from": { "id": 2, "type": "timestamp" },
         "to": { "id": 3, "type": "timestamp" },
         "points": { "id": 4, "type": "u32" }
+      }
+    },
+    "Sample": {
+      "fields": {
+        "host": { "id": 0, "type": "u16" },
+        "t": { "id": 1, "type": "f64" },
+        "cpu": { "id": 2, "type": "f32" },
+        "rps": { "id": 3, "type": "f32" },
+        "latency": { "id": 4, "type": "f32" }
       }
     },
     "Series": {

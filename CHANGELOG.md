@@ -6,6 +6,18 @@ carries a format version in its header: a reader rejects a version it does not k
 lockfile and reports breaking changes. The `tbr` command ships in the same package as the runtime,
 so generated code and the runtime that reads it come from one version.
 
+## Unreleased
+
+- Streams: a procedure that returns `stream<T>(setup)`, `channel<T>().subscribe(topic)`, an async
+  iterable or a `ReadableStream` sends rows to the client over one HTTP response. The client
+  subscribes with `api.x.subscribe(input, handler, options)`; batches carry typed-array `columns`.
+  Batching (`window`, `maxRows`), a bounded queue per client (`maxBuffered`, `overflow`) and
+  heartbeats are options. See the [streams guide](docs/guide/streams.md) and FORMAT §12.
+- New error codes on the client: `SLOW_CONSUMER`, `DISCONNECTED`.
+- `columnsOf(rows)` in `ts-bin-rpc`; `Stream`, `Batch`, `Subscription` and `Columns` types.
+- Generated code: stream procedures are marked in the tables, and client tables of routers with
+  streams import `subscribe` from `ts-bin-rpc/runtime`. Run `tbr generate` after upgrading.
+
 ## 0.1.0-alpha.1
 
 - The `tbr` command moved into `ts-bin-rpc`. Replace `ts-bin-rpc-cli` with `ts-bin-rpc` and keep

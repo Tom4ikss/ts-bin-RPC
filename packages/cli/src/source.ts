@@ -34,7 +34,9 @@ export type Desc =
 export interface RawProcedure {
   path: string;
   params: { type: TypeRef; optional: boolean }[];
+  /** For a streaming procedure, the row type. */
   returns: TypeRef;
+  stream: boolean;
   overloads: number;
   location?: Location;
 }
@@ -55,6 +57,8 @@ interface AstTypeNode {
 }
 
 const BRAND_PREFIX = '__@tbr@';
+const STREAM_PREFIX = '__@tbrStream@';
+const ITERABLES = new Set(['AsyncIterable', 'AsyncIterableIterator', 'AsyncGenerator', 'ReadableStream']);
 const BUILTINS = new Set([
   'Date', 'Uint8Array', 'Int8Array', 'Uint16Array', 'Int16Array', 'Uint32Array', 'Int32Array', 'Float32Array',
   'Float64Array', 'BigInt64Array', 'BigUint64Array', 'Uint8ClampedArray', 'ArrayBuffer', 'SharedArrayBuffer', 'DataView',
@@ -130,13 +134,26 @@ export class Ts71Source implements TypeSource {
         });
         let ret = sig.getReturnType();
         if (ret.isTypeReference() && ret.getSymbol()?.name === 'Promise') ret = this.checker.getTypeArguments(ret)[0];
-        out.push({ path: p, params, returns: new TsRef(ret), overloads: sigs.length, location });
+        const row = this.streamRow(ret);
+        out.push({ path: p, params, returns: new TsRef(row ?? ret), stream: row !== undefined, overloads: sigs.length, location });
       } else if (t.isObjectType() && !t.isTypeReference()) {
         this.walkRouter(t, p, out);
       } else {
         out.push({ path: p, problem: `router property must be a function or a namespace object, got '${this.checker.typeToString(t)}'`, location });
       }
     }
+  }
+
+  // `Stream<T>` from ts-bin-rpc (a phantom symbol-keyed property holds T), or an async iterable or
+  // ReadableStream of T: the procedure streams rows of T.
+  private streamRow(t: Type): Type | undefined {
+    if (t.isObjectType() || t.isIntersectionType()) {
+      const prop = t.getProperties().find((p) => p.name.startsWith(STREAM_PREFIX));
+      if (prop) return this.checker.getTypeOfSymbol(prop);
+    }
+    const name = t.getSymbol()?.name;
+    if (name && ITERABLES.has(name) && t.isTypeReference()) return this.checker.getTypeArguments(t)[0];
+    return undefined;
   }
 
   text(ref: TypeRef): string {

@@ -56,7 +56,9 @@ export interface Procedure {
   path: string; // 'user.get'
   input: IRType | null; // null: the handler takes no input
   inputOptional: boolean;
-  output: IRType | null; // null: Promise<void>
+  output: IRType | null; // null: Promise<void>; for a stream, the row type
+  /** Returns `Stream<T>`: output is the row type, and each frame on the wire is a `T[]` message. */
+  stream?: boolean;
   location?: Location;
 }
 
