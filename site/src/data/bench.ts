@@ -112,7 +112,7 @@ export const COMPRESSION = {
 
 // size.md, esbuild minified ESM, gzip -9.
 export const BUNDLE = {
-  runtime: '3.8 KB',
+  runtime: '3.9 KB',
   dashboard: '9.1 KB',
-  fixture: '11.0 KB',
+  fixture: '11.1 KB',
 };

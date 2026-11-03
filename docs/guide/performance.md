@@ -22,11 +22,13 @@ generated codecs, speed relative to JSON
 | every field, with verification | 5.7× | 2.5× | 3.5× | 3.4× |
 | 2 of 8 fields | 16.7× | 6.4× | 9.0× | 6.0× |
 | numeric fields only | 37× | 19× | 35× | 35× |
-| `decode` into plain objects | 7.4× | 2.9× | 3.8× | 4.0× |
+| `decode: 'eager'`, without verification | 7.4× | 2.9× | 3.8× | 4.0× |
 | 10 users, every field | 4.0× | 1.7× | 1.8× | 1.6× |
 
 The client verifies every response by default, so the second row is what an app sees.
 `verify: false` gives the first row, for a server you trust completely; see [Views](./views.md#verification).
+`decode: 'eager'` reads every field into plain objects, so it costs the same whichever fields you
+use later; see [plain objects](./views.md#plain-objects).
 
 Views read only what you touch, and arrays of objects are stored column by column. That is why the
 gap grows when you read fewer fields.
@@ -74,9 +76,9 @@ Client bundles, minified and gzipped with esbuild
 
 | | Client, min + gz |
 |---|---|
-| Runtime and client, no procedures | 3.8 KB |
+| Runtime and client, no procedures | 3.9 KB |
 | Dashboard example (3 procedures) | 9.1 KB |
-| Test fixture with every supported type | 11.0 KB |
+| Test fixture with every supported type | 11.1 KB |
 
 The client gets only input encoders and output decoders. CI fails if the runtime grows past 5 KB or
 the fixture past 12 KB.

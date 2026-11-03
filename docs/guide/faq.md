@@ -59,8 +59,8 @@ which works. First-class bindings are planned.
 ## SSR, React Server Components, workers?
 
 Views are class instances over a buffer. When data crosses a boundary that copies it
-(`structuredClone`, `postMessage`, RSC props, IndexedDB), pass `toPlain(view)`. See
-[Views](./views.md).
+(`structuredClone`, `postMessage`, RSC props, IndexedDB), pass `toPlain(view)`, or have the client
+return plain objects with `decode: 'eager'`. See [Views](./views.md#plain-objects).
 
 ## Do I still need HTTP compression?
 

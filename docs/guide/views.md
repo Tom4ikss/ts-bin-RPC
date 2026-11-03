@@ -42,6 +42,9 @@ setUser({ ...user, name: 'Ada' }); // wrong: loses every field
 setUser({ ...toPlain(user), name: 'Ada' }); // right
 ```
 
+If a procedure's results always go to such code, ask the client for
+[plain objects](#plain-objects) instead.
+
 - **Views are read-only.** Assigning a field throws a `TypeError` in strict mode, which is all ES
   modules. To edit, copy with `toPlain` first.
 - **`structuredClone`, `postMessage`, IndexedDB and React Server Components** copy own data
@@ -49,7 +52,9 @@ setUser({ ...toPlain(user), name: 'Ada' }); // right
 - **Don't rely on the identity of `Date` values.** In arrays of objects each read returns a new
   `Date`. Compare with `getTime()`.
 
-## `toPlain`
+## Plain objects
+
+`toPlain` turns a view into plain data:
 
 ```ts
 import { toPlain } from 'ts-bin-rpc';
@@ -59,6 +64,23 @@ const plain = toPlain(user); // User, made of plain objects, arrays, fresh Dates
 
 `toPlain` makes a deep copy: it reads every field once and copies typed arrays. Use it at the edge
 of code that needs plain data: state stores, workers, caches, mutations.
+
+When a procedure's results always end up there, let the client do it. `decode: 'eager'` returns
+what `toPlain` would, for the whole client, per procedure or per call:
+
+```ts
+const api = createClient<AppRouter>({ url: '/rpc', procedures: clientProcedures, decode: 'eager' });
+
+createClient<AppRouter>({ url: '/rpc', procedures: clientProcedures, decode: { 'user.get': 'eager' } });
+
+await api.user.list({ role: 'admin' }, { decode: 'lazy' }); // this call returns views
+```
+
+A call option wins over the procedure's entry, which wins over the client-wide mode. The default
+is `'lazy'`. The map's keys are checked against the router, so a typo in a path is a type error.
+
+Eager results are copies with nothing tied to the response buffer. The price is laziness: every
+field is read, even the ones you never touch. See [Performance](./performance.md#reading).
 
 ## Typed arrays share the response
 

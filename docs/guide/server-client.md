@@ -67,6 +67,7 @@ export const api = createClient<AppRouter>({
 | `procedures` | — | `clientProcedures` from the generated file |
 | `headers` | — | sent with every call; a function is called before each one |
 | `fetch` | `globalThis.fetch` | for tests, retries or instrumentation |
+| `decode` | `'lazy'` | `'eager'` returns plain objects instead of [views](./views.md#plain-objects); a map like `{ 'user.get': 'eager' }` sets it per procedure |
 | `verify` | `true` | verify responses before reading them |
 | `limits` | as on the server | limits for verifying responses |
 | `debug` | `false` | log every call to the console |
@@ -77,6 +78,7 @@ Every procedure takes the input, if it has one, and then call options:
 const abort = new AbortController();
 const user = await api.user.get({ id: 1 }, { signal: abort.signal, headers: { 'x-trace': id } });
 const me = await api.whoami({ signal: abort.signal }); // no input: options come first
+const copy = await api.user.get({ id: 1 }, { decode: 'eager' }); // plain objects for this call
 ```
 
 ### Debugging

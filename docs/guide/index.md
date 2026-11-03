@@ -47,7 +47,7 @@ chart.setData([m.t, m.cpu]); // typed arrays over the response bytes, nothing co
   safe changes from breaking ones before you deploy.
 - **Stale code cannot slip through.** If you change a type and forget to regenerate, `tsc` fails.
   `tbr generate --watch` regenerates in about 15 ms per save.
-- **Small client.** About 9 KB gzip for a real app, of which the runtime is 3.8 KB. The client
+- **Small client.** About 9 KB gzip for a real app, of which the runtime is 3.9 KB. The client
   bundle holds only input encoders and output decoders.
 - **Any runtime.** The server is a Fetch API handler (Node, Bun, Deno, Workers). No `eval`, so
   strict CSP works.

@@ -29,9 +29,14 @@ export type InputArgs<A extends unknown[]> = A extends []
       ? [input?: I]
       : [];
 
+/** What a call returns: `'lazy'` views that read the response on access, or `'eager'` plain objects. */
+export type DecodeMode = 'lazy' | 'eager';
+
 export interface CallOptions {
   signal?: AbortSignal;
   headers?: HeadersInit;
+  /** Overrides the client's `decode` for this call. */
+  decode?: DecodeMode;
 }
 
 export type ClientProcedure<F> = F extends (...args: infer A) => infer O

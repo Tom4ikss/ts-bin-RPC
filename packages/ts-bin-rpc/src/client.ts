@@ -1,9 +1,9 @@
 // createClient<AppRouter>: a proxy whose calls POST the encoded input and return views over the response.
 import { decodeError, FLAG_ERROR, toPlain, VerifyError, type Limits } from './runtime.ts';
 import { codeForStatus, CONTENT_TYPE, RpcError, SCHEMA_HEADER, type ClientProcedures } from './rpc.ts';
-import type { CallOptions, Client } from './router.ts';
+import type { CallOptions, Client, DecodeMode, ProcedurePath } from './router.ts';
 
-export interface ClientOptions {
+export interface ClientOptions<R = unknown> {
   /** Base URL of the procedures, e.g. `/rpc` or `https://api.example.com/rpc`. */
   url: string;
   /** `clientProcedures` (or `procedures`) from generated code. */
@@ -12,6 +12,12 @@ export interface ClientOptions {
   fetch?: typeof fetch;
   /** Sent with every call; a function is called before each one. */
   headers?: HeadersInit | (() => HeadersInit | Promise<HeadersInit>);
+  /**
+   * What calls return. `'lazy'` (default): views that read the response bytes on access. `'eager'`:
+   * plain objects, as `toPlain` gives, safe to mutate, spread and clone. A map sets it per procedure,
+   * `CallOptions.decode` per call.
+   */
+  decode?: DecodeMode | { readonly [P in ProcedurePath<R>]?: DecodeMode };
   /** Verify responses before reading them. Default: true. */
   verify?: boolean;
   limits?: Partial<Limits>;
@@ -21,8 +27,9 @@ export interface ClientOptions {
 
 const decoder = new TextDecoder();
 
-export function createClient<R>(options: ClientOptions): Client<R> {
+export function createClient<R>(options: ClientOptions<R>): Client<R> {
   const { procedures, verify = true, limits, debug = false } = options;
+  const decode = options.decode as DecodeMode | Readonly<Record<string, DecodeMode | undefined>> | undefined;
   const base = options.url.replace(/\/+$/, '');
   const warned = new Set<string>();
 
@@ -51,7 +58,8 @@ export function createClient<R>(options: ClientOptions): Client<R> {
       error = readError(bytes, res.status);
     } else if (proc.output) {
       try {
-        result = proc.output.view(bytes, { verify, limits });
+        const mode = opts.decode ?? (typeof decode === 'string' ? decode : decode?.[path]);
+        result = mode === 'eager' ? proc.output.decode(bytes, { verify, limits }) : proc.output.view(bytes, { verify, limits });
       } catch (e) {
         if (!(e instanceof VerifyError)) throw e;
         error = new RpcError('BAD_RESPONSE', `invalid response: ${e.message}`, undefined, { status: res.status, cause: e });

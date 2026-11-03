@@ -1,5 +1,5 @@
 // Handler and client options, in process.
-import { createClient } from 'ts-bin-rpc/client';
+import { createClient, type ClientOptions } from 'ts-bin-rpc/client';
 import { createHandler } from 'ts-bin-rpc/server';
 import { RpcError } from 'ts-bin-rpc';
 import { describe, expect, it, vi } from 'vitest';
@@ -38,6 +38,52 @@ describe('createHandler', () => {
 });
 
 describe('createClient', () => {
+  describe('decode', () => {
+    const handler = createHandler(appRouter, { procedures, prefix: '/rpc' });
+    const make = (decode?: ClientOptions<typeof appRouter>['decode']) =>
+      createClient<typeof appRouter>({ url: 'http://test/rpc', procedures, fetch: via(handler), decode });
+    const isPlain = (v: object) => Object.keys(v).length > 0;
+    const owns = (a: ArrayBufferView) => a.byteOffset === 0 && a.buffer.byteLength === a.byteLength;
+
+    it('returns views by default', async () => {
+      const user = await make().user.get({ id: 1 });
+      expect(isPlain(user)).toBe(false);
+      expect(() => Object.assign(user, { name: 'x' })).toThrow(TypeError);
+      expect(isPlain((await make().user.list())[0])).toBe(false);
+    });
+
+    it("returns plain objects with decode: 'eager'", async () => {
+      const api = make('eager');
+      const user = await api.user.get({ id: 1 });
+      expect(Object.keys(user)).toEqual(expect.arrayContaining(['id', 'name', 'role', 'balance', 'createdAt', 'tags']));
+      user.name = 'Ada';
+      expect(structuredClone(user)).toEqual({ ...user });
+      const [row] = await api.user.list();
+      expect({ ...row }).toMatchObject({ id: 1, tags: ['founder'] });
+      expect(row.createdAt).toBeInstanceOf(Date);
+      const { t, v } = await api.series({ n: 4 });
+      // Typed arrays are copies, not views over the response bytes.
+      expect([owns(t), owns(v), t.length]).toEqual([true, true, 4]);
+    });
+
+    it('takes a mode per procedure and per call', async () => {
+      const api = make({ 'user.get': 'eager' });
+      expect(isPlain(await api.user.get({ id: 1 }))).toBe(true);
+      expect(isPlain((await api.user.list())[0])).toBe(false);
+      expect(isPlain((await api.user.list(undefined, { decode: 'eager' }))[0])).toBe(true);
+      expect(isPlain(await api.user.get({ id: 1 }, { decode: 'lazy' }))).toBe(false);
+      expect(isPlain(await make('eager').user.get({ id: 1 }, { decode: 'lazy' }))).toBe(false);
+      expect(isPlain(await make('eager').echo({ text: 'hi', bytes: new Uint8Array([1]) }))).toBe(true);
+    });
+
+    it('checks procedure paths in the map', () => {
+      // @ts-expect-error: no such procedure
+      make({ 'user.gett': 'eager' });
+      // @ts-expect-error: a namespace is not a procedure
+      make({ user: 'eager' });
+    });
+  });
+
   it('reports responses that are not ts-bin-rpc messages', async () => {
     const proxy = via(async () => new Response('<html>bad gateway</html>', { status: 502, headers: { 'content-type': 'text/html' } }));
     const e = await client(proxy).whoami().catch((x: unknown) => x);
