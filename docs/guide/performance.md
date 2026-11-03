@@ -20,15 +20,15 @@ columns, against JSON's best shape for them, an object of four number arrays.
 
 | Reading | Node | Chromium | Firefox | WebKit |
 |---|---|---|---|---|
-| 1000 users, every field | 5.6× | 2.3× | 3.4× | 3.3× |
-| 1000 users, every field, `verify: false` | 8.0× | 2.9× | 4.1× | 4.1× |
-| 1000 users, 2 of 7 fields | 8.8× | 4.1× | 6.0× | 4.7× |
-| 1000 users, numeric fields only | 11× | 5.5× | 11× | 6.1× |
-| 1000 users, `decode: 'eager'`, `verify: false` | 7.0× | 3.0× | 3.6× | 4.0× |
-| 100k points, every value | 137× | 18× | 118× | 22× |
-| 10 users, every field | 2.8× | 1.3× | 1.4× | 1.3× |
-| 500 products with long text | 1.7× | 0.91× | 2.0× | 1.5× |
-| 1 user | 1.5× | 0.94× | 0.66× | 0.83× |
+| 1000 users, every field | 7.1× | 2.6× | 3.7× | 3.7× |
+| 1000 users, every field, `verify: false` | 8.1× | 2.9× | 4.1× | 4.2× |
+| 1000 users, 2 of 7 fields | 13× | 4.9× | 7.0× | 5.3× |
+| 1000 users, numeric fields only | 18× | 7.3× | 14× | 7.2× |
+| 1000 users, `decode: 'eager'`, `verify: false` | 7.3× | 3.0× | 3.6× | 4.0× |
+| 100k points, every value | 136× | 18× | 97× | 21× |
+| 10 users, every field | 3.3× | 1.4× | 1.5× | 1.4× |
+| 500 products with long text | 4.0× | 1.6× | 2.7× | 2.1× |
+| 1 user | 1.6× | 0.94× | 0.74× | 0.92× |
 
 The client verifies every response by default, so rows without a note include verification.
 `verify: false` skips it for a server you trust completely; see [Views](./views.md#verification).
@@ -37,15 +37,17 @@ use later; see [plain objects](./views.md#plain-objects).
 
 Views read only what you touch, and arrays of objects are stored column by column. That is why the
 gap grows when you read fewer fields. Typed-array columns need no parsing at all: the time in the
-points row is the loop that sums them.
+points row is the loop that sums them. Measured alone, that loop takes 74–159 µs in every engine,
+the same as over a plain object; next to the JSON case, which allocates about 13 MB per call, V8
+and JavaScriptCore run it 3–6× slower, and the table keeps that number.
 
 ## Writing
 
 | Encoding | Node | Chromium | Firefox | WebKit |
 |---|---|---|---|---|
-| 1000 users | 2.3× | 1.9× | 1.7× | 1.9× |
-| 500 products with long text | 1.5× | 0.88× | 1.1× | 0.31× |
-| 100k points | 476× | 84× | 150× | 125× |
+| 1000 users | 2.4× | 1.9× | 1.7× | 2.3× |
+| 500 products with long text | 1.4× | 0.93× | 1.1× | 0.62× |
+| 100k points | 496× | 90× | 179× | 146× |
 
 ## Size
 
@@ -68,12 +70,12 @@ Without compression the binary format is 1.5–2.6× smaller in the dashboard ex
 > The format is built for many objects, numbers and partial reads. It does not try to beat JSON on
 > small text-heavy payloads at any cost.
 
-- **One small object.** Verifying a message and setting up a view cost more than parsing 150 bytes
-  of JSON: 0.4–0.7 µs against 0.4–0.6 µs. Either way it is under a microsecond.
-- **Long text with verification.** Verification more than doubles the read time of text-heavy
-  rows: in Chromium 51 µs without it and 117 µs with it, against 107 µs for JSON.
-- **Encoding text in WebKit.** JavaScriptCore's `JSON.stringify` is about 3× faster than the
-  generated encoder on the products payload.
+- **One small object in browsers.** Verifying a message and setting up a view cost more than
+  parsing 150 bytes of JSON: 0.43–0.62 µs against 0.40–0.47 µs. Either way it is under a
+  microsecond.
+- **Encoding text in Chromium and WebKit.** On the products payload the generated encoder is 7%
+  slower than `JSON.stringify` in Chromium and 1.6× slower in WebKit, whose `JSON.stringify` is
+  2.5× faster than Chromium's here.
 - **Small responses are 9–13% larger** after compression. JSON's repeated keys compress well, and
   a binary message carries its layout.
 - **Numeric series are no smaller than JSON number arrays** after compression. Numbers rounded to
@@ -89,9 +91,9 @@ Client bundles, minified and gzipped with esbuild
 
 | | Client, min + gz |
 |---|---|
-| Runtime and client, no procedures | 3.9 KB |
-| Dashboard example (3 procedures) | 9.1 KB |
-| Test fixture with every supported type | 11.1 KB |
+| Runtime and client, no procedures | 4.0 KB |
+| Dashboard example (3 procedures) | 9.3 KB |
+| Test fixture with every supported type | 11.2 KB |
 
 The client gets only input encoders and output decoders. CI fails if the runtime grows past 5 KB or
 the fixture past 12 KB.

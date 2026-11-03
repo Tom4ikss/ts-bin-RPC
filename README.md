@@ -38,33 +38,36 @@ Full tables, with times: [generated.md](bench/results/generated.md).
 
 | Reading | Node | Chromium | Firefox | WebKit |
 |---|---|---|---|---|
-| 1000 users, every field | 5.6× | 2.3× | 3.4× | 3.3× |
-| 1000 users, 2 of 7 fields | 8.8× | 4.1× | 6.0× | 4.7× |
-| 1000 users, numeric fields only | 11× | 5.5× | 11× | 6.1× |
-| 100k points, every value | 137× | 18× | 118× | 22× |
-| 10 users, every field | 2.8× | 1.3× | 1.4× | 1.3× |
-| 500 products with long text | 1.7× | **0.91×** | 2.0× | 1.5× |
-| 1 user | 1.5× | **0.94×** | **0.66×** | **0.83×** |
+| 1000 users, every field | 7.1× | 2.6× | 3.7× | 3.7× |
+| 1000 users, 2 of 7 fields | 13× | 4.9× | 7.0× | 5.3× |
+| 1000 users, numeric fields only | 18× | 7.3× | 14× | 7.2× |
+| 100k points, every value | 136× | 18×¹ | 97× | 21×¹ |
+| 10 users, every field | 3.3× | 1.4× | 1.5× | 1.4× |
+| 500 products with long text | 4.0× | 1.6× | 2.7× | 2.1× |
+| 1 user | 1.6× | **0.94×** | **0.74×** | **0.92×** |
 
 | Encoding | Node | Chromium | Firefox | WebKit |
 |---|---|---|---|---|
-| 1000 users | 2.3× | 1.9× | 1.7× | 1.9× |
-| 500 products with long text | 1.5× | **0.88×** | 1.1× | **0.31×** |
-| 100k points | 476× | 84× | 150× | 125× |
+| 1000 users | 2.4× | 1.9× | 1.7× | 2.3× |
+| 500 products with long text | 1.4× | **0.93×** | 1.1× | **0.62×** |
+| 100k points | 496× | 90× | 179× | 146× |
 
 Users have 7 fields: three numbers, a boolean and three strings, 30% of names in Cyrillic. Products
 have a 12–52 word description. Points are four columns, a `Float64Array` time and three
 `Float32Array` values; JSON gets its best shape for them, an object of four number arrays.
 
+¹ Measured alone, summing the 100k points through a view takes 74–159 µs in every engine, the same
+as over a plain object. Next to the JSON case, which allocates about 13 MB per call, V8 and
+JavaScriptCore run the same loop 3–6× slower; the table keeps that slower number.
+
 ### Where JSON wins
 
-- **One small object.** Verifying a message and setting up a view cost more than parsing 150 bytes
-  of JSON: 0.4–0.7 µs against 0.4–0.6 µs. Either way it is under a microsecond.
-- **Long text with verification.** Verification more than doubles the read time of text-heavy
-  rows: in Chromium 51 µs without it and 117 µs with it, against 107 µs for JSON. `verify: false`
-  skips the check for a server you trust.
-- **Encoding text in WebKit.** JavaScriptCore's `JSON.stringify` is about 3× faster than the
-  generated encoder on the products payload.
+- **One small object in browsers.** Verifying a message and setting up a view cost more than
+  parsing 150 bytes of JSON: 0.43–0.62 µs against 0.40–0.47 µs. Either way it is under a
+  microsecond.
+- **Encoding text in Chromium and WebKit.** On the products payload the generated encoder is 7%
+  slower than `JSON.stringify` in Chromium and 1.6× slower in WebKit, whose `JSON.stringify` is
+  2.5× faster than Chromium's here.
 - **Size of small and numeric responses after compression**, see below.
 
 ### Size
@@ -86,8 +89,8 @@ compress well as text, while float32 mantissas look like noise to a compressor.
 
 ### Bundle
 
-The client runtime is 3.9 KB min + gzip, and the client bundle of the dashboard example, codecs
-and runtime, is 9.1 KB ([size.md](bench/results/size.md)). CI fails if the runtime grows past 5 KB.
+The client runtime is 4.0 KB min + gzip, and the client bundle of the dashboard example, codecs
+and runtime, is 9.3 KB ([size.md](bench/results/size.md)). CI fails if the runtime grows past 5 KB.
 
 ### Caveats
 
@@ -112,7 +115,8 @@ Phase 0 measured layout variants before any code generation
 
 Design notes, the wire format and the roadmap are in Russian: [design](docs/DESIGN.md),
 [wire format v0](docs/FORMAT.md), [roadmap](docs/ROADMAP.md),
-[landscape research](reports/Обзор%20TS%20RPC%20и%20бинарных%20форматов.md).
+[landscape research](reports/Обзор%20TS%20RPC%20и%20бинарных%20форматов.md),
+[string and verification optimizations](reports/Оптимизации%20строк%20и%20верификации.md).
 
 ## Repository
 

@@ -46,10 +46,10 @@ export const SCENARIOS: Scenario[] = [
     label: 'Read every field',
     caption: '1000 users, every field of every object read once.',
     rows: {
-      chromium: { verified: 2.34, plain: 2.93, json: '209 µs', tbr: '71 µs', tbrVerified: '90 µs' },
-      firefox: { verified: 3.38, plain: 4.07, json: '310 µs', tbr: '76 µs', tbrVerified: '92 µs' },
-      webkit: { verified: 3.34, plain: 4.12, json: '283 µs', tbr: '69 µs', tbrVerified: '85 µs' },
-      node: { verified: 5.58, plain: 8.02, json: '448 µs', tbr: '56 µs', tbrVerified: '80 µs' },
+      chromium: { verified: 2.63, plain: 2.88, json: '211 µs', tbr: '73 µs', tbrVerified: '80 µs' },
+      firefox: { verified: 3.69, plain: 4.07, json: '318 µs', tbr: '78 µs', tbrVerified: '86 µs' },
+      webkit: { verified: 3.7, plain: 4.18, json: '282 µs', tbr: '67 µs', tbrVerified: '76 µs' },
+      node: { verified: 7.14, plain: 8.09, json: '471 µs', tbr: '58 µs', tbrVerified: '66 µs' },
     },
   },
   {
@@ -57,10 +57,10 @@ export const SCENARIOS: Scenario[] = [
     label: 'Read 2 of 7 fields',
     caption: '1000 users, two fields read. Views skip what you never touch.',
     rows: {
-      chromium: { verified: 4.13, plain: 6.45, json: '209 µs', tbr: '32 µs', tbrVerified: '51 µs' },
-      firefox: { verified: 6.04, plain: 8.62, json: '311 µs', tbr: '36 µs', tbrVerified: '51 µs' },
-      webkit: { verified: 4.66, plain: 6.11, json: '283 µs', tbr: '46 µs', tbrVerified: '61 µs' },
-      node: { verified: 8.82, plain: 16.21, json: '440 µs', tbr: '27 µs', tbrVerified: '50 µs' },
+      chromium: { verified: 4.92, plain: 5.87, json: '208 µs', tbr: '36 µs', tbrVerified: '42 µs' },
+      firefox: { verified: 6.99, plain: 8.65, json: '310 µs', tbr: '36 µs', tbrVerified: '44 µs' },
+      webkit: { verified: 5.29, plain: 6.26, json: '280 µs', tbr: '45 µs', tbrVerified: '53 µs' },
+      node: { verified: 12.73, plain: 16.54, json: '460 µs', tbr: '28 µs', tbrVerified: '36 µs' },
     },
   },
   {
@@ -68,10 +68,10 @@ export const SCENARIOS: Scenario[] = [
     label: 'Numeric fields only',
     caption: '1000 users, only the numeric columns read.',
     rows: {
-      chromium: { verified: 5.49, plain: 20.41, json: '211 µs', tbr: '10 µs', tbrVerified: '38 µs' },
-      firefox: { verified: 10.86, plain: 33.48, json: '308 µs', tbr: '9.21 µs', tbrVerified: '28 µs' },
-      webkit: { verified: 6.08, plain: 34.1, json: '285 µs', tbr: '8.35 µs', tbrVerified: '47 µs' },
-      node: { verified: 11.13, plain: 35.21, json: '449 µs', tbr: '13 µs', tbrVerified: '40 µs' },
+      chromium: { verified: 7.33, plain: 19.79, json: '209 µs', tbr: '11 µs', tbrVerified: '29 µs' },
+      firefox: { verified: 14.35, plain: 33.26, json: '309 µs', tbr: '9.28 µs', tbrVerified: '22 µs' },
+      webkit: { verified: 7.18, plain: 35.99, json: '277 µs', tbr: '7.71 µs', tbrVerified: '39 µs' },
+      node: { verified: 17.66, plain: 36.69, json: '460 µs', tbr: '13 µs', tbrVerified: '26 µs' },
     },
   },
   {
@@ -79,10 +79,10 @@ export const SCENARIOS: Scenario[] = [
     label: '100k points',
     caption: 'Four typed-array columns summed, against JSON number arrays. Nothing to parse.',
     rows: {
-      chromium: { verified: 17.6, plain: 15.1, json: '7.8 ms', tbr: '515 µs', tbrVerified: '442 µs' },
-      firefox: { verified: 117.51, plain: 118.53, json: '15.9 ms', tbr: '134 µs', tbrVerified: '135 µs' },
-      webkit: { verified: 21.56, plain: 21.53, json: '9.5 ms', tbr: '441 µs', tbrVerified: '440 µs' },
-      node: { verified: 137.19, plain: 136.8, json: '13.2 ms', tbr: '97 µs', tbrVerified: '97 µs' },
+      chromium: { verified: 17.78, plain: 15.18, json: '7.9 ms', tbr: '519 µs', tbrVerified: '443 µs' },
+      firefox: { verified: 96.51, plain: 115.29, json: '15.7 ms', tbr: '136 µs', tbrVerified: '163 µs' },
+      webkit: { verified: 21.19, plain: 21.18, json: '9.2 ms', tbr: '436 µs', tbrVerified: '436 µs' },
+      node: { verified: 135.98, plain: 136.46, json: '12.8 ms', tbr: '94 µs', tbrVerified: '94 µs' },
     },
   },
   {
@@ -90,10 +90,10 @@ export const SCENARIOS: Scenario[] = [
     label: 'Encode',
     caption: '1000 users encoded, against JSON.stringify. No verification on this path.',
     rows: {
-      chromium: { plain: 1.91, json: '263 µs', tbr: '137 µs' },
-      firefox: { plain: 1.7, json: '282 µs', tbr: '166 µs' },
-      webkit: { plain: 1.86, json: '207 µs', tbr: '111 µs' },
-      node: { plain: 2.34, json: '377 µs', tbr: '161 µs' },
+      chromium: { plain: 1.88, json: '269 µs', tbr: '143 µs' },
+      firefox: { plain: 1.65, json: '290 µs', tbr: '175 µs' },
+      webkit: { plain: 2.28, json: '205 µs', tbr: '90 µs' },
+      node: { plain: 2.36, json: '366 µs', tbr: '155 µs' },
     },
   },
   {
@@ -101,21 +101,21 @@ export const SCENARIOS: Scenario[] = [
     label: '10 users',
     caption: 'A small response: 10 users, every field. The gain is a few microseconds.',
     rows: {
-      chromium: { verified: 1.29, plain: 1.7, json: '2.08 µs', tbr: '1.23 µs', tbrVerified: '1.61 µs' },
-      firefox: { verified: 1.37, plain: 1.78, json: '3.27 µs', tbr: '1.84 µs', tbrVerified: '2.39 µs' },
-      webkit: { verified: 1.31, plain: 1.6, json: '2.62 µs', tbr: '1.64 µs', tbrVerified: '1.99 µs' },
-      node: { verified: 2.8, plain: 4.06, json: '4.45 µs', tbr: '1.10 µs', tbrVerified: '1.59 µs' },
+      chromium: { verified: 1.45, plain: 1.7, json: '2.09 µs', tbr: '1.23 µs', tbrVerified: '1.44 µs' },
+      firefox: { verified: 1.48, plain: 1.78, json: '3.32 µs', tbr: '1.86 µs', tbrVerified: '2.24 µs' },
+      webkit: { verified: 1.43, plain: 1.63, json: '2.65 µs', tbr: '1.62 µs', tbrVerified: '1.85 µs' },
+      node: { verified: 3.26, plain: 4.03, json: '4.41 µs', tbr: '1.09 µs', tbrVerified: '1.35 µs' },
     },
   },
   {
     id: 'text',
     label: 'Long text',
-    caption: '500 products with 12–52 word descriptions. With verification JSON is close, and ahead in Chromium.',
+    caption: '500 products with 12–52 word descriptions, every field.',
     rows: {
-      chromium: { verified: 0.91, plain: 2.09, json: '107 µs', tbr: '51 µs', tbrVerified: '117 µs' },
-      firefox: { verified: 1.97, plain: 3.2, json: '262 µs', tbr: '82 µs', tbrVerified: '133 µs' },
-      webkit: { verified: 1.48, plain: 2.68, json: '165 µs', tbr: '62 µs', tbrVerified: '111 µs' },
-      node: { verified: 1.66, plain: 5.39, json: '223 µs', tbr: '41 µs', tbrVerified: '134 µs' },
+      chromium: { verified: 1.64, plain: 2.07, json: '106 µs', tbr: '51 µs', tbrVerified: '65 µs' },
+      firefox: { verified: 2.68, plain: 3.21, json: '260 µs', tbr: '81 µs', tbrVerified: '97 µs' },
+      webkit: { verified: 2.08, plain: 2.64, json: '159 µs', tbr: '60 µs', tbrVerified: '76 µs' },
+      node: { verified: 3.99, plain: 5.46, json: '227 µs', tbr: '42 µs', tbrVerified: '57 µs' },
     },
   },
   {
@@ -123,10 +123,10 @@ export const SCENARIOS: Scenario[] = [
     label: '1 user',
     caption: 'A single 150-byte object. With verification JSON is as fast or faster in browsers; both are under a microsecond.',
     rows: {
-      chromium: { verified: 0.94, plain: 1.19, json: '0.40 µs', tbr: '0.33 µs', tbrVerified: '0.42 µs' },
-      firefox: { verified: 0.66, plain: 0.94, json: '0.47 µs', tbr: '0.49 µs', tbrVerified: '0.70 µs' },
-      webkit: { verified: 0.83, plain: 1.04, json: '0.47 µs', tbr: '0.45 µs', tbrVerified: '0.56 µs' },
-      node: { verified: 1.51, plain: 2.08, json: '0.59 µs', tbr: '0.28 µs', tbrVerified: '0.39 µs' },
+      chromium: { verified: 0.94, plain: 1.19, json: '0.40 µs', tbr: '0.34 µs', tbrVerified: '0.43 µs' },
+      firefox: { verified: 0.74, plain: 0.94, json: '0.46 µs', tbr: '0.49 µs', tbrVerified: '0.62 µs' },
+      webkit: { verified: 0.92, plain: 1.07, json: '0.47 µs', tbr: '0.44 µs', tbrVerified: '0.51 µs' },
+      node: { verified: 1.64, plain: 2.1, json: '0.59 µs', tbr: '0.28 µs', tbrVerified: '0.36 µs' },
     },
   },
 ];
@@ -146,7 +146,7 @@ export const COMPRESSION = {
 
 // size.md, esbuild minified ESM, gzip -9.
 export const BUNDLE = {
-  runtime: '3.9 KB',
-  dashboard: '9.1 KB',
-  fixture: '11.1 KB',
+  runtime: '4.0 KB',
+  dashboard: '9.3 KB',
+  fixture: '11.2 KB',
 };
