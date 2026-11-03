@@ -2,13 +2,15 @@
 import { defineConfig, passthroughImageService } from 'astro/config';
 import { unified } from '@astrojs/markdown-remark';
 import starlight from '@astrojs/starlight';
-import { GITHUB, buildSidebar, guideDirFromSite } from './src/lib/guide.mjs';
+import { BASE, GITHUB, SITE, buildSidebar, guideDirFromSite } from './src/lib/guide.mjs';
 import guideWatch from './src/lib/guide-watch.mjs';
 import remarkGuide from './src/plugins/remark-guide.mjs';
 
 export default defineConfig({
   // Static output only; nothing here needs a server.
   output: 'static',
+  site: SITE,
+  base: BASE,
   trailingSlash: 'ignore',
   // No image optimisation: the site has a handful of SVGs and no native image dependency.
   image: { service: passthroughImageService() },

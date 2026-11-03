@@ -4,12 +4,12 @@
 import Search from '@astrojs/starlight/components/Search.astro';
 import SiteTitle from '@astrojs/starlight/components/SiteTitle.astro';
 import ThemeSelect from './ThemeSelect.astro';
-import { GITHUB } from '../lib/guide.mjs';
+import { GITHUB, href, unbase } from '../lib/guide.mjs';
 
-const path = Astro.url.pathname;
+const path = unbase(Astro.url.pathname);
 const links = [
-	{ label: 'Docs', href: '/guide/', current: path.startsWith('/guide') && !path.startsWith('/guide/performance') },
-	{ label: 'Benchmarks', href: '/guide/performance/', current: path.startsWith('/guide/performance') },
+	{ label: 'Docs', href: href('/guide/'), current: path.startsWith('/guide') && !path.startsWith('/guide/performance') },
+	{ label: 'Benchmarks', href: href('/guide/performance/'), current: path.startsWith('/guide/performance') },
 	{ label: 'Example', href: `${GITHUB}/tree/main/examples/dashboard`, current: false },
 ];
 ---

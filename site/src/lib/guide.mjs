@@ -14,6 +14,13 @@ export const guideDir = process.env.TBR_GUIDE_DIR ? resolve(process.env.TBR_GUID
 export const guideDirFromSite = relative(siteRoot, guideDir).split(sep).join('/');
 
 export const GITHUB = 'https://github.com/Tom4ikss/ts-bin-RPC';
+/** The site is served from https://tom4ikss.github.io/ts-bin-RPC/ (GitHub Pages project site). */
+export const SITE = 'https://tom4ikss.github.io';
+export const BASE = '/ts-bin-RPC';
+/** A root-relative site path (`/guide/`) with the base prepended. */
+export const href = (path) => BASE + path;
+/** A request path with the base removed, for comparing against site paths. */
+export const unbase = (path) => (path.startsWith(BASE) ? path.slice(BASE.length) || '/' : path);
 export const GITHUB_BLOB = `${GITHUB}/blob/main`;
 export const GITHUB_TREE = `${GITHUB}/tree/main`;
 
@@ -59,7 +66,7 @@ export function slugToId(slug) {
 
 /** The URL of a guide page, with the trailing slash Astro uses by default. */
 export function slugToHref(slug) {
-  return `/${slugToId(slug)}/`;
+  return href(`/${slugToId(slug)}/`);
 }
 
 /** Sidebar from the files that exist: planned pages in order, then any others under "More". */

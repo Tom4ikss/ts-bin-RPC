@@ -2,7 +2,7 @@
 import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
 import Flow from '../components/landing/Flow.astro';
 import Bench from '../components/landing/Bench.astro';
-import { GITHUB } from '../lib/guide.mjs';
+import { GITHUB, href } from '../lib/guide.mjs';
 import '../styles/landing.css';
 
 const features = [
@@ -10,37 +10,37 @@ const features = [
 		glyph: 'T',
 		title: 'Your types are the schema',
 		text: 'Interfaces, unions, Date, generics, recursive types and typed arrays. No IDL to keep in sync and no validator DSL.',
-		href: '/guide/types/',
+		href: href('/guide/types/'),
 	},
 	{
 		glyph: 'u8',
 		title: 'Branded numbers pick widths',
 		text: 'u8, u16, u32, i32, f32, i64 and friends are number or bigint with an invisible tag. Assignments need no casts; the encoder checks ranges.',
-		href: '/guide/types/#numeric-brands',
+		href: href('/guide/types/#numeric-brands'),
 	},
 	{
 		glyph: '{…}',
 		title: 'Lazy, zero-copy views',
 		text: 'A response is verified once, then read on demand. Strings decode on first read and a field you never touch costs nothing.',
-		href: '/guide/views/',
+		href: href('/guide/views/'),
 	},
 	{
 		glyph: 'f32[]',
 		title: 'Columns straight into charts',
 		text: 'Float32Array and Float64Array fields come back as views over the response bytes. Hand them to uPlot or WebGL as they are.',
-		href: '/guide/views/',
+		href: href('/guide/views/'),
 	},
 	{
 		glyph: 'lock',
 		title: 'Schema evolution in CI',
 		text: 'tbr.lock.json gives every field a stable ID. tbr check labels each change safe or breaking, and stale generated code fails tsc.',
-		href: '/guide/evolution/',
+		href: href('/guide/evolution/'),
 	},
 	{
 		glyph: 'fetch',
 		title: 'Small, and runs anywhere',
 		text: 'A Fetch API handler for Node, Bun, Deno and Workers. A 3.8 KB client runtime, no eval, so strict CSP works.',
-		href: '/guide/server-client/',
+		href: href('/guide/server-client/'),
 	},
 ];
 
@@ -118,7 +118,7 @@ const skipIt = [
 		<section class="cta" aria-labelledby="cta-title">
 			<h2 id="cta-title">From a router to a typed binary client in five steps.</h2>
 			<div class="cta-actions">
-				<a class="btn primary" href="/guide/getting-started/">Get started</a>
+				<a class="btn primary" href={href("/guide/getting-started/")}>Get started</a>
 				<a class="btn ghost" href={`${GITHUB}/tree/main/examples/dashboard`}>See the dashboard example</a>
 			</div>
 		</section>
@@ -126,9 +126,9 @@ const skipIt = [
 		<footer class="site-foot">
 			<span>ts-bin-rpc · MIT</span>
 			<nav aria-label="Footer">
-				<a href="/guide/">Docs</a>
-				<a href="/guide/performance/">Performance</a>
-				<a href="/guide/faq/">FAQ</a>
+				<a href={href("/guide/")}>Docs</a>
+				<a href={href("/guide/performance/")}>Performance</a>
+				<a href={href("/guide/faq/")}>FAQ</a>
 				<a href={GITHUB}>GitHub</a>
 			</nav>
 		</footer>

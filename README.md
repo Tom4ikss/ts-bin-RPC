@@ -5,7 +5,7 @@ zero-copy `TypedArray` columns and tRPC-like DX. Nothing is published yet; this 
 research, the design, the benchmarks that fixed the wire format, the code generator, the codec
 runtime, the server and client, an example app and a user guide.
 
-**User guide:** [docs/guide](docs/guide/index.md), also as a website: `pnpm --filter tbr-site dev`.
+**User guide:** [docs/guide](docs/guide/index.md), also as a website: `pnpm --filter tbr-site dev`, then http://localhost:4321/ts-bin-RPC/.
 
 Project documents (in Russian):
 [design](docs/DESIGN.md), [wire format v0](docs/FORMAT.md), [roadmap to alpha](docs/ROADMAP.md),

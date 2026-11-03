@@ -4,8 +4,10 @@
 // how a `Float32Array` field sits in a response. The client reads them in place.
 import Default from '@astrojs/starlight/components/Hero.astro';
 import { SCENARIOS, BUNDLE } from '../data/bench';
+import { href, unbase } from '../lib/guide.mjs';
 
-const isLanding = Astro.url.pathname === '/' || Astro.url.pathname === '/index.html';
+const path = unbase(Astro.url.pathname);
+const isLanding = path === '/' || path === '/index.html';
 // Pages built with <StarlightPage> (landing, 404) have virtual entries under src/content/docs and
 // draw their own content; a guide page with `hero` frontmatter gets Starlight's default hero.
 const isGuidePage = !(Astro.locals.starlightRoute.entry.filePath ?? '').startsWith('src/content/docs');
@@ -46,11 +48,11 @@ const range = (id: string, key: 'verified' | 'plain', which: string[] = ['chromi
 						<code>Float32Array</code>, ready for your charts.
 					</p>
 					<div class="actions">
-						<a class="btn primary" href="/guide/getting-started/">
+						<a class="btn primary" href={href("/guide/getting-started/")}>
 							Get started
 							<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M6 3.5 10.5 8 6 12.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
 						</a>
-						<a class="btn ghost" href="/guide/">Read the introduction</a>
+						<a class="btn ghost" href={href("/guide/")}>Read the introduction</a>
 					</div>
 					<p class="meta">Pre-alpha, not on npm yet · MIT · Node, Bun, Deno, Workers</p>
 				</div>

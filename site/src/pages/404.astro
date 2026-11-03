@@ -1,7 +1,7 @@
 ---
 import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
 import { getCollection } from 'astro:content';
-import { buildSidebar } from '../lib/guide.mjs';
+import { buildSidebar, href } from '../lib/guide.mjs';
 
 // Suggest the guide pages that exist, in sidebar order, with their titles.
 const titles = new Map((await getCollection('docs')).map((e) => [e.id, e.data.title]));
@@ -22,7 +22,7 @@ const label = (slug: string) => titles.get(slug) ?? slug;
 		<ul>
 			{pages.map((s) => <li><a href={`/${s}/`}>{label(s)}</a></li>)}
 		</ul>
-		<a class="home" href="/">← Back to the home page</a>
+		<a class="home" href={href("/")}>← Back to the home page</a>
 	</section>
 </StarlightPage>
 
