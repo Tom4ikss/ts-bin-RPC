@@ -55,8 +55,8 @@ const signed = (v: number) => (v > 0 ? `+${v}%` : v < 0 ? `−${Math.abs(v)}%` :
 						<ul class="legend" aria-label="Legend">
 							{p.hasVerified ? (
 								<>
-									<li><span class="sw s1" />with verification <span class="muted">(default)</span></li>
-									<li><span class="sw s2" /><code>verify: false</code></li>
+									<li><span class="sw s1" />with verification <span class="muted">(development)</span></li>
+									<li><span class="sw s2" />without <span class="muted">(production)</span></li>
 								</>
 							) : (
 								<li><span class="sw s1" />ts-bin-rpc</li>
@@ -81,7 +81,7 @@ const signed = (v: number) => (v > 0 ? `+${v}%` : v < 0 ? `−${Math.abs(v)}%` :
 								`${r.label}`,
 								`JSON ${row.json}`,
 								row.verified !== undefined ? `ts-bin-rpc ${row.tbrVerified} (${fmt(row.verified)}), verified` : null,
-								`ts-bin-rpc ${row.tbr} (${fmt(row.plain)})${row.verified !== undefined ? ', verify: false' : ''}`,
+								`ts-bin-rpc ${row.tbr} (${fmt(row.plain)})${row.verified !== undefined ? ', not verified' : ''}`,
 							].filter(Boolean).join('\n');
 							return (
 								<div class="row" tabindex="0" data-tip={tip} aria-label={tip.replaceAll('\n', '; ')}>
@@ -126,7 +126,7 @@ const signed = (v: number) => (v > 0 ? `+${v}%` : v < 0 ? `−${Math.abs(v)}%` :
 									</tr>
 								)}
 								<tr>
-									<th scope="row">{p.label}{p.hasVerified ? ', verify: false' : ''}</th>
+									<th scope="row">{p.label}{p.hasVerified ? ', not verified' : ''}</th>
 									{RUNTIMES.map((r) => <td>{fmt(p.rows[r.id].plain)}</td>)}
 								</tr>
 							</>

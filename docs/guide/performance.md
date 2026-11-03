@@ -21,17 +21,18 @@ columns, against JSON's best shape for them, an object of four number arrays.
 | Reading | Node | Chromium | Firefox | WebKit |
 |---|---|---|---|---|
 | 1000 users, every field | 7.1× | 2.6× | 3.7× | 3.7× |
-| 1000 users, every field, `verify: false` | 8.1× | 2.9× | 4.1× | 4.2× |
+| 1000 users, every field, no verification | 8.1× | 2.9× | 4.1× | 4.2× |
 | 1000 users, 2 of 7 fields | 13× | 4.9× | 7.0× | 5.3× |
 | 1000 users, numeric fields only | 18× | 7.3× | 14× | 7.2× |
-| 1000 users, `decode: 'eager'`, `verify: false` | 7.3× | 3.0× | 3.6× | 4.0× |
+| 1000 users, `decode: 'eager'`, no verification | 7.3× | 3.0× | 3.6× | 4.0× |
 | 100k points, every value | 136× | 18× | 97× | 21× |
 | 10 users, every field | 3.3× | 1.4× | 1.5× | 1.4× |
 | 500 products with long text | 4.0× | 1.6× | 2.7× | 2.1× |
 | 1 user | 1.6× | 0.94× | 0.74× | 0.92× |
 
-The client verifies every response by default, so rows without a note include verification.
-`verify: false` skips it for a server you trust completely; see [Views](./views.md#verification).
+Rows without a note include verification. The client verifies responses by default in
+development and skips verification in production builds, where reads get the faster numbers; see
+[Views](./views.md#verification).
 `decode: 'eager'` reads every field into plain objects, so it costs the same whichever fields you
 use later; see [plain objects](./views.md#plain-objects).
 

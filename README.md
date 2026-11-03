@@ -31,8 +31,9 @@ drawing response columns with uPlot.
 ## Benchmarks
 
 Generated codecs against `JSON.parse(new TextDecoder().decode(bytes))` and
-`TextEncoder.encode(JSON.stringify(value))`, speed relative to JSON (higher is better). The client
-verifies every response by default, so the read rows include verification. Apple M3 Pro, Node
+`TextEncoder.encode(JSON.stringify(value))`, speed relative to JSON (higher is better). The read rows
+include verification, which the client does by default in development and skips in production
+builds, so they are the slower case. Apple M3 Pro, Node
 22.13 and headless Chromium 156, Firefox 157 and WebKit 27.2 through Playwright, 2026-11-03.
 Full tables, with times: [generated.md](bench/results/generated.md).
 

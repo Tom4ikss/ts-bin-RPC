@@ -18,7 +18,10 @@ export interface ClientOptions<R = unknown> {
    * `CallOptions.decode` per call.
    */
   decode?: DecodeMode | { readonly [P in ProcedurePath<R>]?: DecodeMode };
-  /** Verify responses before reading them. Default: true. */
+  /**
+   * Verify responses before reading them. Default: on in development, off in production builds
+   * (`process.env.NODE_ENV === 'production'`, which bundlers replace at build time).
+   */
   verify?: boolean;
   limits?: Partial<Limits>;
   /** Log every call to the console: procedure, time, size, result. */
@@ -27,8 +30,19 @@ export interface ClientOptions<R = unknown> {
 
 const decoder = new TextDecoder();
 
+// Not @types/node: the client runs in browsers, where bundlers replace this expression.
+declare const process: { env: { NODE_ENV?: string } };
+/** Production builds skip response verification by default; without a bundler this is false. */
+function production(): boolean {
+  try {
+    return process.env.NODE_ENV === 'production';
+  } catch {
+    return false;
+  }
+}
+
 export function createClient<R>(options: ClientOptions<R>): Client<R> {
-  const { procedures, verify = true, limits, debug = false } = options;
+  const { procedures, verify = !production(), limits, debug = false } = options;
   const decode = options.decode as DecodeMode | Readonly<Record<string, DecodeMode | undefined>> | undefined;
   const base = options.url.replace(/\/+$/, '');
   const warned = new Set<string>();

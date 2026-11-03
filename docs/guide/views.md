@@ -5,7 +5,7 @@ description: How responses are read lazily, and the few places where a view is n
 
 # Views
 
-The client does not parse a response into objects. It verifies the bytes once, then returns
+The client does not parse a response into objects. It checks the bytes once, then returns
 **views**: objects whose getters read fields from the response buffer when you touch them.
 Strings decode on first read; a field you never read costs nothing.
 
@@ -106,10 +106,22 @@ Before the first view is returned, the whole message is checked:
 
 After that, reads do no bounds checks.
 
-The client verifies every response by default. `verify: false` in `createClient` skips the check
-when you trust the server completely. The server always verifies inputs. A message that fails
-verification is a `400 BAD_INPUT` on the server and a `BAD_RESPONSE` error on the client; it
-never crashes the process.
+The server always verifies inputs. The client verifies responses by default in development and
+skips verification in production builds, where `process.env.NODE_ENV` is `'production'`. Bundlers
+such as Vite, webpack and esbuild with `define` replace that expression at build time; without a
+bundler the client verifies. Set `verify` in `createClient` to choose explicitly:
+
+```ts
+createClient<AppRouter>({ url: '/rpc', procedures, verify: true }); // a server you do not control
+```
+
+A message that fails verification is a `400 BAD_INPUT` on the server and a `BAD_RESPONSE` error on
+the client; it never crashes the process.
+
+> [!CAUTION]
+> Without verification the client trusts the bytes. A broken or hostile response can throw a
+> `RangeError` on read, return wrong values or allocate large arrays. Keep verification on for a
+> server you do not control.
 
 ## On the server
 

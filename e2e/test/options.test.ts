@@ -89,6 +89,27 @@ describe('createClient', () => {
     });
   });
 
+  it('verifies responses unless NODE_ENV is production', async () => {
+    const handler = createHandler(appRouter, { procedures, prefix: '/rpc' });
+    const seen: unknown[] = [];
+    const output = procedures['user.get'].output!;
+    const spied = { ...procedures, 'user.get': { ...procedures['user.get'], output: { ...output, view: (b: Uint8Array, o?: { verify?: boolean }) => (seen.push(o?.verify), output.view(b, o)) } } };
+    const get = (verify?: boolean) => createClient<typeof appRouter>({ url: 'http://test/rpc', procedures: spied, fetch: via(handler), verify }).user.get({ id: 1 });
+    const env = process.env.NODE_ENV;
+    try {
+      await get();
+      process.env.NODE_ENV = 'production';
+      await get();
+      await get(true);
+      process.env.NODE_ENV = 'development';
+      await get();
+      await get(false);
+    } finally {
+      process.env.NODE_ENV = env;
+    }
+    expect(seen).toEqual([true, false, true, true, false]);
+  });
+
   it('reports responses that are not ts-bin-rpc messages', async () => {
     const proxy = via(async () => new Response('<html>bad gateway</html>', { status: 502, headers: { 'content-type': 'text/html' } }));
     const e = await client(proxy).whoami().catch((x: unknown) => x);

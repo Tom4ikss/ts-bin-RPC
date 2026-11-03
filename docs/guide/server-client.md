@@ -68,7 +68,7 @@ export const api = createClient<AppRouter>({
 | `headers` | — | sent with every call; a function is called before each one |
 | `fetch` | `globalThis.fetch` | for tests, retries or instrumentation |
 | `decode` | `'lazy'` | `'eager'` returns plain objects instead of [views](./views.md#plain-objects); a map like `{ 'user.get': 'eager' }` sets it per procedure |
-| `verify` | `true` | verify responses before reading them |
+| `verify` | `true`, `false` in production | verify responses before reading them; production means `process.env.NODE_ENV === 'production'` |
 | `limits` | as on the server | limits for verifying responses |
 | `debug` | `false` | log every call to the console |
 
