@@ -1,0 +1,9 @@
+---
+// The page title, followed by the frontmatter description as a lede.
+import Default from '@astrojs/starlight/components/PageTitle.astro';
+
+const { description } = Astro.locals.starlightRoute.entry.data;
+---
+
+<Default />
+{description && <p class="tbr-lede">{description}</p>}

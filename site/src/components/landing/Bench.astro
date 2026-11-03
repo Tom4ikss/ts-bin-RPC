@@ -1,0 +1,590 @@
+---
+// Benchmark section: speed against JSON per scenario and runtime, size after compression, bundle
+// size. All numbers come from src/data/bench.ts, which copies them from bench/results.
+import { BUNDLE, COMPRESSION, MACHINE, RUNTIMES, SCENARIOS, SOURCE } from '../../data/bench';
+import { GITHUB_BLOB } from '../../lib/guide.mjs';
+
+const NICE = [2, 2.5, 4, 5, 10, 20, 25, 40, 50, 100];
+const panels = SCENARIOS.map((s) => {
+	const max = Math.max(...RUNTIMES.map((r) => s.rows[r.id].plain));
+	const top = NICE.find((n) => n >= max * 1.08) ?? Math.ceil(max);
+	const step = top <= 2.5 ? 0.5 : top <= 5 ? 1 : top <= 10 ? 2 : top <= 25 ? 5 : 10;
+	const ticks: number[] = [];
+	for (let x = 0; x <= top + 1e-9; x += step) ticks.push(Math.round(x * 10) / 10);
+	const hasVerified = RUNTIMES.some((r) => s.rows[r.id].verified !== undefined);
+	return { ...s, top, ticks, hasVerified };
+});
+const pct = (v: number, top: number) => `${((v / top) * 100).toFixed(2)}%`;
+const fmt = (v: number) => (v >= 10 ? v.toFixed(0) : v.toFixed(1)) + '×';
+const signed = (v: number) => (v > 0 ? `+${v}%` : v < 0 ? `−${Math.abs(v)}%` : '0%');
+---
+
+<section class="bench not-content" id="benchmarks" aria-labelledby="bench-title">
+	<header class="section-head">
+		<p class="kicker">Benchmarks</p>
+		<h2 id="bench-title">Measured against <code>JSON.parse</code>, in three browser engines.</h2>
+		<p class="sub">
+			Speed relative to <code>JSON.parse(new TextDecoder().decode(bytes))</code>, which is what{' '}
+			<code>response.json()</code> does. Higher is better, and the dashed line marks JSON.
+		</p>
+	</header>
+
+	<div class="bench-card">
+		<div class="tabs" role="tablist" aria-label="Scenario">
+			{
+				panels.map((p, i) => (
+					<button
+						type="button"
+						role="tab"
+						id={`tab-${p.id}`}
+						aria-controls={`panel-${p.id}`}
+						aria-selected={i === 0 ? 'true' : 'false'}
+						tabindex={i === 0 ? 0 : -1}
+					>
+						{p.label}
+					</button>
+				))
+			}
+		</div>
+
+		{
+			panels.map((p, i) => (
+				<div class="panel" role="tabpanel" id={`panel-${p.id}`} aria-labelledby={`tab-${p.id}`} data-panel hidden={i !== 0}>
+					<div class="panel-head">
+						<p class="caption">{p.caption}</p>
+						<ul class="legend" aria-label="Legend">
+							{p.hasVerified ? (
+								<>
+									<li><span class="sw s1" />with verification <span class="muted">(default)</span></li>
+									<li><span class="sw s2" /><code>verify: false</code></li>
+								</>
+							) : (
+								<li><span class="sw s1" />ts-bin-rpc</li>
+							)}
+						</ul>
+					</div>
+
+					<div class="chart" style={`--base:${pct(1, p.top)}`}>
+						<div class="grid" aria-hidden="true">
+							{p.ticks.map((t) => (
+								<span class="tick" style={`left:${pct(t, p.top)}`}>
+									<span>{t}×</span>
+								</span>
+							))}
+							<span class="baseline" style={`left:${pct(1, p.top)}`}>
+								<span>JSON</span>
+							</span>
+						</div>
+						{RUNTIMES.map((r) => {
+							const row = p.rows[r.id];
+							const tip = [
+								`${r.label}`,
+								`JSON ${row.json}`,
+								row.verified !== undefined ? `ts-bin-rpc ${row.tbrVerified} (${fmt(row.verified)}), verified` : null,
+								`ts-bin-rpc ${row.tbr} (${fmt(row.plain)})${row.verified !== undefined ? ', verify: false' : ''}`,
+							].filter(Boolean).join('\n');
+							return (
+								<div class="row" tabindex="0" data-tip={tip} aria-label={tip.replaceAll('\n', '; ')}>
+									<span class="rt">{r.label}{r.id === 'node' && <span class="srv">server</span>}</span>
+									<div class="bars">
+										{row.verified !== undefined && (
+											<div class="bar s1" style={`width:${pct(row.verified, p.top)}`}>
+												<span class="v">{fmt(row.verified)}</span>
+											</div>
+										)}
+										<div class={`bar ${row.verified !== undefined ? 's2' : 's1'}`} style={`width:${pct(row.plain, p.top)}`}>
+											<span class="v">{fmt(row.plain)}</span>
+										</div>
+									</div>
+								</div>
+							);
+						})}
+					</div>
+				</div>
+			))
+		}
+
+		<div class="tooltip" role="presentation" hidden></div>
+
+		<details class="table-view">
+			<summary>All numbers as a table</summary>
+			<div class="table-scroll">
+				<table>
+					<thead>
+						<tr>
+							<th scope="col">Scenario</th>
+							{RUNTIMES.map((r) => <th scope="col">{r.label}</th>)}
+						</tr>
+					</thead>
+					<tbody>
+						{panels.map((p) => (
+							<>
+								{p.hasVerified && (
+									<tr>
+										<th scope="row">{p.label}, verified</th>
+										{RUNTIMES.map((r) => <td>{fmt(p.rows[r.id].verified!)}</td>)}
+									</tr>
+								)}
+								<tr>
+									<th scope="row">{p.label}{p.hasVerified ? ', verify: false' : ''}</th>
+									{RUNTIMES.map((r) => <td>{fmt(p.rows[r.id].plain)}</td>)}
+								</tr>
+							</>
+						))}
+					</tbody>
+				</table>
+			</div>
+		</details>
+
+		<p class="fine">
+			{MACHINE}. Medians; run-to-run noise reaches 20–40% on some rows. Synthetic data, 30% of names in Cyrillic.
+			Source: <a href={`${GITHUB_BLOB}/${SOURCE.generated}`}>generated.md</a>.
+		</p>
+	</div>
+
+	<div class="side">
+		<div class="mini">
+			<h3>Size after compression</h3>
+			<p class="mini-sub">Relative to JSON with the same compressor. Shaded cells: JSON is smaller.</p>
+			<div class="table-scroll">
+				<table class="comp">
+					<thead>
+						<tr>
+							<th scope="col"><span class="sr-only">Payload</span></th>
+							{COMPRESSION.columns.map((c) => <th scope="col">{c}</th>)}
+						</tr>
+					</thead>
+					<tbody>
+						{COMPRESSION.rows.map((row) => (
+							<tr>
+								<th scope="row">{row.label}</th>
+								{row.values.map((v) => <td class={v > 0 ? 'worse' : undefined}>{signed(v)}</td>)}
+							</tr>
+						))}
+					</tbody>
+				</table>
+			</div>
+			<p class="fine"><a href={`${GITHUB_BLOB}/${SOURCE.compression}`}>compression.md</a>. Decompression time is not measured.</p>
+		</div>
+		<div class="mini">
+			<h3>Client bundle, min + gzip</h3>
+			<dl class="sizes">
+				<div><dt>Runtime and client</dt><dd>{BUNDLE.runtime}</dd></div>
+				<div><dt>Dashboard example, 3 procedures</dt><dd>{BUNDLE.dashboard}</dd></div>
+				<div><dt>Fixture with every supported type</dt><dd>{BUNDLE.fixture}</dd></div>
+			</dl>
+			<p class="fine"><a href={`${GITHUB_BLOB}/${SOURCE.size}`}>size.md</a>, esbuild. The client gets only input encoders and output decoders.</p>
+		</div>
+	</div>
+</section>
+
+<script>
+	for (const card of document.querySelectorAll<HTMLElement>('.bench-card')) {
+		const tabs = [...card.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
+		const panels = [...card.querySelectorAll<HTMLElement>('[data-panel]')];
+		const select = (i: number, focus = false) => {
+			tabs.forEach((t, j) => {
+				t.setAttribute('aria-selected', String(i === j));
+				t.tabIndex = i === j ? 0 : -1;
+			});
+			panels.forEach((p, j) => (p.hidden = i !== j));
+			if (focus) tabs[i].focus();
+		};
+		tabs.forEach((t, i) => {
+			t.addEventListener('click', () => select(i));
+			t.addEventListener('keydown', (e) => {
+				const d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+				if (d) {
+					e.preventDefault();
+					select((i + d + tabs.length) % tabs.length, true);
+				}
+			});
+		});
+
+		const tip = card.querySelector<HTMLElement>('.tooltip')!;
+		const show = (row: HTMLElement) => {
+			const lines = (row.dataset.tip ?? '').split('\n');
+			tip.replaceChildren(
+				...lines.map((l, i) => {
+					const el = document.createElement(i === 0 ? 'strong' : 'span');
+					el.textContent = l;
+					return el;
+				}),
+			);
+			tip.hidden = false;
+			const c = card.getBoundingClientRect();
+			const r = row.querySelector('.bars')!.getBoundingClientRect();
+			const w = tip.offsetWidth;
+			const left = Math.min(Math.max(r.left - c.left, 8), c.width - w - 8);
+			tip.style.transform = `translate(${left}px, ${r.top - c.top - tip.offsetHeight - 8}px)`;
+		};
+		const hide = () => (tip.hidden = true);
+		for (const row of card.querySelectorAll<HTMLElement>('.row')) {
+			row.addEventListener('pointerenter', () => show(row));
+			row.addEventListener('pointerleave', hide);
+			row.addEventListener('focus', () => show(row));
+			row.addEventListener('blur', hide);
+		}
+	}
+</script>
+
+<style>
+	.bench {
+		display: grid;
+		grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr);
+		grid-template-areas: 'head head' 'card side';
+		gap: 1.5rem;
+	}
+	.section-head {
+		grid-area: head;
+	}
+	.bench-card {
+		grid-area: card;
+		align-self: start;
+		position: relative;
+		border: 1px solid var(--tbr-border);
+		border-radius: var(--tbr-radius-lg);
+		background: var(--tbr-surface);
+		padding: 1.25rem 1.25rem 1rem;
+		min-width: 0;
+	}
+	.side {
+		grid-area: side;
+		display: grid;
+		/* an implicit track sizes to the widest table; this one lets the tables scroll instead */
+		grid-template-columns: minmax(0, 1fr);
+		gap: 1.5rem;
+		align-content: start;
+		min-width: 0;
+	}
+
+	.tabs {
+		display: flex;
+		gap: 0.25rem;
+		padding: 0.25rem;
+		border: 1px solid var(--tbr-border);
+		border-radius: 0.6rem;
+		background: var(--sl-color-black);
+		overflow-x: auto;
+		scrollbar-width: none;
+	}
+	.tabs button {
+		flex: 0 0 auto;
+		font: inherit;
+		font-size: 0.8125rem;
+		font-weight: 500;
+		color: var(--sl-color-gray-3);
+		background: transparent;
+		border: 0;
+		border-radius: 0.4rem;
+		padding: 0.4rem 0.75rem;
+		cursor: pointer;
+		transition: color 0.15s, background-color 0.15s;
+	}
+	.tabs button:hover {
+		color: var(--sl-color-white);
+	}
+	.tabs button[aria-selected='true'] {
+		color: var(--sl-color-white);
+		background: var(--tbr-surface-2);
+		box-shadow: 0 0 0 1px var(--tbr-border);
+	}
+
+	.panel-head {
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: space-between;
+		gap: 0.5rem 1.5rem;
+		margin-top: 1.25rem;
+		align-items: baseline;
+	}
+	.caption {
+		font-size: 0.875rem;
+		color: var(--sl-color-gray-2);
+	}
+	.legend {
+		display: flex;
+		gap: 1rem;
+		list-style: none;
+		padding: 0;
+		margin: 0;
+		font-size: 0.8125rem;
+		color: var(--sl-color-gray-2);
+	}
+	.legend li {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+	}
+	.legend .muted {
+		color: var(--sl-color-gray-4);
+	}
+	.legend code,
+	.section-head code,
+	.table-view code {
+		font-family: var(--__sl-font-mono);
+		font-size: 0.86em;
+	}
+	.sw {
+		width: 0.7rem;
+		height: 0.7rem;
+		border-radius: 0.2rem;
+	}
+	.s1 {
+		background: var(--tbr-series-1);
+	}
+	.s2 {
+		background: var(--tbr-series-2);
+	}
+
+	.chart {
+		--label: 6.5rem;
+		position: relative;
+		margin-top: 1.25rem;
+		padding-top: 1.5rem;
+		padding-bottom: 0.25rem;
+	}
+	.grid {
+		position: absolute;
+		inset: 0 2.75rem 0 var(--label);
+		pointer-events: none;
+	}
+	.tick {
+		position: absolute;
+		top: 0;
+		bottom: 0;
+		border-left: 1px solid var(--sl-color-hairline);
+	}
+	.tick span,
+	.baseline span {
+		position: absolute;
+		top: 0;
+		transform: translateX(-50%);
+		font-family: var(--__sl-font-mono);
+		font-size: 0.6875rem;
+		color: var(--sl-color-gray-4);
+		font-variant-numeric: tabular-nums;
+		white-space: nowrap;
+	}
+	.baseline {
+		position: absolute;
+		top: 1.25rem;
+		bottom: 0;
+		border-left: 1px dashed var(--tbr-baseline);
+		z-index: 1;
+	}
+	.baseline span {
+		top: auto;
+		bottom: -1.35rem;
+		color: var(--sl-color-gray-2);
+	}
+	.row {
+		position: relative;
+		display: grid;
+		grid-template-columns: var(--label) minmax(0, 1fr);
+		align-items: center;
+		padding-block: 0.55rem;
+		padding-right: 2.75rem;
+		border-radius: 0.4rem;
+		outline-offset: 0;
+	}
+	.row:hover .bar,
+	.row:focus-visible .bar {
+		filter: brightness(1.12);
+	}
+	.rt {
+		font-size: 0.875rem;
+		color: var(--sl-color-gray-1);
+		display: flex;
+		flex-direction: column;
+		line-height: 1.2;
+	}
+	.srv {
+		font-size: 0.6875rem;
+		color: var(--sl-color-gray-4);
+	}
+	.bars {
+		display: grid;
+		gap: 2px;
+	}
+	.bar {
+		position: relative;
+		height: 0.875rem;
+		border-radius: 0 4px 4px 0;
+		min-width: 2px;
+		transition: width 0.5s var(--tbr-ease), filter 0.15s;
+	}
+	.bar .v {
+		position: absolute;
+		left: calc(100% + 0.4rem);
+		top: 50%;
+		transform: translateY(-50%);
+		font-family: var(--__sl-font-mono);
+		font-size: 0.75rem;
+		color: var(--sl-color-gray-1);
+		font-variant-numeric: tabular-nums;
+		white-space: nowrap;
+	}
+	.bar.s2 .v {
+		color: var(--sl-color-gray-3);
+	}
+	.tooltip {
+		position: absolute;
+		top: 0;
+		left: 0;
+		z-index: 5;
+		display: grid;
+		gap: 0.15rem;
+		padding: 0.55rem 0.7rem;
+		border-radius: 0.5rem;
+		border: 1px solid var(--tbr-border-strong);
+		background: var(--sl-color-black);
+		box-shadow: var(--tbr-shadow-pop);
+		font-size: 0.75rem;
+		color: var(--sl-color-gray-2);
+		font-variant-numeric: tabular-nums;
+		pointer-events: none;
+		white-space: nowrap;
+	}
+	.tooltip[hidden] {
+		display: none;
+	}
+	.tooltip :global(strong) {
+		color: var(--sl-color-white);
+		font-weight: 600;
+	}
+
+	.table-view {
+		margin-top: 1.75rem;
+		border-top: 1px solid var(--tbr-border);
+		padding-top: 0.75rem;
+	}
+	.table-view summary {
+		font-size: 0.8125rem;
+		color: var(--sl-color-gray-3);
+		cursor: pointer;
+		width: max-content;
+	}
+	.table-view summary:hover {
+		color: var(--sl-color-white);
+	}
+	.table-scroll {
+		overflow-x: auto;
+	}
+	table {
+		width: 100%;
+		border-collapse: collapse;
+		font-size: 0.8125rem;
+		font-variant-numeric: tabular-nums;
+		margin-top: 0.75rem;
+	}
+	th,
+	td {
+		padding: 0.4rem 0.6rem;
+		border-bottom: 1px solid var(--sl-color-hairline);
+		text-align: right;
+		white-space: nowrap;
+	}
+	th:first-child {
+		text-align: left;
+	}
+	thead th {
+		font-weight: 500;
+		color: var(--sl-color-gray-3);
+	}
+	tbody th {
+		font-weight: 400;
+		color: var(--sl-color-gray-2);
+	}
+	td {
+		color: var(--sl-color-gray-1);
+		font-family: var(--__sl-font-mono);
+		font-size: 0.75rem;
+	}
+	.fine {
+		margin-top: 1rem;
+		font-size: 0.75rem;
+		line-height: 1.55;
+		color: var(--sl-color-gray-4);
+	}
+	.fine a {
+		color: var(--sl-color-gray-3);
+		text-underline-offset: 0.2em;
+	}
+
+	.mini {
+		min-width: 0;
+		border: 1px solid var(--tbr-border);
+		border-radius: var(--tbr-radius-lg);
+		background: var(--tbr-surface);
+		padding: 1.25rem;
+	}
+	.mini h3 {
+		font-size: 0.9375rem;
+		font-weight: 600;
+		color: var(--sl-color-white);
+		letter-spacing: -0.01em;
+	}
+	.mini-sub {
+		margin-top: 0.25rem;
+		font-size: 0.8125rem;
+		color: var(--sl-color-gray-3);
+	}
+	.comp th,
+	.comp td {
+		padding-inline: 0.4rem;
+	}
+	.comp td.worse {
+		background: color-mix(in oklch, var(--sl-color-gray-4) 18%, transparent);
+		color: var(--sl-color-white);
+	}
+	.sizes {
+		margin: 0.75rem 0 0;
+		display: grid;
+	}
+	.sizes > div {
+		display: flex;
+		justify-content: space-between;
+		align-items: baseline;
+		gap: 1rem;
+		padding-block: 0.55rem;
+		border-bottom: 1px solid var(--sl-color-hairline);
+	}
+	.sizes dt {
+		font-size: 0.8125rem;
+		color: var(--sl-color-gray-2);
+	}
+	.sizes dd {
+		margin: 0;
+		font-size: 1.125rem;
+		font-weight: 600;
+		letter-spacing: -0.02em;
+		color: var(--sl-color-white);
+		white-space: nowrap;
+	}
+
+	@media (max-width: 60rem) {
+		.bench {
+			grid-template-columns: minmax(0, 1fr);
+			grid-template-areas: 'head' 'card' 'side';
+		}
+		.side {
+			grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+		}
+	}
+	@media (max-width: 30rem) {
+		.bench-card {
+			padding: 1rem 0.875rem;
+		}
+		.chart {
+			--label: 4.75rem;
+		}
+		.row,
+		.grid {
+			padding-right: 2.5rem;
+		}
+		.grid {
+			right: 2.5rem;
+		}
+	}
+</style>

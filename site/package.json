@@ -1,0 +1,19 @@
+{
+  "name": "tbr-site",
+  "private": true,
+  "type": "module",
+  "description": "Documentation website for ts-bin-rpc. Guide pages are read from ../docs/guide.",
+  "scripts": {
+    "dev": "ASTRO_TELEMETRY_DISABLED=1 astro dev",
+    "build": "ASTRO_TELEMETRY_DISABLED=1 astro build",
+    "preview": "ASTRO_TELEMETRY_DISABLED=1 astro preview"
+  },
+  "dependencies": {
+    "@astrojs/markdown-remark": "^7.3.0",
+    "@astrojs/starlight": "^0.42.6",
+    "@fontsource-variable/geist": "^5.3.0",
+    "@fontsource-variable/geist-mono": "^5.3.0",
+    "astro": "~7.3.8",
+    "unist-util-visit": "^5.1.0"
+  }
+}

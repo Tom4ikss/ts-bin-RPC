@@ -1,0 +1,488 @@
+---
+// The landing page hero (Starlight's Hero slot, used only on pages with `hero` frontmatter).
+// The bytes in the card are real: the eight values below encoded as little-endian f32, which is
+// how a `Float32Array` field sits in a response. The client reads them in place.
+import Default from '@astrojs/starlight/components/Hero.astro';
+import { SCENARIOS, BUNDLE } from '../data/bench';
+
+const isLanding = Astro.url.pathname === '/' || Astro.url.pathname === '/index.html';
+// Pages built with <StarlightPage> (landing, 404) have virtual entries under src/content/docs and
+// draw their own content; a guide page with `hero` frontmatter gets Starlight's default hero.
+const isGuidePage = !(Astro.locals.starlightRoute.entry.filePath ?? '').startsWith('src/content/docs');
+
+const values = [42.5, 47.25, 51, 49.75, 63.5, 71.25, 68, 55.5];
+const view = new DataView(new ArrayBuffer(values.length * 4));
+values.forEach((v, i) => view.setFloat32(i * 4, v, true));
+const hex = [...new Uint8Array(view.buffer)].map((b) => b.toString(16).padStart(2, '0'));
+const rows = [0, 1].map((r) => values.slice(r * 4, r * 4 + 4).map((_, j) => {
+	const i = r * 4 + j;
+	return { i, bytes: hex.slice(i * 4, i * 4 + 4) };
+}));
+
+const range = (id: string, key: 'verified' | 'plain', which: string[] = ['chromium', 'firefox', 'webkit']) => {
+	const s = SCENARIOS.find((x) => x.id === id)!;
+	const xs = which.map((r) => s.rows[r as keyof typeof s.rows][key] ?? 0);
+	const f = (x: number) => (x >= 10 ? Math.round(x).toString() : x.toFixed(1));
+	return `${f(Math.min(...xs))}–${f(Math.max(...xs))}×`;
+};
+---
+
+{
+	isLanding ? (
+		<section class="hero not-content" aria-labelledby="hero-title">
+			<div class="hero-grid">
+				<div class="copy">
+					<p class="eyebrow">
+						<span class="dot" aria-hidden="true" />
+						Code-first RPC for TypeScript
+					</p>
+					<h1 id="hero-title">
+						<span class="line">Plain TypeScript in.</span>
+						<span class="line"><span class="hl">Bytes</span> on the wire.</span>
+					</h1>
+					<p class="lede">
+						Write a router of async functions with ordinary types. <code>tbr generate</code> turns them into
+						codecs, and the client reads lazy views straight from the response. Numeric columns arrive as{' '}
+						<code>Float32Array</code>, ready for your charts.
+					</p>
+					<div class="actions">
+						<a class="btn primary" href="/guide/getting-started/">
+							Get started
+							<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M6 3.5 10.5 8 6 12.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
+						</a>
+						<a class="btn ghost" href="/guide/">Read the introduction</a>
+					</div>
+					<p class="meta">Pre-alpha, not on npm yet · MIT · Node, Bun, Deno, Workers</p>
+				</div>
+
+				<figure class="card" aria-label="A Float32Array column inside a response, byte by byte">
+					<div class="card-bar">
+						<span class="dots" aria-hidden="true"><i /><i /><i /></span>
+						<span class="card-title">POST /rpc/series · 200 · application/vnd.tbr</span>
+					</div>
+					<div class="card-body" data-hex>
+						<p class="label">
+							<span>response bytes</span>
+							<span class="muted">field <code>v</code>, 8 × f32, little-endian</span>
+						</p>
+						<div class="hex" role="presentation">
+							{rows.map((row, r) => (
+								<div class="hex-row">
+									<span class="off">+{(r * 16).toString(16).padStart(2, '0')}</span>
+									{row.map((g) => (
+										<span class="grp" data-i={g.i} tabindex="-1">
+											{g.bytes.map((b) => <span class="b">{b}</span>)}
+										</span>
+									))}
+								</div>
+							))}
+						</div>
+						<div class="arrow" aria-hidden="true">
+							<span>read in place, no parse, no copy</span>
+						</div>
+						<p class="label"><span>on the client</span></p>
+						<pre class="out"><code><span class="k">const</span> {'{'} t, v {'}'} = <span class="k">await</span> api.<span class="f">series</span>(query);{'\n'}v <span class="c">// Float32Array(8)</span>{'\n'}<span class="arr">[{values.map((v, i) => (<><span class="val" data-i={i}>{v}</span>{i < values.length - 1 ? ', ' : ''}</>))}]</span>{'\n'}plot.<span class="f">setData</span>([t, v]);</code></pre>
+					</div>
+				</figure>
+			</div>
+
+			<dl class="stats">
+				<div>
+					<dt>Reading 1000 objects</dt>
+					<dd><strong>{range('all', 'verified')}</strong> faster than <code>JSON.parse</code> in browsers, verification included</dd>
+				</div>
+				<div>
+					<dt>Reading 2 of 8 fields</dt>
+					<dd><strong>{range('partial', 'verified')}</strong> faster, because untouched fields cost nothing</dd>
+				</div>
+				<div>
+					<dt>Numeric columns</dt>
+					<dd><strong>{range('numbers', 'plain')}</strong> faster with <code>verify: false</code>; typed arrays need no parsing</dd>
+				</div>
+				<div>
+					<dt>Client runtime</dt>
+					<dd><strong>{BUNDLE.runtime}</strong> min + gzip; {BUNDLE.dashboard} for the whole dashboard example</dd>
+				</div>
+			</dl>
+		</section>
+	) : (
+		isGuidePage && <Default />
+	)
+}
+
+<script>
+	// Highlight a value and its four bytes together. Cycles slowly on its own until hovered.
+	for (const card of document.querySelectorAll<HTMLElement>('.hero .card')) {
+		const items = [...card.querySelectorAll<HTMLElement>('[data-i]')];
+		const count = new Set(items.map((el) => el.dataset.i)).size;
+		let active = -1;
+		let hovering = false;
+		const set = (i: number) => {
+			active = i;
+			for (const el of items) el.classList.toggle('on', Number(el.dataset.i) === i);
+		};
+		for (const el of items) {
+			el.addEventListener('pointerenter', () => {
+				hovering = true;
+				set(Number(el.dataset.i));
+			});
+		}
+		card.addEventListener('pointerleave', () => {
+			hovering = false;
+		});
+		const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+		set(0);
+		if (!reduce) {
+			setInterval(() => {
+				if (!hovering && document.visibilityState === 'visible') set((active + 1) % count);
+			}, 1600);
+		}
+	}
+</script>
+
+<style>
+	.hero {
+		position: relative;
+		padding-block: clamp(2rem, 6vw, 5rem) 1rem;
+	}
+	.hero::before {
+		/* faint grid with a glow behind the card */
+		content: '';
+		position: absolute;
+		inset: -6rem -50vw 0;
+		background:
+			radial-gradient(40rem 22rem at 72% 38%, var(--tbr-glow), transparent 70%),
+			linear-gradient(var(--tbr-grid-line) 1px, transparent 1px) 0 0 / 2.5rem 2.5rem,
+			linear-gradient(90deg, var(--tbr-grid-line) 1px, transparent 1px) 0 0 / 2.5rem 2.5rem;
+		mask-image: radial-gradient(70rem 32rem at 55% 30%, black 30%, transparent 75%);
+		pointer-events: none;
+		z-index: -1;
+	}
+	.hero-grid {
+		display: grid;
+		grid-template-columns: minmax(0, 1.12fr) minmax(0, 1fr);
+		gap: clamp(2rem, 5vw, 4.5rem);
+		align-items: center;
+	}
+	.eyebrow {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.5rem;
+		font-family: var(--__sl-font-mono);
+		font-size: 0.75rem;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		color: var(--sl-color-gray-3);
+		border: 1px solid var(--tbr-border);
+		background: var(--tbr-surface);
+		border-radius: 999px;
+		padding: 0.3rem 0.75rem 0.3rem 0.6rem;
+	}
+	.dot {
+		width: 0.45rem;
+		height: 0.45rem;
+		border-radius: 50%;
+		background: var(--tbr-accent-line);
+		box-shadow: 0 0 0 3px var(--tbr-accent-wash);
+	}
+	h1 {
+		margin-top: 1.25rem;
+		font-size: clamp(2.25rem, 0.9rem + 3.4vw, 3.625rem);
+		line-height: 1.02;
+		letter-spacing: -0.045em;
+		font-weight: 650;
+		color: var(--sl-color-white);
+		text-wrap: balance;
+	}
+	h1 .line {
+		display: block;
+		white-space: nowrap;
+	}
+	.hl {
+		color: var(--tbr-accent-text);
+		font-family: var(--__sl-font-mono);
+		font-weight: 600;
+		letter-spacing: -0.06em;
+	}
+	.lede {
+		margin-top: 1.25rem;
+		font-size: clamp(1.0625rem, 1rem + 0.3vw, 1.1875rem);
+		line-height: 1.6;
+		color: var(--sl-color-gray-3);
+		max-width: 34rem;
+		text-wrap: pretty;
+	}
+	.lede code,
+	.stats code {
+		font-family: var(--__sl-font-mono);
+		font-size: 0.86em;
+		color: var(--sl-color-gray-1);
+		background: var(--tbr-surface-2);
+		border: 1px solid var(--tbr-border);
+		border-radius: 0.3rem;
+		padding: 0.05em 0.3em;
+		white-space: nowrap;
+	}
+	.actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.75rem;
+		margin-top: 2rem;
+	}
+	.btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		height: 2.75rem;
+		padding-inline: 1.15rem;
+		border-radius: 0.6rem;
+		font-size: 0.9375rem;
+		font-weight: 550;
+		text-decoration: none;
+		transition: transform 0.15s var(--tbr-ease), background-color 0.15s, border-color 0.15s, color 0.15s;
+	}
+	.btn:active {
+		transform: translateY(1px);
+	}
+	.primary {
+		background: var(--tbr-accent-solid);
+		color: var(--tbr-on-accent);
+	}
+	.primary:hover {
+		filter: brightness(1.06);
+	}
+	.primary svg {
+		transition: transform 0.15s var(--tbr-ease);
+	}
+	.primary:hover svg {
+		transform: translateX(2px);
+	}
+	.ghost {
+		color: var(--sl-color-white);
+		border: 1px solid var(--tbr-border-strong);
+		background: var(--tbr-surface);
+	}
+	.ghost:hover {
+		border-color: var(--sl-color-gray-4);
+	}
+	.meta {
+		margin-top: 1.25rem;
+		font-size: 0.8125rem;
+		color: var(--sl-color-gray-4);
+	}
+
+	/* The bytes card */
+	.card {
+		margin: 0;
+		border: 1px solid var(--tbr-border);
+		border-radius: var(--tbr-radius-lg);
+		background: var(--tbr-code-bg);
+		box-shadow: var(--tbr-shadow-pop);
+		overflow: hidden;
+		min-width: 0;
+	}
+	.card-bar {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		padding: 0.6rem 0.9rem;
+		background: var(--tbr-code-chrome);
+		border-bottom: 1px solid var(--tbr-border);
+	}
+	.dots {
+		display: inline-flex;
+		gap: 0.35rem;
+	}
+	.dots i {
+		width: 0.6rem;
+		height: 0.6rem;
+		border-radius: 50%;
+		background: var(--tbr-dots);
+	}
+	.card-title {
+		font-family: var(--__sl-font-mono);
+		font-size: 0.75rem;
+		color: var(--sl-color-gray-3);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.card-body {
+		padding: 1.1rem 1.15rem 1.25rem;
+		font-family: var(--__sl-font-mono);
+	}
+	.label {
+		display: flex;
+		justify-content: space-between;
+		gap: 1rem;
+		font-size: 0.6875rem;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		color: var(--sl-color-gray-3);
+		margin-bottom: 0.6rem;
+	}
+	.label .muted {
+		text-transform: none;
+		letter-spacing: 0;
+		color: var(--sl-color-gray-4);
+	}
+	.label code {
+		color: var(--sl-color-gray-2);
+	}
+	.hex {
+		display: grid;
+		gap: 0.35rem;
+		font-size: clamp(0.72rem, 0.6rem + 0.35vw, 0.8125rem);
+	}
+	.hex-row {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+	.off {
+		color: var(--sl-color-gray-4);
+		width: 2.2em;
+		flex-shrink: 0;
+	}
+	.grp {
+		display: inline-flex;
+		gap: 0.35em;
+		padding: 0.2rem 0.4rem;
+		border-radius: 0.35rem;
+		border: 1px solid transparent;
+		color: var(--sl-color-gray-3);
+		cursor: default;
+		transition: background-color 0.25s, color 0.25s, border-color 0.25s, box-shadow 0.25s;
+	}
+	.grp.on {
+		background: var(--tbr-accent-wash);
+		border-color: color-mix(in oklch, var(--tbr-accent-line) 45%, transparent);
+		color: var(--tbr-accent-text);
+	}
+	.arrow {
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+		margin: 1rem 0 0.9rem;
+		font-size: 0.6875rem;
+		color: var(--sl-color-gray-4);
+	}
+	.arrow::before,
+	.arrow::after {
+		content: '';
+		height: 1px;
+		flex: 1;
+		background: linear-gradient(90deg, transparent, var(--tbr-border-strong), transparent);
+	}
+	.out {
+		margin: 0;
+		font-size: clamp(0.72rem, 0.6rem + 0.35vw, 0.8125rem);
+		line-height: 1.75;
+		color: var(--sl-color-gray-2);
+		white-space: pre-wrap;
+		overflow-wrap: anywhere;
+	}
+	.out .k {
+		color: var(--sl-color-gray-3);
+	}
+	.out .f {
+		color: var(--sl-color-white);
+	}
+	.out .c {
+		color: var(--sl-color-gray-4);
+	}
+	.val {
+		border-radius: 0.25rem;
+		padding: 0 0.1em;
+		box-shadow: 0 0 0 1px transparent;
+		transition: background-color 0.25s, color 0.25s, box-shadow 0.25s;
+	}
+	.val.on {
+		background: var(--tbr-accent-wash);
+		color: var(--tbr-accent-text);
+		box-shadow: 0 0 0 1px color-mix(in oklch, var(--tbr-accent-line) 45%, transparent);
+	}
+
+	/* Stats strip */
+	.stats {
+		display: grid;
+		grid-template-columns: repeat(4, minmax(0, 1fr));
+		margin-top: clamp(3rem, 6vw, 4.5rem);
+		border-top: 1px solid var(--tbr-border);
+	}
+	.stats > div {
+		padding: 1.25rem 1.25rem 0.25rem 0;
+	}
+	.stats > div + div {
+		padding-inline-start: 1.25rem;
+		border-inline-start: 1px solid var(--tbr-border);
+	}
+	.stats dt {
+		font-family: var(--__sl-font-mono);
+		font-size: 0.6875rem;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		color: var(--sl-color-gray-4);
+	}
+	.stats dd {
+		margin: 0.5rem 0 0;
+		font-size: 0.875rem;
+		line-height: 1.5;
+		color: var(--sl-color-gray-3);
+	}
+	.stats strong {
+		display: block;
+		font-size: 1.75rem;
+		line-height: 1.15;
+		font-weight: 600;
+		letter-spacing: -0.03em;
+		color: var(--sl-color-white);
+		margin-bottom: 0.3rem;
+	}
+
+	@media (max-width: 60rem) {
+		.hero-grid {
+			grid-template-columns: minmax(0, 1fr);
+		}
+		.stats {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+		.stats > div:nth-child(3) {
+			border-inline-start: 0;
+			padding-inline-start: 0;
+		}
+		.stats > div:nth-child(n + 3) {
+			border-top: 1px solid var(--tbr-border);
+			margin-top: 1rem;
+		}
+	}
+	@media (max-width: 30rem) {
+		.stats {
+			grid-template-columns: minmax(0, 1fr);
+		}
+		.stats > div,
+		.stats > div + div {
+			padding-inline-start: 0;
+			border-inline-start: 0;
+		}
+		.stats > div + div {
+			border-top: 1px solid var(--tbr-border);
+			margin-top: 0.75rem;
+		}
+		.card-title {
+			font-size: 0.6875rem;
+		}
+		.label {
+			flex-direction: column;
+			gap: 0.2rem;
+		}
+		.hex-row {
+			display: grid;
+			grid-template-columns: 2.2em repeat(2, max-content);
+			row-gap: 0.35rem;
+		}
+		.hex-row > :nth-child(4) {
+			grid-column: 2;
+		}
+	}
+</style>

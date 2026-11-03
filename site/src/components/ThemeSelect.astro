@@ -1,0 +1,71 @@
+---
+// A single light/dark toggle instead of Starlight's select. The choice is stored under the same
+// key Starlight's ThemeProvider reads before first paint, so there is no flash. Until the user
+// picks, the system preference applies.
+---
+
+<tbr-theme-toggle>
+	<button type="button" class="tbr-theme-toggle" aria-label="Switch to light theme" title="Toggle theme">
+		<svg class="sun" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round">
+			<circle cx="12" cy="12" r="4"></circle>
+			<path d="M12 2.5v2M12 19.5v2M4.6 4.6l1.4 1.4M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4 6 18M18 6l1.4-1.4"></path>
+		</svg>
+		<svg class="moon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+			<path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5a8.5 8.5 0 1 0 11 11Z"></path>
+		</svg>
+	</button>
+</tbr-theme-toggle>
+
+<script>
+	const KEY = 'starlight-theme';
+	const system = () => (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+
+	function apply(theme: 'light' | 'dark') {
+		document.documentElement.dataset.theme = theme;
+		for (const b of document.querySelectorAll<HTMLButtonElement>('.tbr-theme-toggle')) {
+			b.setAttribute('aria-label', theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme');
+		}
+	}
+
+	matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => {
+		if (!localStorage.getItem(KEY)) apply(system());
+	});
+
+	class TbrThemeToggle extends HTMLElement {
+		connectedCallback() {
+			const current = document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
+			apply(current);
+			this.querySelector('button')?.addEventListener('click', () => {
+				const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+				// Going back to what the system prefers clears the override.
+				localStorage.setItem(KEY, next === system() ? '' : next);
+				apply(next);
+			});
+		}
+	}
+	if (!customElements.get('tbr-theme-toggle')) customElements.define('tbr-theme-toggle', TbrThemeToggle);
+</script>
+
+<style>
+	.tbr-theme-toggle {
+		display: inline-grid;
+		place-items: center;
+		width: 2.125rem;
+		height: 2.125rem;
+		border-radius: 0.5rem;
+		border: 1px solid transparent;
+		background: transparent;
+		color: var(--sl-color-gray-3);
+		cursor: pointer;
+		transition: color 0.15s, background-color 0.15s, border-color 0.15s;
+	}
+	.tbr-theme-toggle:hover {
+		color: var(--sl-color-white);
+		background: var(--tbr-surface);
+		border-color: var(--tbr-border);
+	}
+	:global([data-theme='light']) .sun,
+	:global([data-theme='dark']) .moon {
+		display: none;
+	}
+</style>

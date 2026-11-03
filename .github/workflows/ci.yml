@@ -31,6 +31,8 @@ jobs:
         run: pnpm --filter spike-ts71 run router
       - name: Example dashboard builds
         run: pnpm --filter tbr-example-dashboard build
+      - name: Docs site builds
+        run: pnpm --filter tbr-site build
       - name: Bundle size budget
         run: node bench/size.mjs --budget
       - name: Bench smoke (quick)

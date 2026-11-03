@@ -1,0 +1,87 @@
+---
+import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
+import { getCollection } from 'astro:content';
+import { buildSidebar } from '../lib/guide.mjs';
+
+// Suggest the guide pages that exist, in sidebar order, with their titles.
+const titles = new Map((await getCollection('docs')).map((e) => [e.id, e.data.title]));
+const pages = buildSidebar()
+	.flatMap((g) => g.items.map((i) => i.slug))
+	.filter((s) => titles.has(s));
+const label = (slug: string) => titles.get(slug) ?? slug;
+---
+
+<StarlightPage
+	frontmatter={{ title: 'Page not found', template: 'splash', pagefind: false, editUrl: false, hero: { title: '404' } }}
+	hasSidebar={false}
+>
+	<section class="nf not-content">
+		<p class="code" aria-hidden="true"><span>0x</span>404</p>
+		<h1>This page decoded to nothing.</h1>
+		<p class="sub">The link may be out of date, or the page has not been written yet. Try search, or start from one of these:</p>
+		<ul>
+			{pages.map((s) => <li><a href={`/${s}/`}>{label(s)}</a></li>)}
+		</ul>
+		<a class="home" href="/">← Back to the home page</a>
+	</section>
+</StarlightPage>
+
+<style>
+	.nf {
+		max-width: 36rem;
+		margin: clamp(3rem, 10vh, 7rem) auto 4rem;
+		text-align: center;
+	}
+	.code {
+		font-family: var(--__sl-font-mono);
+		font-size: clamp(4rem, 10vw, 6.5rem);
+		font-weight: 600;
+		letter-spacing: -0.06em;
+		line-height: 1;
+		color: var(--sl-color-white);
+	}
+	.code span {
+		color: var(--tbr-accent-text);
+	}
+	h1 {
+		margin-top: 1.25rem;
+		font-size: 1.5rem;
+		font-weight: 600;
+		letter-spacing: -0.02em;
+		color: var(--sl-color-white);
+	}
+	.sub {
+		margin-top: 0.75rem;
+		color: var(--sl-color-gray-3);
+	}
+	ul {
+		list-style: none;
+		padding: 0;
+		margin: 2rem 0 0;
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: center;
+		gap: 0.5rem;
+	}
+	li a {
+		display: inline-block;
+		padding: 0.35rem 0.75rem;
+		border: 1px solid var(--tbr-border);
+		border-radius: 999px;
+		font-size: 0.875rem;
+		color: var(--sl-color-gray-2);
+		text-decoration: none;
+		transition: border-color 0.15s, color 0.15s;
+	}
+	li a:hover {
+		color: var(--sl-color-white);
+		border-color: var(--tbr-border-strong);
+	}
+	.home {
+		display: inline-block;
+		margin-top: 2.5rem;
+		font-size: 0.875rem;
+		color: var(--tbr-accent-text);
+		text-decoration: none;
+	}
+</style>

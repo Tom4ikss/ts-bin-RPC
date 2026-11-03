@@ -3,7 +3,9 @@
 Work in progress: a code-first TypeScript RPC with a binary wire format, lazy client-side views,
 zero-copy `TypedArray` columns and tRPC-like DX. Nothing is published yet; this repository holds the
 research, the design, the benchmarks that fixed the wire format, the code generator, the codec
-runtime, and the server and client (phase 3). DX polish and a real example come next (phase 4).
+runtime, the server and client, an example app and a user guide.
+
+**User guide:** [docs/guide](docs/guide/index.md), also as a website: `pnpm --filter tbr-site dev`.
 
 Project documents (in Russian):
 [design](docs/DESIGN.md), [wire format v0](docs/FORMAT.md), [roadmap to alpha](docs/ROADMAP.md),
@@ -22,6 +24,8 @@ Project documents (in Russian):
 | `packages/ts-bin-rpc/` | numeric brands (`u8` … `i64`), `RpcError`, `toPlain`; `/server` (`createHandler`, Fetch API), `/client` (`createClient`), `/node` (adapter for `node:http`), `/runtime` (codec runtime for generated code) |
 | `e2e/` | fixture app tested in process, over HTTP under Node, Bun and Deno, and from Chromium |
 | `playground/` | a router to play with: `pnpm watch` regenerates on save, `pnpm demo` encodes and reads a message |
+| `docs/guide/` | user guide: getting started, types, views, server and client, evolution, CLI, performance, FAQ |
+| `site/` | docs website (Astro Starlight) built from `docs/guide`: `pnpm --filter tbr-site dev` |
 | `examples/dashboard/` | Node server and a Vite + React client: a metrics dashboard drawing response columns with uPlot |
 
 ## Running

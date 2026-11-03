@@ -9,3 +9,5 @@ playground/src/tbr.gen.ts
 e2e/src/tbr.gen.ts
 examples/*/src/server/tbr.gen.ts
 examples/*/dist/
+site/dist/
+site/.astro/

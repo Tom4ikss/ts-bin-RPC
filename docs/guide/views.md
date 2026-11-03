@@ -1,0 +1,93 @@
+---
+title: Views
+description: How responses are read lazily, and the few places where a view is not a plain object.
+---
+
+# Views
+
+The client does not parse a response into objects. It verifies the bytes once, then returns
+**views**: objects whose getters read fields from the response buffer when you touch them.
+Strings decode on first read; a field you never read costs nothing.
+
+```ts
+const users = await api.user.list();
+users.length; // a real Array
+users.filter((u) => u.role === 'admin').map((u) => u.name); // reads two columns, nothing else
+```
+
+In most code a view behaves like the plain object its type describes. This page lists where it
+doesn't.
+
+## What works as usual
+
+- **Property reads, destructuring, `in`, optional chaining:** `const { id, name } = user`.
+- **Arrays are real arrays:** `Array.isArray`, `map`, `filter`, `sort`, spread of the array
+  itself (`[...users]`).
+- **`JSON.stringify(view)`** gives the same JSON as for the plain object. Views implement
+  `toJSON`.
+- **`console.log(view)` in Node** prints the plain value.
+- **Discriminated unions narrow:** `switch (shape.kind)`.
+- **Repeated reads return the same nested object:** `users[0] === users[0]`, `user.tags === user.tags`.
+
+## What does not
+
+> [!WARNING]
+> **Object spread and `Object.keys` don't see the fields.** The fields are getters on the prototype,
+> so `{ ...user }` and `Object.keys(user)` miss them. For a single object you get `{}`. For an
+> element of an array of objects you get internal bookkeeping properties.
+
+```ts
+setUser({ ...user, name: 'Ada' }); // wrong: loses every field
+setUser({ ...toPlain(user), name: 'Ada' }); // right
+```
+
+- **Views are read-only.** Assigning a field throws a `TypeError` in strict mode, which is all ES
+  modules. To edit, copy with `toPlain` first.
+- **`structuredClone`, `postMessage`, IndexedDB and React Server Components** copy own data
+  properties, so they get the bookkeeping instead of the fields. Pass `toPlain(view)` instead.
+- **Don't rely on the identity of `Date` values.** In arrays of objects each read returns a new
+  `Date`. Compare with `getTime()`.
+
+## `toPlain`
+
+```ts
+import { toPlain } from 'ts-bin-rpc';
+
+const plain = toPlain(user); // User, made of plain objects, arrays, fresh Dates and typed array copies
+```
+
+`toPlain` makes a deep copy: it reads every field once and copies typed arrays. Use it at the edge
+of code that needs plain data: state stores, workers, caches, mutations.
+
+## Typed arrays share the response
+
+A `Float32Array` field is a view over the response buffer, which is why reading it is free. Two
+consequences:
+
+- **Writing into it changes the response.** Fine if that's what you want; otherwise `slice()` it.
+- **It keeps the whole response alive.** If you keep one small typed array from a large response,
+  the whole buffer stays in memory. `slice()` what you keep long-term.
+
+## Verification
+
+Before the first view is returned, the whole message is checked:
+
+- offsets and lengths stay inside the buffer;
+- strings are valid;
+- enum indexes and union tags exist;
+- required fields are present;
+- nesting depth and the total number of elements stay within limits, so a message built with
+  reused offsets cannot make a reader loop.
+
+After that, reads do no bounds checks.
+
+The client verifies every response by default. `verify: false` in `createClient` skips the check
+when you trust the server completely. The server always verifies inputs. A message that fails
+verification is a `400 BAD_INPUT` on the server and a `BAD_RESPONSE` error on the client; it
+never crashes the process.
+
+## On the server
+
+Inputs arrive as **plain objects**, not views. They are verified, then decoded in full: inputs are
+usually small, and handlers often change what they receive. Outputs are encoded from whatever
+your procedure returns, plain objects or views alike.

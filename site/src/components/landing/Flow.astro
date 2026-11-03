@@ -1,0 +1,149 @@
+---
+// Router → generate → client, as three steps with real code from examples/dashboard (trimmed).
+import { Code } from '@astrojs/starlight/components';
+
+const router = `import type { u16, u32 } from 'ts-bin-rpc';
+
+/** A time series as two columns. */
+export interface Series {
+  t: Float64Array; // ms since the epoch
+  v: Float32Array;
+}
+
+export const appRouter = {
+  series: async (q: { host: u16; from: Date; to: Date; points: u32 }): Promise<Series> => {
+    const t = timeline(q.from, q.to, q.points);
+    return { t, v: sample(q.host, t) };
+  },
+};
+
+export type AppRouter = typeof appRouter;`;
+
+const generate = `$ tbr generate --router src/server/router.ts
+created tbr.lock.json
+wrote src/server/tbr.gen.ts
+
+$ tbr generate --router src/server/router.ts --watch   # ~15 ms per save
+$ tbr check --router src/server/router.ts              # in CI`;
+
+const client = `import { createClient } from 'ts-bin-rpc/client';
+import type { AppRouter } from '../server/router.ts';
+import { clientProcedures } from '../server/tbr.gen.ts';
+
+const api = createClient<AppRouter>({ url: '/rpc', procedures: clientProcedures });
+
+const { t, v } = await api.series({ host: 1, from, to, points: 10_000 });
+plot.setData([t, v]); // typed arrays over the response bytes, nothing copied`;
+
+const steps = [
+	{
+		n: '01',
+		title: 'Write a router',
+		text: 'Plain async functions and plain types. No IDL, no schema library. Branded numbers like u16 and f32 pick the wire width and are still just number in your code.',
+		code: router,
+		lang: 'ts',
+		file: 'src/server/router.ts',
+	},
+	{
+		n: '02',
+		title: 'Generate codecs',
+		text: 'The CLI reads your types through the TypeScript 7.1 compiler API, writes typed codecs, and records stable field IDs in a lockfile you commit.',
+		code: generate,
+		lang: 'sh',
+		file: 'Terminal',
+	},
+	{
+		n: '03',
+		title: 'Call it from the client',
+		text: 'Types come from typeof appRouter, as with tRPC. Only import type reaches server files, so the bundle holds the runtime and this direction’s codecs.',
+		code: client,
+		lang: 'ts',
+		file: 'src/client/api.ts',
+	},
+];
+---
+
+<section class="flow not-content" aria-labelledby="flow-title">
+	<header class="section-head">
+		<p class="kicker">How it works</p>
+		<h2 id="flow-title">One contract, three files.</h2>
+		<p class="sub">The router is the source of truth. Everything on the wire is derived from its types.</p>
+	</header>
+	<ol class="steps">
+		{
+			steps.map((s) => (
+				<li class="step">
+					<div class="step-copy">
+						<span class="n">{s.n}</span>
+						<h3>{s.title}</h3>
+						<p>{s.text}</p>
+					</div>
+					<div class="step-code">
+						{s.lang === 'sh' ? (
+							<Code code={s.code} lang="shellsession" frame="terminal" title="Terminal" />
+						) : (
+							<Code code={s.code} lang={s.lang} title={s.file} />
+						)}
+					</div>
+				</li>
+			))
+		}
+	</ol>
+</section>
+
+<style>
+	.steps {
+		list-style: none;
+		padding: 0;
+		margin: 2.5rem 0 0;
+		display: grid;
+		gap: 0;
+		counter-reset: step;
+	}
+	.step {
+		display: grid;
+		grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.6fr);
+		gap: clamp(1.25rem, 4vw, 3.5rem);
+		padding-block: 1.75rem;
+		border-top: 1px solid var(--tbr-border);
+		align-items: start;
+	}
+	.step-copy {
+		position: sticky;
+		top: calc(var(--sl-nav-height) + 1.5rem);
+	}
+	.n {
+		font-family: var(--__sl-font-mono);
+		font-size: 0.75rem;
+		color: var(--tbr-accent-text);
+		letter-spacing: 0.04em;
+	}
+	h3 {
+		margin-top: 0.35rem;
+		font-size: 1.25rem;
+		font-weight: 600;
+		letter-spacing: -0.02em;
+		color: var(--sl-color-white);
+	}
+	.step-copy p {
+		margin-top: 0.5rem;
+		font-size: 0.9375rem;
+		line-height: 1.6;
+		color: var(--sl-color-gray-3);
+		text-wrap: pretty;
+	}
+	.step-code {
+		min-width: 0;
+	}
+	.step-code :global(.expressive-code) {
+		margin: 0;
+	}
+	@media (max-width: 52rem) {
+		.step {
+			grid-template-columns: minmax(0, 1fr);
+		}
+		.step-copy {
+			position: static;
+		}
+	}
+</style>
