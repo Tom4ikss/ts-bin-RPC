@@ -14,11 +14,6 @@ beforeAll(async () => {
   for (const f of fixtures) gen[f] = await generate(f);
 }, 60_000);
 
-it('generated code typechecks', () => {
-  const tsc = path.join(import.meta.dirname, '..', 'node_modules', '.bin', 'tsc');
-  execFileSync(tsc, ['-p', path.join(import.meta.dirname, '.gen', 'tsconfig.json')], { stdio: 'pipe' });
-}, 60_000);
-
 describe.each(fixtures)('%s: round trip', (fixture) => {
   const roots = () => {
     const g = gen[fixture];
@@ -220,3 +215,9 @@ describe('schema evolution on the wire', () => {
     expect(() => v1.mod.codecs['NewUser'].decode(input)).toThrow('NewUser.invite is missing');
   });
 });
+
+// Last: the evolution tests above regenerate their files, and this checks every file in .gen.
+it('generated code typechecks', () => {
+  const tsc = path.join(import.meta.dirname, '..', 'node_modules', '.bin', 'tsc');
+  execFileSync(tsc, ['-p', path.join(import.meta.dirname, '.gen', 'tsconfig.json')], { stdio: 'pipe' });
+}, 60_000);

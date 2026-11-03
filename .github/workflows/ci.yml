@@ -29,5 +29,7 @@ jobs:
           E2E_RUNTIMES: node,bun,deno
       - name: TypeScript 7.1 API spike
         run: pnpm --filter spike-ts71 run router
+      - name: Bundle size budget
+        run: node bench/size.mjs --budget
       - name: Bench smoke (quick)
         run: node bench/run.mjs core --quick --runtimes=node,chromium

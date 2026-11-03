@@ -1,13 +1,13 @@
 // createClient<AppRouter>: a proxy whose calls POST the encoded input and return views over the response.
 import { decodeError, FLAG_ERROR, toPlain, VerifyError, type Limits } from './runtime.ts';
-import { codeForStatus, CONTENT_TYPE, RpcError, SCHEMA_HEADER, type Procedures } from './rpc.ts';
+import { codeForStatus, CONTENT_TYPE, RpcError, SCHEMA_HEADER, type ClientProcedures } from './rpc.ts';
 import type { CallOptions, Client } from './router.ts';
 
 export interface ClientOptions {
   /** Base URL of the procedures, e.g. `/rpc` or `https://api.example.com/rpc`. */
   url: string;
-  /** The `procedures` table from generated code. */
-  procedures: Procedures;
+  /** `clientProcedures` (or `procedures`) from generated code. */
+  procedures: ClientProcedures;
   /** Default: globalThis.fetch. */
   fetch?: typeof fetch;
   /** Sent with every call; a function is called before each one. */

@@ -1,7 +1,7 @@
 // createHandler: a Fetch API handler, `(Request) => Promise<Response>`, for Bun.serve, Deno.serve,
 // Cloudflare Workers, or Node through `ts-bin-rpc/node`.
 import { DEFAULT_LIMITS, EncodeError, encodeError, VerifyError, type Limits } from './runtime.ts';
-import { CONTENT_TYPE, RpcError, SCHEMA_HEADER, type ProcedureEntry, type Procedures } from './rpc.ts';
+import { CONTENT_TYPE, RpcError, SCHEMA_HEADER, type ServerEntry, type ServerProcedures } from './rpc.ts';
 import type { AnyProcedure, AnyRouter } from './router.ts';
 
 type CtxUnion<R> = {
@@ -14,8 +14,8 @@ type Intersect<U> = (U extends unknown ? (x: U) => void : never) extends (x: inf
 export type RouterContext<R> = [CtxUnion<R>] extends [never] ? undefined : Intersect<CtxUnion<R>>;
 
 export interface HandlerOptions<R> {
-  /** The `procedures` table from generated code. */
-  procedures: Procedures;
+  /** `serverProcedures` (or `procedures`) from generated code. */
+  procedures: ServerProcedures;
   /** Path prefix of every procedure. Default: `/`. */
   prefix?: string;
   /** Builds the second argument of procedures, once per request. May throw RpcError. */
@@ -38,7 +38,7 @@ export interface HandlerOptions<R> {
 interface Route {
   fn: AnyProcedure;
   self: object;
-  proc: ProcedureEntry;
+  proc: ServerEntry;
 }
 
 const encoder = new TextEncoder();
@@ -126,11 +126,11 @@ export function createHandler<R extends AnyRouter>(router: R, options: HandlerOp
   };
 }
 
-function headers(proc?: ProcedureEntry, extra: Record<string, string> = {}): Record<string, string> {
+function headers(proc?: ServerEntry, extra: Record<string, string> = {}): Record<string, string> {
   return { 'content-type': CONTENT_TYPE, ...(proc ? { [SCHEMA_HEADER]: proc.hash } : {}), ...extra };
 }
 
-function fail(e: RpcError, extra: Record<string, string> = {}, proc?: ProcedureEntry): Response {
+function fail(e: RpcError, extra: Record<string, string> = {}, proc?: ServerEntry): Response {
   const data = e.data === undefined ? undefined : encoder.encode(JSON.stringify(e.data));
   return new Response(encodeError({ code: e.code, message: e.message, data }), { status: e.status, headers: headers(proc, extra) });
 }

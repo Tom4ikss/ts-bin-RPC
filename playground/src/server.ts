@@ -8,12 +8,12 @@ import { fileURLToPath } from 'node:url';
 import { createHandler } from 'ts-bin-rpc/server';
 import { toNodeListener } from 'ts-bin-rpc/node';
 import { appRouter } from './router.ts';
-import { procedures } from './tbr.gen.ts';
+import { serverProcedures } from './tbr.gen.ts';
 
 const port = Number(process.env.PORT ?? 3000);
 
 const rpc = createHandler(appRouter, {
-  procedures,
+  procedures: serverProcedures,
   prefix: '/rpc',
   context: (req) => ({ userId: req.headers.get('authorization')?.replace(/^Bearer /, '') ?? null }),
 });
@@ -32,8 +32,8 @@ const page = `<!doctype html>
 <script type="module">
   import { createClient } from 'ts-bin-rpc/client';
   import { toPlain } from 'ts-bin-rpc';
-  import { procedures } from '/app/tbr.gen.ts';
-  window.api = createClient({ url: '/rpc', procedures, debug: true, headers: { authorization: 'Bearer me' } });
+  import { clientProcedures } from '/app/tbr.gen.ts';
+  window.api = createClient({ url: '/rpc', procedures: clientProcedures, debug: true, headers: { authorization: 'Bearer me' } });
   window.toPlain = toPlain;
 </script>
 <body style="font: 15px system-ui; margin: 2em">

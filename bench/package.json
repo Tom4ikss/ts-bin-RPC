@@ -8,6 +8,7 @@
     "gen": "node --experimental-strip-types --no-warnings gen/build.mjs"
   },
   "devDependencies": {
+    "esbuild": "^0.28.2",
     "playwright": "^1.64.1",
     "ts-bin-rpc": "workspace:*"
   }

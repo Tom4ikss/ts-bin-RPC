@@ -55,13 +55,14 @@ A server and a client (phase 3):
 ```ts
 // server
 import { createHandler } from 'ts-bin-rpc/server';
-import { procedures } from './tbr.gen.ts';
-const handler = createHandler(appRouter, { procedures, prefix: '/rpc', context: (req) => ({ user: auth(req) }) });
+import { serverProcedures } from './tbr.gen.ts';
+const handler = createHandler(appRouter, { procedures: serverProcedures, prefix: '/rpc', context: (req) => ({ user: auth(req) }) });
 Bun.serve({ fetch: handler }); // or Deno.serve(handler), or http.createServer(toNodeListener(handler))
 
 // client
 import { createClient } from 'ts-bin-rpc/client';
-const api = createClient<typeof appRouter>({ url: '/rpc', procedures });
+import { clientProcedures } from './tbr.gen.ts'; // encoders of inputs, decoders of outputs: the rest is tree-shaken
+const api = createClient<typeof appRouter>({ url: '/rpc', procedures: clientProcedures });
 const user = await api.user.get({ id: 1 }); // a lazy view over the response
 ```
 

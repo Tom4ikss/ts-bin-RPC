@@ -57,6 +57,31 @@ export function ranks(b: Uint8Array, pres: number, nul: number, n: number): Int3
   return out;
 }
 
+let scratch = new Int32Array(48);
+
+/**
+ * Column set of an object vector (FORMAT §6): `spec` holds `[fieldId, align, flags]` per field, flags bit 0 for
+ * optional, bit 1 for nullable. Returns `[data, presence, null]` offsets per field, at the field's spec index;
+ * -1 where the column or bitmap is absent. Columns of unknown fields are skipped.
+ * The result is a shared buffer, valid until the next call: read it before constructing nested columns.
+ */
+export function catalog(dv: DataView, vec: number, spec: readonly number[]): Int32Array {
+  const n = dv.getUint32(vec, true), nc = dv.getUint16(vec + 4, true), nb = (n + 7) >>> 3;
+  if (scratch.length < spec.length) scratch = new Int32Array(spec.length);
+  const out = scratch.fill(-1, 0, spec.length);
+  for (let j = 0; j < nc; j++) {
+    const e = vec + 8 + 8 * j, id = dv.getUint16(e, true), fl = dv.getUint16(e + 2, true);
+    let k = 0;
+    while (k < spec.length && spec[k] !== id) k += 3;
+    if (k === spec.length) continue;
+    let o = dv.getUint32(e + 4, true);
+    if (fl & 1) (out[k + 1] = o), (o += nb);
+    if (fl & 2) (out[k + 2] = o), (o += nb);
+    out[k] = align(o, spec[k + 1]);
+  }
+  return out;
+}
+
 export type { u8, i8, u16, i16, u32, i32, f32, f64, u64, i64 } from './brands.ts';
 export type { Expect, Same, InputOf, InputOptional, OutputOf, ProcedurePath } from './router.ts';
 
@@ -99,7 +124,7 @@ function isAscii(s: string): boolean {
   return ASCII.test(s);
 }
 
-const encoder = new TextEncoder();
+const textEncoder = new TextEncoder();
 const asciiDecoder = new TextDecoder('utf-8');
 const utf16Decoder = new TextDecoder('utf-16le');
 const utf16StrictDecoder = new TextDecoder('utf-16le', { fatal: true });
@@ -300,7 +325,7 @@ export class Writer {
       flags |= FLAG_STRINGS;
       const aLen = this.#asciiLen;
       const a = this.alloc(aLen, 1);
-      if (aLen) encoder.encodeInto(this.#ascii.length === 1 ? this.#ascii[0] : this.#ascii.join(''), this.buf.subarray(a, a + aLen));
+      if (aLen) textEncoder.encodeInto(this.#ascii.length === 1 ? this.#ascii[0] : this.#ascii.join(''), this.buf.subarray(a, a + aLen));
       const uLen = this.#utf16Len;
       const u = this.alloc(uLen * 2, 2);
       const w16 = makeTyped(Uint16Array, this.buf.buffer, u, uLen);
@@ -721,6 +746,39 @@ export class Check {
     for (let i = 0; i < n; i++) if (this.has(pres, nul, i)) k++;
     return k;
   }
+
+  /**
+   * Column set of an object vector (spec as in `catalog`, names for messages): verifies the catalog and
+   * calls `body(k, data, n, presence, null)` for each column of a known field, k its spec index / 3.
+   * Returns the row count.
+   */
+  cols(off: number, d: number, type: string, names: readonly string[], spec: readonly number[], body: (k: number, b: number, n: number, pres: number, nul: number) => void): number {
+    const n = this.vec(off, d);
+    this.need(off + 4, 4);
+    const dv = this.dv, nc = dv.getUint16(off + 4, true), nb = (n + 7) >>> 3;
+    this.need(off + 8, 8 * nc);
+    const seen = new Uint8Array(names.length);
+    for (let j = 0; j < nc; j++) {
+      const e = off + 8 + 8 * j, id = dv.getUint16(e, true), fl = dv.getUint16(e + 2, true), o0 = dv.getUint32(e + 4, true);
+      if (fl & ~3) this.fail(`${type}: unknown column flags`);
+      let o = o0;
+      const pres = fl & 1 ? o : -1;
+      if (fl & 1) o += nb;
+      const nul = fl & 2 ? o : -1;
+      if (fl & 2) o += nb;
+      this.need(o0, o - o0);
+      let k = 0;
+      while (k < names.length && spec[3 * k] !== id) k++;
+      if (k === names.length) continue;
+      const allow = spec[3 * k + 2];
+      if (seen[k]++) this.fail(`${type}.${names[k]}: duplicate column`);
+      if (fl & 1 & ~allow) this.fail(`${type}.${names[k]}: required column has absent rows`);
+      if (fl & 2 & ~allow) this.fail(`${type}.${names[k]}: column has nulls`);
+      body(k, align(o, spec[3 * k + 1]), n, pres, nul);
+    }
+    for (let k = 0; k < names.length; k++) if (!seen[k] && !(spec[3 * k + 2] & 1)) this.fail(`${type}.${names[k]}: column is missing`);
+    return n;
+  }
 }
 
 // ---------------------------------------------------------------------------------------------- codec
@@ -731,14 +789,20 @@ export interface ViewOptions {
   limits?: Partial<Limits>;
 }
 
-export interface Codec<T> {
+export interface Encoder<T> {
   encode(value: T): Uint8Array<ArrayBuffer>;
+}
+
+export interface Decoder<T> {
   /** Lazy views over the message: fields are read on access. */
   view(bytes: Uint8Array, options?: ViewOptions): T;
   /** Plain objects, safe to mutate and spread. */
   decode(bytes: Uint8Array, options?: ViewOptions): T;
   verify(bytes: Uint8Array, limits?: Partial<Limits>): void;
 }
+
+/** Both halves; generated code also exports each half alone, so bundles keep only the one they use. */
+export interface Codec<T> extends Encoder<T>, Decoder<T> {}
 
 // ------------------------------------------------------------------------------------ type descriptors
 
@@ -755,7 +819,7 @@ export type TypeDesc =
   | { kind: 'union'; name: string };
 
 export interface SchemaDesc {
-  objects: Record<string, readonly { name: string; type: TypeDesc; optional: boolean; nullable: boolean }[]>;
+  objects: Record<string, readonly { name: string; type: TypeDesc; optional?: boolean; nullable?: boolean }[]>;
   enums: Record<string, readonly string[]>;
   unions: Record<string, { discriminant: string; variants: Record<string, string> }>;
 }
@@ -845,31 +909,23 @@ function explain(e: EncodeError, schema: SchemaDesc, type: TypeDesc, value: unkn
   return out;
 }
 
-export interface CodecDef<T> {
+export interface EncoderDef<T> {
   /** For error messages: where in the value an encode failed. */
   desc?: { schema: SchemaDesc; type: TypeDesc };
   strings: boolean;
   size: number;
   align: number;
   write(w: Writer, at: number, v: T): void;
+}
+
+export interface DecoderDef<T> {
+  size: number;
   read(r: Reader, at: number): T;
   check(c: Check, at: number): void;
   plain(v: T): T;
 }
 
-export function codec<T>(d: CodecDef<T>): Codec<T> {
-  const open = (bytes: Uint8Array, o: ViewOptions = {}): Reader => {
-    if (o.verify === false) {
-      const r = new Reader(bytes);
-      if (r.flags & FLAG_ERROR) throw new VerifyError('message is an error envelope');
-      return r;
-    }
-    const c = new Check(bytes, o.limits);
-    if (c.flags & FLAG_ERROR) c.fail('message is an error envelope');
-    c.need(c.root, d.size);
-    d.check(c, c.root);
-    return c.reader();
-  };
+export function encoder<T>(d: EncoderDef<T>): Encoder<T> {
   // Messages of one procedure tend to have similar sizes: start where the last one ended instead of
   // growing from a small buffer, which left ~2x the message in garbage on every encode.
   let capacity = 256;
@@ -886,6 +942,23 @@ export function codec<T>(d: CodecDef<T>): Codec<T> {
       capacity = Math.max(256, bytes.length + (bytes.length >>> 3));
       return bytes;
     },
+  };
+}
+
+export function decoder<T>(d: DecoderDef<T>): Decoder<T> {
+  const open = (bytes: Uint8Array, o: ViewOptions = {}): Reader => {
+    if (o.verify === false) {
+      const r = new Reader(bytes);
+      if (r.flags & FLAG_ERROR) throw new VerifyError('message is an error envelope');
+      return r;
+    }
+    const c = new Check(bytes, o.limits);
+    if (c.flags & FLAG_ERROR) c.fail('message is an error envelope');
+    c.need(c.root, d.size);
+    d.check(c, c.root);
+    return c.reader();
+  };
+  return {
     view(bytes, o) {
       const r = open(bytes, o);
       return d.read(r, r.root);
@@ -898,6 +971,10 @@ export function codec<T>(d: CodecDef<T>): Codec<T> {
       open(bytes, { limits });
     },
   };
+}
+
+export function codec<T>(e: Encoder<T>, d: Decoder<T>): Codec<T> {
+  return { encode: e.encode, view: d.view, decode: d.decode, verify: d.verify };
 }
 
 // ------------------------------------------------------------------------------------- error envelope

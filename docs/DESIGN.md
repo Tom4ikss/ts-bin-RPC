@@ -72,10 +72,10 @@ export type AppRouter = typeof appRouter;
 
 // server/main.ts
 import { createHandler } from 'ts-bin-rpc/server';
-import { procedures } from './tbr.gen.ts';
+import { serverProcedures } from './tbr.gen.ts';
 
 const handler = createHandler(appRouter, {
-  procedures,
+  procedures: serverProcedures,
   prefix: '/rpc',
   context: (req) => ({ db, user: auth(req) }),
 });
@@ -87,10 +87,11 @@ const handler = createHandler(appRouter, {
 
 ```ts
 import { createClient } from 'ts-bin-rpc/client';
-import { procedures } from '../server/tbr.gen.ts';
+import { clientProcedures } from '../server/tbr.gen.ts';
 import type { AppRouter } from '../server/router';
 
-const api = createClient<AppRouter>({ url: '/rpc', procedures });
+// clientProcedures: энкодеры входов и декодеры выходов, остальное бандлер выкидывает
+const api = createClient<AppRouter>({ url: '/rpc', procedures: clientProcedures });
 
 const user = await api.user.get({ id: 1 });   // ctx в сигнатуре клиента нет; user: User,
                                               // строки декодируются при первом чтении
@@ -219,10 +220,15 @@ export type u8  = number & { readonly [tbr]?: 'u8' };
 
 ## 7. Сгенерированный код
 
-*Состояние на фазу 3:* генерируется один файл `tbr.gen.ts`, его импортируют и клиент, и сервер.
-Разделение на клиентскую и серверную части, описанное ниже, сделаем вместе с бюджетом бандла
-(ROADMAP 4.5). Views и `toPlain` устроены так, как описано; `decode` на сервере — это `toPlain`
-поверх верифицированного view.
+*Состояние на 4.5:* генерируется один файл `tbr.gen.ts` с тремя таблицами процедур:
+`clientProcedures` (кодировщики входов, декодеры выходов), `serverProcedures` (наоборот) и
+`procedures` (всё, для тестов и `tbr decode`). Вместо двух файлов, описанных ниже, стороны
+разделяет tree-shaking: каждый кодировщик и декодер — отдельная константа с `/* @__PURE__ */`,
+и бандлер выкидывает то, что не попало в импортированную таблицу. Разбор и проверка каталога
+колонок живут в runtime (`catalog`, `Check.cols`), в сгенерированном коде остаются только тела
+колонок. Размеры и бюджет — [size.md](../bench/results/size.md), `node bench/size.mjs --budget`
+в CI. Views и `toPlain` устроены так, как описано; `decode` на сервере — это `toPlain` поверх
+верифицированного view.
 
 **Клиент** (`generated/client.ts`): кодировщики входов, views выходов, верификаторы выходов
 (подключаются в dev), таблица процедур.
