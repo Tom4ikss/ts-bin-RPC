@@ -6,6 +6,6 @@ Client and handler in one process, no network: what a call costs on both sides t
 
 | Call | Time | Over POST |
 |---|---|---|
-| POST, user.get | 35.31 µs |  |
-| GET, catalog.user | 29.79 µs | −5.52 µs |
-| GET, catalog.user, 304 | 11.52 µs | −23.80 µs |
+| POST, user.get | 33.68 µs |  |
+| GET, catalog.user | 29.00 µs | −4.68 µs |
+| GET, catalog.user, 304 | 11.36 µs | −22.32 µs |
