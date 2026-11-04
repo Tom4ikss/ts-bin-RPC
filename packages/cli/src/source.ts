@@ -228,8 +228,10 @@ export class Ts71Source implements TypeSource {
     for (const part of parts) {
       for (const prop of part.getProperties()) {
         if (!prop.name.startsWith(RULE_PREFIX)) continue;
-        let obj = this.checker.getTypeOfSymbol(prop);
-        if (obj.isUnionType()) obj = obj.getTypes().find((m) => m.isObjectType()) ?? obj;
+        // `{ readonly maxLength: 64 } | object | undefined`: the member with properties
+        const t = this.checker.getTypeOfSymbol(prop);
+        const obj = (t.isUnionType() ? t.getTypes() : [t]).find((m) => m.isObjectType() && m.getProperties().length > 0);
+        if (!obj) continue;
         for (const r of obj.getProperties()) {
           const v = this.checker.getTypeOfSymbol(r);
           if (v.isNumberLiteralType() || v.isStringLiteralType() || v.isBigIntLiteralType()) out[r.name] = v.value as string | number | bigint;

@@ -18,7 +18,10 @@ export type i64 = bigint & { readonly [tbr]?: 'i64' };
 // are optional symbol-keyed properties: any string fits `string & MaxLength<64>` for the type
 // checker, and the codegen reads the literals. Combine them with `&`.
 export declare const tbrRule: unique symbol;
-type Rule<R> = { readonly [tbrRule]?: R };
+// `| object` lets any rule be assigned to any other: `string & MinLength<1>` from an input goes into
+// an output field of `string & MaxLength<64>` without a cast. Rules are checked at run time, not by
+// the types. The union keeps `R` for tbr generate to read.
+type Rule<R> = { readonly [tbrRule]?: R | object };
 
 /** At least `N`, inclusive. On numeric brands, `number` and `bigint`. NaN breaks it. */
 export type Min<N extends number | bigint> = Rule<{ readonly min: N }>;

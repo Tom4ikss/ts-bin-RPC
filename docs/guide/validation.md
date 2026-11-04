@@ -27,7 +27,9 @@ export const appRouter = {
 
 A rule is an optional property with a symbol key that is never there, like a
 [numeric brand](./types.md#numeric-brands). `string & MaxLength<64>` takes any string without a
-cast, and `input.name` is a `string` in the procedure.
+cast, and `input.name` is a `string` in the procedure. The types never check the rules: a value
+with any rules goes into a field with other rules, such as `input.name` into an output field of
+`string & MaxLength<16>`.
 
 `tbr generate` compiles the rules into the code that verifies the input. The server checks them
 before it calls the procedure, as part of the same pass over the message.
