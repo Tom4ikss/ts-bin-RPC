@@ -845,87 +845,10 @@ export class Check {
     return k;
   }
 
-  // ------------------------------------------------------------------------------ rules
-
-  broke(field: string, rule: RuleError['rule'], limit: number | bigint | string, index?: number): never {
-    throw new RuleError(field, rule, typeof limit === 'bigint' ? limit.toString() : limit, index);
-  }
-
-  // The generated code reads the value with the getter of its type, so that each call site sees
-  // one type: a shared reader switching on the kind made the checks of numbers megamorphic.
-  /** Number within inclusive limits; undefined is no limit. `!(v >= min)`: NaN breaks both. */
-  lim(v: number, min: number | undefined, max: number | undefined, field: string, index?: number) {
-    if (min !== undefined && !(v >= min)) this.broke(field, 'min', min, index);
-    if (max !== undefined && !(v <= max)) this.broke(field, 'max', max, index);
-  }
-
-  /**
-   * `lim` for the u64 or i64 at `at`, by its two 32-bit words: a BigInt per value made these checks
-   * the slowest. Limits come split into words, the high one signed for i64; NaN is no limit.
-   */
-  lim64(at: number, signed: boolean, minHi: number, minLo: number, maxHi: number, maxLo: number, field: string, index?: number) {
-    const dv = this.dv, lo = dv.getUint32(at, true), hi = signed ? dv.getInt32(at + 4, true) : dv.getUint32(at + 4, true);
-    if (hi < minHi || (hi === minHi && lo < minLo)) this.broke(field, 'min', (BigInt(minHi) << 32n) | BigInt(minLo), index);
-    if (hi > maxHi || (hi === maxHi && lo > maxLo)) this.broke(field, 'max', (BigInt(maxHi) << 32n) | BigInt(maxLo), index);
-  }
-
-  /** Length of a string, array or typed array. */
-  lenRule(n: number, min: number | undefined, max: number | undefined, field: string, index?: number) {
-    if (min !== undefined && n < min) this.broke(field, 'minLength', min, index);
-    if (max !== undefined && n > max) this.broke(field, 'maxLength', max, index);
-  }
-
-  /** Lengths of the n lists of a list body, from its offsets at `off`. */
-  lens(off: number, n: number, min: number | undefined, max: number | undefined, pres: number, nul: number, field: string) {
-    const dv = this.dv;
-    for (let i = 0; i < n; i++) {
-      if (this.has(pres, nul, i)) this.lenRule(dv.getUint32(off + 4 * i + 4, true) - dv.getUint32(off + 4 * i, true), min, max, field, i);
-    }
-  }
-
-  #text(start: number, lb: number): string {
+  /** Text of the string at `start` in the block `lb & 1` names, `lb >>> 1` units long; for `Pattern`. */
+  text(start: number, lb: number): string {
     const block = lb & 1 ? this.#utf16! : (this.#ascii ??= asciiDecoder.decode(this.bytes.subarray(this.#aOff, this.#aOff + this.asciiLen)));
     return block.substring(start, start + (lb >>> 1));
-  }
-
-  /** String slot at `at`, after `str()`. */
-  strRule(at: number, min: number | undefined, max: number | undefined, re: RegExp | undefined, field: string, index?: number) {
-    const lb = this.dv.getUint32(at + 4, true);
-    this.lenRule(lb >>> 1, min, max, field, index);
-    if (re && !re.test(this.#text(this.dv.getUint32(at, true), lb))) this.broke(field, 'pattern', re.source, index);
-  }
-
-  /**
-   * String column body, after `strCol()`. A back-reference is checked as the row it points to, and
-   * skipped when that row had a value and so was checked already.
-   */
-  strRules(b: number, n: number, min: number | undefined, max: number | undefined, re: RegExp | undefined, pres: number, nul: number, field: string) {
-    const dv = this.dv;
-    if (re === undefined) {
-      // lengths only: they are in the refs, no text and no offsets needed
-      for (let i = 0; i < n; i++) {
-        let ref = dv.getUint32(b + 8 + 4 * i, true);
-        if (ref & 1) {
-          const j = ref >>> 1;
-          if (this.has(pres, nul, j)) continue;
-          ref = dv.getUint32(b + 8 + 4 * j, true);
-        }
-        if (this.has(pres, nul, i)) this.lenRule(ref >>> 2, min, max, field, i);
-      }
-      return;
-    }
-    const starts = new Uint32Array(n);
-    let a = dv.getUint32(b, true), u = dv.getUint32(b + 4, true);
-    for (let i = 0; i < n; i++) {
-      let ref = dv.getUint32(b + 8 + 4 * i, true), j = i;
-      if (ref & 1) ref = dv.getUint32(b + 8 + 4 * (j = ref >>> 1), true);
-      else if (ref & 2) (starts[i] = u), (u += ref >>> 2);
-      else (starts[i] = a), (a += ref >>> 2);
-      if (!this.has(pres, nul, i) || (j !== i && this.has(pres, nul, j))) continue;
-      const len = ref >>> 2;
-      this.lenRule(len, min, max, field, i);
-      if (re && !re.test(this.#text(starts[j], (len << 1) | ((ref >>> 1) & 1)))) this.broke(field, 'pattern', re.source, i);
-    }
   }
 
   /**
@@ -959,6 +882,85 @@ export class Check {
     }
     for (let k = 0; k < names.length; k++) if (!seen[k] && !(spec[3 * k + 2] & 1)) this.fail(`${type}.${names[k]}: column is missing`);
     return n;
+  }
+}
+
+// ------------------------------------------------------------------------------ rules
+// Functions rather than methods of Check, so that a bundle without rules (every client) drops them.
+// The generated code reads a number with the getter of its type, so that each call site sees one
+// type: a shared reader switching on the kind made the checks megamorphic.
+
+function broke(field: string, rule: RuleError['rule'], limit: number | bigint | string, index?: number): never {
+  throw new RuleError(field, rule, typeof limit === 'bigint' ? limit.toString() : limit, index);
+}
+
+/** Number within inclusive limits; undefined is no limit. `!(v >= min)`: NaN breaks both. */
+export function ruleNum(v: number, min: number | undefined, max: number | undefined, field: string, index?: number) {
+  if (min !== undefined && !(v >= min)) broke(field, 'min', min, index);
+  if (max !== undefined && !(v <= max)) broke(field, 'max', max, index);
+}
+
+/**
+ * `ruleNum` for the u64 or i64 at `at`, by its two 32-bit words: a BigInt per value made these checks
+ * the slowest. Limits come split into words, the high one signed for i64; NaN is no limit.
+ */
+export function ruleNum64(c: Check, at: number, signed: boolean, minHi: number, minLo: number, maxHi: number, maxLo: number, field: string, index?: number) {
+  const dv = c.dv, lo = dv.getUint32(at, true), hi = signed ? dv.getInt32(at + 4, true) : dv.getUint32(at + 4, true);
+  if (hi < minHi || (hi === minHi && lo < minLo)) broke(field, 'min', (BigInt(minHi) << 32n) | BigInt(minLo), index);
+  if (hi > maxHi || (hi === maxHi && lo > maxLo)) broke(field, 'max', (BigInt(maxHi) << 32n) | BigInt(maxLo), index);
+}
+
+/** Length of a string, array or typed array. */
+export function ruleLen(n: number, min: number | undefined, max: number | undefined, field: string, index?: number) {
+  if (min !== undefined && n < min) broke(field, 'minLength', min, index);
+  if (max !== undefined && n > max) broke(field, 'maxLength', max, index);
+}
+
+/** Lengths of the n lists of a list body, from its offsets at `off`. */
+export function ruleLens(c: Check, off: number, n: number, min: number | undefined, max: number | undefined, pres: number, nul: number, field: string) {
+  const dv = c.dv;
+  for (let i = 0; i < n; i++) {
+    if (c.has(pres, nul, i)) ruleLen(dv.getUint32(off + 4 * i + 4, true) - dv.getUint32(off + 4 * i, true), min, max, field, i);
+  }
+}
+
+/** String slot at `at`, after `c.str()`. */
+export function ruleStr(c: Check, at: number, min: number | undefined, max: number | undefined, re: RegExp | undefined, field: string, index?: number) {
+  const lb = c.dv.getUint32(at + 4, true);
+  ruleLen(lb >>> 1, min, max, field, index);
+  if (re && !re.test(c.text(c.dv.getUint32(at, true), lb))) broke(field, 'pattern', re.source, index);
+}
+
+/**
+ * String column body, after `c.strCol()`. A back-reference is checked as the row it points to, and
+ * skipped when that row had a value and so was checked already.
+ */
+export function ruleStrs(c: Check, b: number, n: number, min: number | undefined, max: number | undefined, re: RegExp | undefined, pres: number, nul: number, field: string) {
+  const dv = c.dv;
+  if (re === undefined) {
+    // lengths only: they are in the refs, no text and no offsets needed
+    for (let i = 0; i < n; i++) {
+      let ref = dv.getUint32(b + 8 + 4 * i, true);
+      if (ref & 1) {
+        const j = ref >>> 1;
+        if (c.has(pres, nul, j)) continue;
+        ref = dv.getUint32(b + 8 + 4 * j, true);
+      }
+      if (c.has(pres, nul, i)) ruleLen(ref >>> 2, min, max, field, i);
+    }
+    return;
+  }
+  const starts = new Uint32Array(n);
+  let a = dv.getUint32(b, true), u = dv.getUint32(b + 4, true);
+  for (let i = 0; i < n; i++) {
+    let ref = dv.getUint32(b + 8 + 4 * i, true), j = i;
+    if (ref & 1) ref = dv.getUint32(b + 8 + 4 * (j = ref >>> 1), true);
+    else if (ref & 2) (starts[i] = u), (u += ref >>> 2);
+    else (starts[i] = a), (a += ref >>> 2);
+    if (!c.has(pres, nul, i) || (j !== i && c.has(pres, nul, j))) continue;
+    const len = ref >>> 2;
+    ruleLen(len, min, max, field, i);
+    if (re && !re.test(c.text(starts[j], (len << 1) | ((ref >>> 1) & 1)))) broke(field, 'pattern', re.source, i);
   }
 }
 
