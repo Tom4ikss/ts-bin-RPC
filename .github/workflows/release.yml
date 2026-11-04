@@ -86,8 +86,9 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          # alpha on 0.1.0-alpha.3 after 0.2.0 is out would install an older version than latest.
-          # A tag moves when its release part is not above the new version: 0.3.0-alpha.1 stays.
+          # alpha on 0.1.0-alpha.3 after 0.2.0 is out would install an older version than latest. A tag
+          # moves when its release part is not above the new version: 0.3.0-alpha.1 stays, and so does
+          # a tag already on a newer stable version.
           for i in $(seq 1 30); do
             [ -n "$(npm view "ts-bin-rpc@$VERSION" version 2>/dev/null)" ] && break
             sleep 20
@@ -97,7 +98,7 @@ jobs:
             const base = (v) => v.split("-")[0].split(".").map(Number);
             const above = (a, b) => { for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return a[i] > b[i]; return false; };
             for (const [tag, v] of Object.entries(tags))
-              if (tag !== "latest" && v.includes("-") && !above(base(v), base(process.env.VERSION))) console.log(tag);
+              if (tag !== "latest" && v !== process.env.VERSION && !above(base(v), base(process.env.VERSION))) console.log(tag);
           ' | while read -r tag; do npm dist-tag add "ts-bin-rpc@$VERSION" "$tag"; done
 
   dist-tag:
