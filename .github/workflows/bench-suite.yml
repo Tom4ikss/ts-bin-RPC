@@ -1,0 +1,51 @@
+name: bench-suite
+
+# Runs one or more bench suites on a GitHub runner, for experiments that need the runner's CPU or
+# Linux builds of the browsers. Results go to the job summary and an artifact; nothing is committed.
+on:
+  workflow_dispatch:
+    inputs:
+      suites:
+        description: Suites from bench/suites, separated by spaces
+        required: true
+      runtimes:
+        description: Runtimes for bench/run.mjs
+        default: node,chromium,firefox,webkit
+      repeat:
+        description: Runs per runtime
+        default: '5'
+
+permissions:
+  contents: read
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Install browsers
+        run: pnpm --filter @tbr/bench exec playwright install --with-deps chromium firefox webkit
+      - name: Build the bench codecs
+        run: pnpm --filter @tbr/bench gen
+      - name: Run
+        env:
+          SUITES: ${{ inputs.suites }}
+          RUNTIMES: ${{ inputs.runtimes }}
+          REPEAT: ${{ inputs.repeat }}
+        run: |
+          for s in $SUITES; do
+            node bench/run.mjs "$s" --runtimes="$RUNTIMES" --repeat="$REPEAT" --out=out
+            cat "out/$s.md" >> "$GITHUB_STEP_SUMMARY"
+            echo >> "$GITHUB_STEP_SUMMARY"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bench-suite
+          path: out
