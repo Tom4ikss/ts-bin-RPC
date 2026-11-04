@@ -6,11 +6,19 @@ name: release
 # without a prerelease identifier, latest follows the newest prerelease too, so that a plain
 # `npm install ts-bin-rpc` gets it.
 #
+# Run by hand (workflow_dispatch) it only moves a dist-tag: `alpha=0.2.0` points alpha at 0.2.0,
+# `alpha=` removes it. It lives here because npm trusts this workflow file and nothing else.
+#
 # Authentication: npm trusted publishing (OIDC), no token. The package on npmjs.com has a trusted
 # publisher: GitHub Actions, repository Tom4ikss/ts-bin-RPC, workflow release.yml, environment npm.
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      dist-tag:
+        description: 'tag=version to point a dist-tag at a version, tag= to remove it'
+        required: true
 
 permissions:
   contents: read
@@ -22,6 +30,7 @@ concurrency:
 
 jobs:
   publish:
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     environment: npm
     steps:
@@ -71,3 +80,24 @@ jobs:
           done
           stable=$(npm view ts-bin-rpc versions --json | node -p "[].concat(JSON.parse(require('fs').readFileSync(0, 'utf8'))).filter((v) => !v.includes('-')).length")
           if [ "$stable" = 0 ]; then npm dist-tag add "$spec" latest; else echo "latest stays on the stable release"; fi
+
+  dist-tag:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment: npm
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - run: npm install -g npm@11
+      - name: Move the dist-tag
+        env:
+          SPEC: ${{ inputs.dist-tag }}
+        run: |
+          tag="${SPEC%%=*}"
+          version="${SPEC#*=}"
+          case "$SPEC" in *=*) ;; *) echo "expected tag=version or tag=, got '$SPEC'"; exit 1 ;; esac
+          if [ "$tag" = latest ] && [ -z "$version" ]; then echo "latest cannot be removed"; exit 1; fi
+          if [ -n "$version" ]; then npm dist-tag add "ts-bin-rpc@$version" "$tag"; else npm dist-tag rm ts-bin-rpc "$tag"; fi
+          npm dist-tag ls ts-bin-rpc
