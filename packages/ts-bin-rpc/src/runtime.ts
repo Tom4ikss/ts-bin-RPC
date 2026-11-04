@@ -485,7 +485,25 @@ export class Reader {
   typedAt<C extends TypedCtor>(vec: number, ctor: C): View<C> {
     return this.typed(ctor, align(vec + 4, ctor.BYTES_PER_ELEMENT), this.dv.getUint32(vec, true));
   }
+
+  // One typed array per element type over the whole message, created on first use: columns read
+  // `u32[base + i]` instead of each holding a view of its own. A view of 10 users made ten typed
+  // arrays, which cost Firefox a third of the time of a small read. Bodies are aligned to their
+  // element size and the message to 8, so every column starts at a whole index.
+  // One field for all of them: nine fields cost every Reader nine stores, 10–24% of `new Reader`.
+  #w: TypedArray[] | undefined = undefined;
+
+  /** The message-wide array of `WHOLE[k]`: `whole(4)` is a Uint32Array; `whole(0)` is `bytes`. */
+  whole<K extends number>(k: K): InstanceType<Whole[K]> {
+    if (k === 0) return this.bytes as InstanceType<Whole[K]>;
+    const ctor = WHOLE[k];
+    return ((this.#w ??= [])[k] ??= this.typed(ctor, 0, Math.floor(this.bytes.byteLength / ctor.BYTES_PER_ELEMENT))) as InstanceType<Whole[K]>;
+  }
 }
+
+/** Element types of `Reader.whole`, by index; the generated code has the indexes. */
+const WHOLE = [Uint8Array, Int8Array, Uint16Array, Int16Array, Uint32Array, Int32Array, Float32Array, Float64Array, BigUint64Array, BigInt64Array] as const;
+type Whole = typeof WHOLE;
 
 // ------------------------------------------------------------------------------------------- columns
 
@@ -495,7 +513,10 @@ export interface Col<T> {
 
 export class StrCol implements Col<string> {
   readonly #r: Reader;
+  /** The refs are `#refs[#at + i]`, in the message-wide u32 array. */
   readonly #refs: Uint32Array;
+  readonly #at: number;
+  readonly #n: number;
   readonly #aBase: number;
   readonly #uBase: number;
   #starts: Uint32Array | undefined = undefined;
@@ -505,15 +526,17 @@ export class StrCol implements Col<string> {
     this.#r = r;
     this.#aBase = r.dv.getUint32(body, true);
     this.#uBase = r.dv.getUint32(body + 4, true);
-    this.#refs = r.typed(Uint32Array, body + 8, n);
+    this.#refs = r.whole(4);
+    this.#at = (body + 8) >>> 2;
+    this.#n = n;
   }
 
   #build(): Uint32Array {
-    const refs = this.#refs, n = refs.length;
+    const refs = this.#refs, at = this.#at, n = this.#n;
     const starts = new Uint32Array(n);
     let a = this.#aBase, u = this.#uBase;
     for (let i = 0; i < n; i++) {
-      const ref = refs[i];
+      const ref = refs[at + i];
       if (ref & 1) continue;
       if (ref & 2) {
         starts[i] = u;
@@ -532,39 +555,51 @@ export class StrCol implements Col<string> {
     const vals = this.#vals!;
     let v = vals[i];
     if (v !== undefined) return v;
-    const ref = this.#refs[i];
+    const ref = this.#refs[this.#at + i];
     if (ref & 1) v = this.get(ref >>> 1);
     else v = (ref & 2 ? this.#r.utf16 : this.#r.ascii).substring(starts[i], starts[i] + (ref >>> 2));
     return (vals[i] = v);
   }
 }
 
+/** Column `b..b + n` of a message-wide array, for `columns()`. */
+export function sub<T extends TypedArray>(a: T, b: number, n: number): T {
+  return a.subarray(b, b + n) as T;
+}
+
+// Element i of these columns is `t[base + i]` of a message-wide array (Reader.whole).
+
 export class NumCol<T extends number | bigint> implements Col<T> {
   readonly #t: ArrayLike<T>;
-  constructor(t: ArrayLike<T>) { this.#t = t; }
-  get(i: number): T { return this.#t[i]; }
+  readonly #b: number;
+  constructor(t: ArrayLike<T>, base = 0) { this.#t = t; this.#b = base; }
+  get(i: number): T { return this.#t[this.#b + i]; }
 }
 
 export class BoolCol implements Col<boolean> {
   readonly #t: Uint8Array;
-  constructor(t: Uint8Array) { this.#t = t; }
-  get(i: number): boolean { return this.#t[i] !== 0; }
+  readonly #b: number;
+  constructor(t: Uint8Array, base = 0) { this.#t = t; this.#b = base; }
+  get(i: number): boolean { return this.#t[this.#b + i] !== 0; }
 }
 
 export class DateCol implements Col<Date> {
   readonly #t: Float64Array;
-  constructor(t: Float64Array) { this.#t = t; }
-  get(i: number): Date { return new Date(this.#t[i]); }
+  readonly #b: number;
+  constructor(t: Float64Array, base = 0) { this.#t = t; this.#b = base; }
+  get(i: number): Date { return new Date(this.#t[this.#b + i]); }
 }
 
 export class EnumCol<T extends string> implements Col<T> {
   readonly #t: Uint8Array | Uint16Array;
+  readonly #b: number;
   readonly #values: readonly string[];
-  constructor(t: Uint8Array | Uint16Array, values: readonly string[]) {
+  constructor(t: Uint8Array | Uint16Array, values: readonly string[], base = 0) {
     this.#t = t;
+    this.#b = base;
     this.#values = values;
   }
-  get(i: number): T { return this.#values[this.#t[i]] as T; }
+  get(i: number): T { return this.#values[this.#t[this.#b + i]] as T; }
 }
 
 export class ConstCol<T> implements Col<T> {
@@ -606,7 +641,8 @@ export class TypedListCol<C extends TypedCtor> implements Col<View<C>> {
   readonly #r: Reader;
   readonly #b: number;
   readonly #ctor: C;
-  #data: View<C> | undefined = undefined;
+  #data: View<C> | undefined = undefined; // the message-wide array of the element type
+  #base = 0;
   #vals: (View<C> | undefined)[] = [];
 
   constructor(r: Reader, body: number, ctor: C) {
@@ -619,8 +655,14 @@ export class TypedListCol<C extends TypedCtor> implements Col<View<C>> {
     let v = this.#vals[i];
     if (v !== undefined) return v;
     const dv = this.#r.dv, b = this.#b;
-    const data = (this.#data ??= this.#r.typedAt(dv.getUint32(b, true), this.#ctor));
-    v = data.subarray(dv.getUint32(b + 4 + 4 * i, true), dv.getUint32(b + 8 + 4 * i, true)) as View<C>;
+    let data = this.#data;
+    if (data === undefined) {
+      const size = this.#ctor.BYTES_PER_ELEMENT;
+      this.#base = align(dv.getUint32(b, true) + 4, size) / size;
+      data = this.#data = this.#r.whole(WHOLE.indexOf(this.#ctor)) as View<C>;
+    }
+    const base = this.#base;
+    v = data.subarray(base + dv.getUint32(b + 4 + 4 * i, true), base + dv.getUint32(b + 8 + 4 * i, true)) as View<C>;
     return (this.#vals[i] = v);
   }
 }
