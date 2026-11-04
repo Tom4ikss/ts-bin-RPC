@@ -1,6 +1,6 @@
 // Streams over a real transport: ts-bin-rpc frames against NDJSON over fetch and SSE, from a Node
 // HTTP server to Chromium on the same machine. Writes bench/results/stream-transport.md.
-//   node --experimental-strip-types --no-warnings bench/transport.mjs [--quick]
+//   node --experimental-strip-types --no-warnings bench/transport.mjs [--quick] [--out=dir]
 import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
@@ -134,5 +134,8 @@ A Node HTTP server on 127.0.0.1 sends ticks \`{ t: f64, price: f32, size: u32, s
 
 ${table}
 `;
-fs.writeFileSync(path.join(dir, 'results', 'stream-transport.md'), out);
-console.log('bench/results/stream-transport.md');
+const outArg = process.argv.find((a) => a.startsWith('--out='));
+const outDir = outArg ? path.resolve(outArg.slice(6)) : path.join(import.meta.dirname, 'results');
+fs.mkdirSync(outDir, { recursive: true });
+fs.writeFileSync(path.join(outDir, 'stream-transport.md'), out);
+console.log(path.join(outDir, 'stream-transport.md'));

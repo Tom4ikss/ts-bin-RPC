@@ -1,6 +1,6 @@
 // What middleware costs per call: a chain composed by use() against a plain procedure, alone and
 // inside createHandler. Writes bench/results/middleware.md.
-//   node --experimental-strip-types --no-warnings bench/middleware.mjs [--quick]
+//   node --experimental-strip-types --no-warnings bench/middleware.mjs [--quick] [--out=dir]
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -74,5 +74,8 @@ The procedure takes no input and returns nothing, so the handler column is routi
 |---|---|---|
 ${rows.map((r) => `| ${r.join(' | ')} |`).join('\n')}
 `;
-fs.writeFileSync(path.join(import.meta.dirname, 'results', 'middleware.md'), out);
-console.log('bench/results/middleware.md');
+const outArg = process.argv.find((a) => a.startsWith('--out='));
+const outDir = outArg ? path.resolve(outArg.slice(6)) : path.join(import.meta.dirname, 'results');
+fs.mkdirSync(outDir, { recursive: true });
+fs.writeFileSync(path.join(outDir, 'middleware.md'), out);
+console.log(path.join(outDir, 'middleware.md'));

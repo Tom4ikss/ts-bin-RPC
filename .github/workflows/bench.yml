@@ -1,0 +1,82 @@
+name: bench
+
+# Runs the benchmarks on a GitHub runner: the generated codecs against JSON in Node, Chromium,
+# Firefox and WebKit, streams over a real transport, and middleware overhead. Results go to the job
+# summary and an artifact; with `publish`, they are committed to bench/results/ci on main and the
+# docs site is rebuilt from them.
+#
+# Shared runners differ in CPU and neighbours from run to run, so absolute times drift by tens of
+# percent. Ratios to JSON, measured in the same job one after the other, are what to compare.
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Commit the results to bench/results/ci on main
+        type: boolean
+        default: true
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: bench
+  cancel-in-progress: false
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Install browsers
+        run: pnpm --filter @tbr/bench exec playwright install --with-deps chromium firefox webkit
+      - name: Build the bench codecs
+        run: pnpm --filter @tbr/bench gen
+      - name: Generated codecs against JSON
+        run: node bench/run.mjs generated --out=out
+      - name: Streams over HTTP
+        run: node --experimental-strip-types --no-warnings bench/transport.mjs --out=out
+      - name: Middleware overhead
+        run: node --experimental-strip-types --no-warnings bench/middleware.mjs --out=out
+      - name: Summary
+        run: |
+          if [ -f bench/results/ci/generated.json ]; then
+            node bench/compare.mjs bench/results/ci/generated.json out/generated.json >> "$GITHUB_STEP_SUMMARY"
+          fi
+          for f in out/*.md; do
+            cat "$f" >> "$GITHUB_STEP_SUMMARY"
+            echo >> "$GITHUB_STEP_SUMMARY"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bench-${{ github.sha }}
+          path: out/
+      - name: Commit the results to main
+        if: ${{ github.event_name == 'push' || inputs.publish }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch origin main
+          git checkout -B main origin/main
+          mkdir -p bench/results/ci
+          cp out/* bench/results/ci/
+          git add bench/results/ci
+          git commit -m "Bench results for ${GITHUB_SHA::7}"
+          for i in 1 2 3; do
+            git push origin main && break
+            git pull --rebase origin main
+          done
+      - name: Rebuild the docs site
+        if: ${{ github.event_name == 'push' || inputs.publish }}
+        run: gh workflow run pages.yml --ref main
+        env:
+          GH_TOKEN: ${{ github.token }}

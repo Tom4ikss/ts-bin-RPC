@@ -1,5 +1,7 @@
-// Runs a suite in Node and in Playwright browsers, prints a Markdown table, writes bench/results/<suite>.md.
-//   node bench/run.mjs <suite> [--quick] [--runtimes node,chromium,firefox,webkit]
+// Runs a suite in Node and in Playwright browsers, prints a Markdown table, writes
+// bench/results/<suite>.md and the raw medians to <suite>.json.
+//   node bench/run.mjs <suite> [--quick] [--runtimes=node,chromium,firefox,webkit] [--out=dir]
+import { execSync } from 'node:child_process';
 import http from 'node:http';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
@@ -13,6 +15,8 @@ const suite = args.find((a) => !a.startsWith('--')) ?? 'core';
 const quick = args.includes('--quick');
 const rtArg = args.find((a) => a.startsWith('--runtimes='));
 const runtimes = (rtArg ? rtArg.split('=')[1] : 'node,chromium,firefox,webkit').split(',');
+const outArg = args.find((a) => a.startsWith('--out='));
+const out = outArg ? path.resolve(outArg.slice(6)) : path.join(root, 'results');
 
 const MIME = { '.mjs': 'text/javascript', '.js': 'text/javascript', '.html': 'text/html' };
 
@@ -84,11 +88,14 @@ const lines = first.map((row, i) => {
   return `| ${row.group} | ${row.variant} | ${cells.join(' | ')} |`;
 });
 
+const commit = process.env.GITHUB_SHA ?? gitHead();
+const date = new Date().toISOString().slice(0, 10);
+const cpu = os.cpus()[0].model;
 const envLines = runtimes.map((rt) => `- ${rt}: ${results[rt].env.ua}${results[rt].env.isolated ? '' : ' (not isolated: coarse timer)'}`);
 const md = [
   `# Suite \`${suite}\`${quick ? ' (quick)' : ''}`,
   '',
-  `${new Date().toISOString().slice(0, 10)}, ${os.cpus()[0].model}, ${os.platform()} ${os.release()}.`,
+  `${date}, ${cpu}, ${os.platform()} ${os.release()}${commit ? `, commit ${commit.slice(0, 7)}` : ''}.`,
   'Median per operation; ratio is speed relative to the first variant of the group; `~` marks spread over 25%.',
   '',
   ...envLines,
@@ -97,7 +104,17 @@ const md = [
 ].join('\n');
 
 console.log(md);
-if (!quick) {
-  await mkdir(path.join(root, 'results'), { recursive: true });
-  await writeFile(path.join(root, 'results', `${suite}.md`), md);
+if (!quick || outArg) {
+  await mkdir(out, { recursive: true });
+  await writeFile(path.join(out, `${suite}.md`), md);
+  const raw = { suite, quick, date, commit, cpu, os: `${os.platform()} ${os.release()}`, runtimes: results };
+  await writeFile(path.join(out, `${suite}.json`), `${JSON.stringify(raw, null, 1)}\n`);
+}
+
+function gitHead() {
+  try {
+    return execSync('git rev-parse HEAD', { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+  } catch {
+    return null;
+  }
 }
