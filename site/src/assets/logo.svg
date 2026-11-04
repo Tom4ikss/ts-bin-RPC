@@ -1,11 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
-  <title>ts-bin-rpc — Packet gaze</title>
+  <title>ts-bin-rpc — Byte disc</title>
   <rect width="128" height="128" rx="32" fill="#b2ea4f"/>
-  <g fill="#0b0c0f" transform="translate(64 64) scale(1.15) translate(-64 -64)">
-    <g transform="translate(16 16) scale(.75)">
-      <path d="M60 16H28a16 16 0 0 0-16 16v44a16 16 0 0 0 16 16h16V80H28a4 4 0 0 1-4-4V32a4 4 0 0 1 4-4h32Z"/>
-      <path transform="rotate(180 64 64)" d="M60 16H28a16 16 0 0 0-16 16v44a16 16 0 0 0 16 16h16V80H28a4 4 0 0 1-4-4V32a4 4 0 0 1 4-4h32Z"/>
-    </g>
-    <path d="M43 50h16v16H43Z M69 62h16v16H69Z"/>
+  <g fill="#0b0c0f">
+    <path d="M22.587442 71H54A3 3 0 0 0 57 68V60A17 17 0 0 1 74 43H100.373067A42 42 0 0 0 22.587442 71Z"/>
+    <path transform="rotate(180 64 64)" d="M22.587442 71H54A3 3 0 0 0 57 68V60A17 17 0 0 1 74 43H100.373067A42 42 0 0 0 22.587442 71Z"/>
   </g>
 </svg>
