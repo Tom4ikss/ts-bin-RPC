@@ -49,6 +49,33 @@ export function groups() {
       ],
     });
   }
+  {
+    // One user is a table, not columns: no typed arrays, but the same Check, Reader and two
+    // TextDecoder calls on blocks of a few dozen bytes.
+    const [user] = makeUsers(4).filter((u) => /[^\x00-\x7f]/.test(u.name));
+    const K1 = procedures.user.output;
+    const bytes = K1.encode(user);
+    const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    const [aOff, aLen, uOff, uLen] = [8, 12, 16, 20].map((at) => dv.getUint32(at, true));
+    const u16 = new Uint16Array(bytes.buffer, bytes.byteOffset + uOff, uLen);
+    const one = (s) => (u) => s([u]);
+    const [rJson, rGen, rVerify] = Array.from({ length: 3 }, () => one(sumOf(all)));
+    out.push({
+      group: `1 user (${aLen} ASCII bytes, ${uLen} UTF-16 units)`,
+      cases: [
+        { label: 'JSON, all fields', fn: (b) => rJson(JSON.parse(td.decode(b))), input: te.encode(JSON.stringify(user)) },
+        { label: 'generated, all fields', fn: (b) => rGen(K1.view(b, { verify: false })), input: bytes },
+        { label: 'generated + verify, all fields', fn: (b) => rVerify(K1.view(b)), input: bytes },
+        { label: 'verify only', fn: (b) => (K1.verify(b), 1), input: bytes },
+        { label: 'new Reader', fn: (b) => new Reader(b).root, input: bytes },
+        { label: 'new DataView', fn: (b) => new DataView(b.buffer, b.byteOffset, b.byteLength).byteLength, input: bytes },
+        { label: 'TextDecoder, ASCII block', fn: (b) => ascii.decode(b.subarray(aOff, aOff + aLen)).length, input: bytes },
+        { label: 'fromCharCode.apply, ASCII block', fn: (b) => String.fromCharCode.apply(null, b.subarray(aOff, aOff + aLen)).length, input: bytes },
+        { label: 'TextDecoder, UTF-16 block', fn: (b) => utf16.decode(b.subarray(uOff, uOff + uLen * 2)).length, input: bytes },
+        { label: 'fromCharCode.apply, UTF-16 block', fn: (u) => String.fromCharCode.apply(null, u).length, input: u16 },
+      ],
+    });
+  }
   // Every column of a view is a typed array over the message's buffer, and so are the DataView and
   // the blocks handed to TextDecoder: about ten views per read of 10 users.
   const shared = new ArrayBuffer(4096);
