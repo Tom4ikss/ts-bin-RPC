@@ -106,15 +106,38 @@ export function toPlain<T>(v: T): T {
 /** Memo slot marker for lazily computed view fields whose value may itself be `undefined`. */
 export const UNSET: unique symbol = Symbol('unset');
 
-/** Column set behind an array of row views: generated code registers it when it reads a vector of objects. */
-export const COLUMN_SETS: WeakMap<object, { columns(): Record<string, ArrayBufferView | undefined> }> = new WeakMap();
+/** Keys under which a row view keeps its column set and its index; generated code sets them. */
+export const S_COLS: unique symbol = Symbol('tbr.cols') as never;
+export const S_ROW: unique symbol = Symbol('tbr.row') as never;
+
+interface ColumnSet {
+  readonly n: number;
+  columns(): Record<string, ArrayBufferView | undefined>;
+}
+
+/**
+ * Column sets of arrays read by code that `tbr generate` of 0.2 emitted. Newer code does not
+ * register arrays: a WeakMap key outlives minor GCs in SpiderMonkey, and with it the whole view,
+ * which made a small response 1.5-2 times slower in Firefox.
+ */
+export const COLUMN_SETS: WeakMap<object, ColumnSet> = new WeakMap();
 
 /**
  * Required numeric, boolean and Date fields of an array of row views as typed arrays over the
- * message, without copying. `undefined` for arrays that are not views (plain objects, toPlain).
+ * message, without copying. `undefined` for arrays that are not views (plain objects, toPlain) and
+ * for arrays that no longer hold every row of the view in order (filtered, sorted, spliced), whose
+ * columns would not match them.
  */
 export function columnsOf<T>(rows: readonly T[]): Partial<Columns<T>> | undefined {
-  return COLUMN_SETS.get(rows)?.columns() as Partial<Columns<T>> | undefined;
+  const first = rows[0] as { [S_COLS]?: ColumnSet } | null | undefined;
+  const c = typeof first === 'object' && first !== null ? first[S_COLS] : undefined;
+  if (c === undefined) return COLUMN_SETS.get(rows)?.columns() as Partial<Columns<T>> | undefined;
+  if (c.n !== rows.length) return undefined;
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i] as { [S_COLS]?: ColumnSet; [S_ROW]?: number } | null;
+    if (r?.[S_COLS] !== c || r[S_ROW] !== i) return undefined;
+  }
+  return c.columns() as Partial<Columns<T>>;
 }
 
 export type TypedArray =

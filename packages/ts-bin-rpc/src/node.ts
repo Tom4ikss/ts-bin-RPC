@@ -3,6 +3,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { DEFAULT_LIMITS } from './runtime.ts';
 import { STREAM_CONTENT_TYPE } from './frames.ts';
+import { SINKS } from './stream-server.ts';
 
 export interface NodeListenerOptions {
   /** Requests with a larger body are answered 413 before the handler runs. Default: 64 MB. */
@@ -55,6 +56,14 @@ export function toNodeListener(
       // A stream: headers now, so the client's fetch resolves before the first frame, then each chunk
       // as it comes, waiting for 'drain' when the socket is full.
       res.flushHeaders();
+      // A response straight from the handler: its sink writes frames to res itself, with no
+      // ReadableStream in between. A middleware that wrapped or started reading the body gets the
+      // body as is.
+      const sink = SINKS.get(response);
+      if (sink && !response.body.locked) {
+        sink.direct(res);
+        return;
+      }
       const reader = response.body.getReader();
       res.once('close', () => void reader.cancel().catch(() => {}));
       for (;;) {

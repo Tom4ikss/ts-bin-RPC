@@ -4,7 +4,7 @@ import { DEFAULT_LIMITS, EncodeError, encodeError, VerifyError, type Limits } fr
 import { CONTENT_TYPE, fromBase64Url, HASH_PARAM, INPUT_PARAM, RpcError, SCHEMA_HEADER, toBase64Url, type ServerEntry, type ServerProcedures } from './rpc.ts';
 import type { AnyProcedure, AnyRouter } from './router.ts';
 import { STREAM_CONTENT_TYPE } from './frames.ts';
-import { Sink, toSource } from './stream-server.ts';
+import { SINKS, Sink, toSource } from './stream-server.ts';
 import { compose, unwrap } from './middleware.ts';
 import { cacheControl, queryOptions } from './query.ts';
 import type { Encoder } from './runtime.ts';
@@ -153,10 +153,12 @@ export function createHandler<R extends AnyRouter>(router: R, options: HandlerOp
         const sink = new Sink(request.signal);
         source.start({ encoder: proc.output as Encoder<unknown[]>, sink, report: (e) => onError(e, { path, request }) });
         // no-transform and X-Accel-Buffering keep proxies (nginx, CDNs) from buffering the frames.
-        return new Response(sink.readable, {
+        const response = new Response(sink.readable, {
           status: 200,
           headers: headers(proc, { 'content-type': STREAM_CONTENT_TYPE, 'cache-control': 'no-store, no-transform', 'x-accel-buffering': 'no' }),
         });
+        SINKS.set(response, sink);
+        return response;
       }
       let body = new Uint8Array(0);
       if (proc.output) {

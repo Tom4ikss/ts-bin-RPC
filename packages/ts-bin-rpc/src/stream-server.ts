@@ -339,9 +339,20 @@ function toRpcError(e: unknown, report: (e: unknown) => void): RpcError {
 
 const encoder = new TextEncoder();
 
+/** Where a sink writes frames without its ReadableStream: Node's ServerResponse. */
+export interface DirectOut {
+  /** false when the socket's buffer is full; the sink then queues frames until 'drain'. */
+  write(chunk: Uint8Array): boolean;
+  end(): void;
+  once(event: 'drain', listener: () => void): unknown;
+}
+
+/** The sink behind each stream response, for adapters that write frames directly (node.ts). */
+export const SINKS: WeakMap<Response, Sink> = new WeakMap();
+
 /**
- * Frames queued for one subscriber, read by the response body. Bounded: `overflow` decides what
- * happens to a client that reads slower than rows arrive.
+ * Frames queued for one subscriber, read by the response body or written to a DirectOut. Bounded:
+ * `overflow` decides what happens to a client that reads slower than rows arrive.
  */
 export class Sink {
   #queue: Uint8Array[] = [];
@@ -357,21 +368,38 @@ export class Sink {
   #heartbeat: ReturnType<typeof setInterval> | undefined;
   #sent = false; // since the last heartbeat tick
   readonly #abort = new AbortController();
-  readonly readable: ReadableStream<Uint8Array>;
+  #readable: ReadableStream<Uint8Array> | undefined;
+  #out: DirectOut | undefined;
+  #blocked = false; // the DirectOut asked to wait for 'drain'
+  #ended = false; // the DirectOut is ended
 
   constructor(signal?: AbortSignal) {
-    this.readable = new ReadableStream<Uint8Array>(
-      {
-        pull: (ctrl) => this.#pull(ctrl),
-        cancel: () => this.#close(),
-      },
-      { highWaterMark: 0 },
-    );
     if (signal) {
       if (signal.aborted) queueMicrotask(() => this.#close());
       else signal.addEventListener('abort', () => this.#close(), { once: true });
     }
     this.configure({});
+  }
+
+  /** The frames as a response body. Use either this or `direct()`. */
+  get readable(): ReadableStream<Uint8Array> {
+    return (this.#readable ??= new ReadableStream<Uint8Array>(
+      {
+        pull: (ctrl) => this.#pull(ctrl),
+        cancel: () => this.#close(),
+      },
+      { highWaterMark: 0 },
+    ));
+  }
+
+  /**
+   * Writes frames to `out` as they are pushed, without the ReadableStream and the promises of its
+   * reads, and ends `out` with the stream. Closing on a client that went away is up to the caller,
+   * through the signal given to the constructor.
+   */
+  direct(out: DirectOut): void {
+    this.#out = out;
+    this.#send();
   }
 
   configure(o: SubscriberOptions): void {
@@ -421,7 +449,7 @@ export class Sink {
         return;
       }
     }
-    this.#wake?.();
+    this.#notify();
   }
 
   end(): void {
@@ -439,7 +467,39 @@ export class Sink {
     this.#bytes += frame.length;
     this.#done = true;
     this.#runCleanups();
-    this.#wake?.();
+    this.#notify();
+  }
+
+  #notify(): void {
+    if (this.#out) this.#send();
+    else this.#wake?.();
+  }
+
+  /** Everything queued as one chunk: fewer writes on a busy stream. */
+  #take(): Uint8Array {
+    const chunk = this.#queue.length === 1 ? this.#queue[0] : concat(this.#queue, this.#bytes);
+    this.#queue = [];
+    this.#bytes = 0;
+    for (const r of this.#drain.splice(0)) r();
+    return chunk;
+  }
+
+  #send(): void {
+    const out = this.#out!;
+    if (this.#blocked || this.#ended) return;
+    if (this.#queue.length && !out.write(this.#take()) && !this.#done && !this.#closed) {
+      this.#blocked = true;
+      out.once('drain', () => {
+        this.#blocked = false;
+        this.#send();
+      });
+      return;
+    }
+    if (this.#done || this.#closed) {
+      this.#ended = true;
+      if (!this.#closed) this.#close();
+      out.end();
+    }
   }
 
   #beat(): void {
@@ -450,14 +510,7 @@ export class Sink {
   async #pull(ctrl: ReadableStreamDefaultController<Uint8Array>): Promise<void> {
     while (!this.#queue.length && !this.#closed && !this.#done) await new Promise<void>((r) => (this.#wake = r));
     this.#wake = undefined;
-    if (this.#queue.length) {
-      // Everything queued goes out as one chunk: fewer writes on a busy stream.
-      const chunk = this.#queue.length === 1 ? this.#queue[0] : concat(this.#queue, this.#bytes);
-      this.#queue = [];
-      this.#bytes = 0;
-      ctrl.enqueue(chunk);
-      for (const r of this.#drain.splice(0)) r();
-    }
+    if (this.#queue.length) ctrl.enqueue(this.#take());
     if (this.#done || this.#closed) {
       if (!this.#closed) this.#close();
       try {

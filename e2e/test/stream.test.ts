@@ -1,7 +1,10 @@
-// Streaming options and failure modes, in process (DESIGN §14).
+// Streaming options and failure modes, in process (DESIGN §14), and over Node's http server.
+import http from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { createClient, type ClientOptions } from 'ts-bin-rpc/client';
 import { createHandler, stream, type StreamOptions } from 'ts-bin-rpc/server';
-import { RpcError, type Batch } from 'ts-bin-rpc';
+import { toNodeListener } from 'ts-bin-rpc/node';
+import { columnsOf, RpcError, type Batch } from 'ts-bin-rpc';
 import { describe, expect, it, vi } from 'vitest';
 import { encodeFrame, FrameReader, FRAME_DATA, FRAME_END, FRAME_HEARTBEAT, STREAM_CONTENT_TYPE } from '../../packages/ts-bin-rpc/src/frames.ts';
 import { appRouter, type Tick } from '../src/router.ts';
@@ -137,6 +140,101 @@ describe('decoding', () => {
       expect(b.columns.seq).toBeInstanceOf(Uint32Array);
       expect(Array.from(b.columns.seq!)).toEqual(b.map((t) => t.seq));
       expect('venue' in b.columns).toBe(false); // optional fields have no column
+    }
+  });
+
+  it('columnsOf gives columns only to the array of a view with every row in order', () => {
+    const K = procedures['stream.ticks'].output;
+    const bytes = K.encode([tick(1), tick(2), tick(3)]);
+    const v = K.view(bytes);
+    const seq = columnsOf(v)!.seq!;
+    expect(Array.from(seq)).toEqual([1, 2, 3]);
+    expect(columnsOf([...v])!.seq).toBe(seq); // a copy in the same order still matches its columns
+    expect(columnsOf([...v].reverse())).toBeUndefined();
+    expect(columnsOf(v.slice(1))).toBeUndefined();
+    expect(columnsOf(K.decode(bytes))).toBeUndefined();
+    expect(columnsOf(K.view(K.encode([])))).toBeUndefined();
+  });
+});
+
+describe('over Node http', () => {
+  type Handler = (r: Request) => Promise<Response>;
+  /** The router behind toNodeListener on 127.0.0.1. */
+  async function serve(router: typeof appRouter, wrap: (h: Handler) => Handler = (h) => h) {
+    const server = http.createServer(toNodeListener(wrap(handlerOf(router))));
+    await new Promise<void>((ok) => server.listen(0, '127.0.0.1', ok));
+    const { port } = server.address() as AddressInfo;
+    return {
+      url: `http://127.0.0.1:${port}/rpc`,
+      api: createClient<typeof appRouter>({ url: `http://127.0.0.1:${port}/rpc`, procedures }),
+      close: () => {
+        server.closeAllConnections();
+        return new Promise((ok) => server.close(ok));
+      },
+    };
+  }
+  /** Rows as fast as a timer allows: 5000 a millisecond, megabytes a second. */
+  const flood = (options: StreamOptions, cleaned: { count: number }): Ticks => async () =>
+    stream<Tick>((emit) => {
+      let seq = 0;
+      const timer = setInterval(() => {
+        for (let k = 0; k < 5000; k++) emit(tick(seq++));
+      }, 1);
+      return () => {
+        clearInterval(timer);
+        cleaned.count++;
+      };
+    }, options);
+
+  // The sink writes frames to the socket itself; a middleware that wraps the body gets them through
+  // the ReadableStream instead.
+  for (const [name, wrap] of [
+    ['straight to the socket', undefined],
+    ['through a wrapped body', (h: Handler) => async (r: Request) => { const res = await h(r); return new Response(res.body, res); }],
+  ] as const) {
+    it(`sends every row and the end, ${name}`, async () => {
+      const s = await serve(withTicks(burst(5000, { window: 1 })), wrap);
+      try {
+        const rows: number[] = [];
+        const error = await new Promise<unknown>((resolve) => s.api.stream.ticks.subscribe({ n: 0 }, { row: (t) => rows.push(t.seq), error: resolve, end: () => resolve(undefined) }));
+        expect(error).toBeUndefined();
+        expect(rows).toEqual(Array.from({ length: 5000 }, (_, i) => i));
+      } finally {
+        await s.close();
+      }
+    });
+  }
+
+  it('ends a client that stops reading with SLOW_CONSUMER and cleans the source up', async () => {
+    const cleaned = { count: 0 };
+    const s = await serve(withTicks(flood({ maxBuffered: 1 << 16 }, cleaned)));
+    const abort = new AbortController();
+    try {
+      const input = procedures['stream.ticks'].input.encode({ n: 0 });
+      // The body is never read: the socket fills up, then the sink's queue.
+      const res = await fetch(`${s.url}/stream.ticks`, { method: 'POST', body: input, headers: { 'content-type': 'application/vnd.tbr', 'x-tbr-schema': procedures['stream.ticks'].hash }, signal: abort.signal });
+      expect(res.status).toBe(200);
+      for (let i = 0; i < 400 && !cleaned.count; i++) await sleep(10);
+      expect(cleaned.count).toBe(1);
+    } finally {
+      abort.abort();
+      await s.close();
+    }
+  });
+
+  it('runs the cleanup when the client goes away', async () => {
+    const cleaned = { count: 0 };
+    const s = await serve(withTicks(burst(1e9, { window: 1 }, cleaned)));
+    try {
+      const abort = new AbortController();
+      let rows = 0;
+      s.api.stream.ticks.subscribe({ n: 0 }, { row: () => void rows++ }, { signal: abort.signal });
+      while (rows < 100) await sleep(2);
+      abort.abort();
+      for (let i = 0; i < 100 && !cleaned.count; i++) await sleep(5);
+      expect(cleaned.count).toBe(1);
+    } finally {
+      await s.close();
     }
   });
 });
