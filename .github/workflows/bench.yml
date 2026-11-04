@@ -42,7 +42,7 @@ jobs:
       - name: Build the bench codecs
         run: pnpm --filter @tbr/bench gen
       - name: Generated codecs against JSON
-        run: node bench/run.mjs generated --repeat=7 --out=out
+        run: node bench/run.mjs generated --repeat=10 --out=out
       - name: Streams over HTTP
         run: node --experimental-strip-types --no-warnings bench/transport.mjs --out=out
       - name: Middleware overhead

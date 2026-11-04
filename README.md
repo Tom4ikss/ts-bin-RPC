@@ -49,7 +49,7 @@ Generated codecs against `JSON.parse(new TextDecoder().decode(bytes))` and
 `TextEncoder.encode(JSON.stringify(value))`, speed relative to JSON (higher is better). The read rows
 include verification, which the client does by default in development and skips in production
 builds, so they are the slower case. The tables are written by the
-[bench workflow](.github/workflows/bench.yml) on a GitHub runner: each runtime runs the suite 7
+[bench workflow](.github/workflows/bench.yml) on a GitHub runner: each runtime runs the suite 10
 times in a fresh process or browser, and a row is the median ratio. Runner CPUs vary between runs,
 which moves some rows by 10–25%, and a few rows in Firefox change by up to 2× from one browser
 launch to the next.

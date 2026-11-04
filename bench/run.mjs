@@ -85,7 +85,11 @@ async function runBrowser(name, origin) {
 
 const fmt = (us) => (us >= 1000 ? `${(us / 1000).toFixed(1)} ms` : us >= 10 ? `${us.toFixed(0)} µs` : `${us.toFixed(2)} µs`);
 
-const median = (xs) => [...xs].sort((a, b) => a - b)[xs.length >> 1];
+const median = (xs) => {
+  const s = [...xs].sort((a, b) => a - b);
+  const m = s.length >> 1;
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+};
 
 const runs = Object.fromEntries(runtimes.map((rt) => [rt, []]));
 const server = runtimes.some((r) => r !== 'node') ? await serve() : null;

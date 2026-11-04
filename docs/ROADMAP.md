@@ -291,7 +291,7 @@ Runtime подрос на `Check.cols`: проверка каталога оку
 коммите даёт отношения к JSON в пределах ±10%.
 
 **Статус: выполнена 2026-11-04, выход — частично.** [`bench.yml`](../.github/workflows/bench.yml)
-гоняет `generated` (7 повторов), `stream-transport` и `middleware`, кладёт результаты в
+гоняет `generated` (10 повторов), `stream-transport` и `middleware`, кладёт результаты в
 [`bench/results/ci`](../bench/results/ci), переписывает таблицы README между маркерами
 (`bench/readme.mjs`) и пересобирает сайт; цифры скорости на лендинге читаются оттуда же через
 `bench/lib/headline.mjs`. `bench/compare.mjs` пишет в summary джоба изменения отношений против
