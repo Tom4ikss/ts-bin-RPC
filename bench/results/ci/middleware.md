@@ -6,8 +6,8 @@ The procedure takes no input and returns nothing, so the handler column is routi
 
 | Chain | Calling the procedure | Through createHandler |
 |---|---|---|
-| no middleware | 63 ns | 10.46 µs |
-| 1 context step | 93 ns (+30 ns) | 10.59 µs (+126 ns) |
-| 1 async context step | 206 ns (+144 ns) | 10.70 µs (+243 ns) |
-| 1 around | 334 ns (+271 ns) | 10.94 µs (+486 ns) |
-| around + 2 context steps | 399 ns (+336 ns) | 11.06 µs (+598 ns) |
+| no middleware | 62 ns | 11.02 µs |
+| 1 context step | 95 ns (+33 ns) | 10.82 µs (−202 ns) |
+| 1 async context step | 205 ns (+143 ns) | 11.06 µs (+33 ns) |
+| 1 around | 337 ns (+275 ns) | 11.30 µs (+277 ns) |
+| around + 2 context steps | 405 ns (+344 ns) | 11.38 µs (+353 ns) |
