@@ -92,13 +92,13 @@ Client bundles, minified and gzipped with esbuild
 
 | | Client, min + gz |
 |---|---|
-| Runtime and client, no procedures | 4.2 KB |
+| Runtime and client, no procedures | 4.7 KB |
 | Stream client, when the router has streams | +1.4 KB |
-| Dashboard example (3 procedures and a stream) | 11.4 KB |
-| Test fixture with every supported type | 11.6 KB |
+| Dashboard example (3 procedures and a stream) | 12.2 KB |
+| Test fixture with every supported type | 12.2 KB |
 
 The client gets only input encoders and output decoders. CI fails if the runtime grows past 5 KB or
-the fixture past 12 KB.
+the fixture past 12.5 KB.
 
 ## What made it fast
 

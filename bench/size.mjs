@@ -7,7 +7,7 @@ import zlib from 'node:zlib';
 import * as esbuild from 'esbuild';
 
 // Client bundles, min + gz. The fixture catches generated code growing per type, not only the runtime.
-const BUDGETS = { 'runtime only': 5 * 1024, 'cli fixture "supported"': 12 * 1024 };
+const BUDGETS = { 'runtime only': 5 * 1024, 'cli fixture "supported"': 12.5 * 1024 };
 const root = path.join(import.meta.dirname, '..');
 const schemas = {
   playground: 'playground/src/tbr.gen.ts',

@@ -491,37 +491,19 @@ export class Reader {
   // arrays, which cost Firefox a third of the time of a small read. Bodies are aligned to their
   // element size and the message to 8, so every column starts at a whole index.
   // One field for all of them: nine fields cost every Reader nine stores, 10–24% of `new Reader`.
-  #w: (TypedArray | undefined)[] | undefined = undefined;
-  get i8(): Int8Array { return ((this.#w ??= [])[0] ??= this.#whole(Int8Array)) as Int8Array; }
-  get u16(): Uint16Array { return ((this.#w ??= [])[1] ??= this.#whole(Uint16Array)) as Uint16Array; }
-  get i16(): Int16Array { return ((this.#w ??= [])[2] ??= this.#whole(Int16Array)) as Int16Array; }
-  get u32(): Uint32Array { return ((this.#w ??= [])[3] ??= this.#whole(Uint32Array)) as Uint32Array; }
-  get i32(): Int32Array { return ((this.#w ??= [])[4] ??= this.#whole(Int32Array)) as Int32Array; }
-  get f32(): Float32Array { return ((this.#w ??= [])[5] ??= this.#whole(Float32Array)) as Float32Array; }
-  get f64(): Float64Array { return ((this.#w ??= [])[6] ??= this.#whole(Float64Array)) as Float64Array; }
-  get u64(): BigUint64Array { return ((this.#w ??= [])[7] ??= this.#whole(BigUint64Array)) as BigUint64Array; }
-  get i64(): BigInt64Array { return ((this.#w ??= [])[8] ??= this.#whole(BigInt64Array)) as BigInt64Array; }
+  #w: TypedArray[] | undefined = undefined;
 
-  #whole<C extends TypedCtor>(ctor: C): View<C> {
-    return this.typed(ctor, 0, Math.floor(this.bytes.byteLength / ctor.BYTES_PER_ELEMENT));
-  }
-
-  /** The array of `whole` for an element type; `bytes` for Uint8Array. */
-  whole<C extends TypedCtor>(ctor: C): View<C> {
-    switch (ctor as TypedCtor) {
-      case Uint8Array: return this.bytes as View<C>;
-      case Int8Array: return this.i8 as View<C>;
-      case Uint16Array: return this.u16 as View<C>;
-      case Int16Array: return this.i16 as View<C>;
-      case Uint32Array: return this.u32 as View<C>;
-      case Int32Array: return this.i32 as View<C>;
-      case Float32Array: return this.f32 as View<C>;
-      case Float64Array: return this.f64 as View<C>;
-      case BigUint64Array: return this.u64 as View<C>;
-      default: return this.i64 as View<C>;
-    }
+  /** The message-wide array of `WHOLE[k]`: `whole(4)` is a Uint32Array; `whole(0)` is `bytes`. */
+  whole<K extends number>(k: K): InstanceType<Whole[K]> {
+    if (k === 0) return this.bytes as InstanceType<Whole[K]>;
+    const ctor = WHOLE[k];
+    return ((this.#w ??= [])[k] ??= this.typed(ctor, 0, Math.floor(this.bytes.byteLength / ctor.BYTES_PER_ELEMENT))) as InstanceType<Whole[K]>;
   }
 }
+
+/** Element types of `Reader.whole`, by index; the generated code has the indexes. */
+const WHOLE = [Uint8Array, Int8Array, Uint16Array, Int16Array, Uint32Array, Int32Array, Float32Array, Float64Array, BigUint64Array, BigInt64Array] as const;
+type Whole = typeof WHOLE;
 
 // ------------------------------------------------------------------------------------------- columns
 
@@ -544,7 +526,7 @@ export class StrCol implements Col<string> {
     this.#r = r;
     this.#aBase = r.dv.getUint32(body, true);
     this.#uBase = r.dv.getUint32(body + 4, true);
-    this.#refs = r.u32;
+    this.#refs = r.whole(4);
     this.#at = (body + 8) >>> 2;
     this.#n = n;
   }
@@ -580,26 +562,31 @@ export class StrCol implements Col<string> {
   }
 }
 
-// Element i of these columns is `t[base + i]` of a message-wide array (Reader.u32…).
+/** Column `b..b + n` of a message-wide array, for `columns()`. */
+export function sub<T extends TypedArray>(a: T, b: number, n: number): T {
+  return a.subarray(b, b + n) as T;
+}
+
+// Element i of these columns is `t[base + i]` of a message-wide array (Reader.whole).
 
 export class NumCol<T extends number | bigint> implements Col<T> {
   readonly #t: ArrayLike<T>;
   readonly #b: number;
-  constructor(t: ArrayLike<T>, base: number) { this.#t = t; this.#b = base; }
+  constructor(t: ArrayLike<T>, base = 0) { this.#t = t; this.#b = base; }
   get(i: number): T { return this.#t[this.#b + i]; }
 }
 
 export class BoolCol implements Col<boolean> {
   readonly #t: Uint8Array;
   readonly #b: number;
-  constructor(t: Uint8Array, base: number) { this.#t = t; this.#b = base; }
+  constructor(t: Uint8Array, base = 0) { this.#t = t; this.#b = base; }
   get(i: number): boolean { return this.#t[this.#b + i] !== 0; }
 }
 
 export class DateCol implements Col<Date> {
   readonly #t: Float64Array;
   readonly #b: number;
-  constructor(t: Float64Array, base: number) { this.#t = t; this.#b = base; }
+  constructor(t: Float64Array, base = 0) { this.#t = t; this.#b = base; }
   get(i: number): Date { return new Date(this.#t[this.#b + i]); }
 }
 
@@ -607,7 +594,7 @@ export class EnumCol<T extends string> implements Col<T> {
   readonly #t: Uint8Array | Uint16Array;
   readonly #b: number;
   readonly #values: readonly string[];
-  constructor(t: Uint8Array | Uint16Array, base: number, values: readonly string[]) {
+  constructor(t: Uint8Array | Uint16Array, values: readonly string[], base = 0) {
     this.#t = t;
     this.#b = base;
     this.#values = values;
@@ -672,7 +659,7 @@ export class TypedListCol<C extends TypedCtor> implements Col<View<C>> {
     if (data === undefined) {
       const size = this.#ctor.BYTES_PER_ELEMENT;
       this.#base = align(dv.getUint32(b, true) + 4, size) / size;
-      data = this.#data = this.#r.whole(this.#ctor);
+      data = this.#data = this.#r.whole(WHOLE.indexOf(this.#ctor)) as View<C>;
     }
     const base = this.#base;
     v = data.subarray(base + dv.getUint32(b + 4 + 4 * i, true), base + dv.getUint32(b + 8 + 4 * i, true)) as View<C>;
