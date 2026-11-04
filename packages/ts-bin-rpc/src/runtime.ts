@@ -490,24 +490,17 @@ export class Reader {
   // `u32[base + i]` instead of each holding a view of its own. A view of 10 users made ten typed
   // arrays, which cost Firefox a third of the time of a small read. Bodies are aligned to their
   // element size and the message to 8, so every column starts at a whole index.
-  #i8: Int8Array | undefined = undefined;
-  #u16: Uint16Array | undefined = undefined;
-  #i16: Int16Array | undefined = undefined;
-  #u32: Uint32Array | undefined = undefined;
-  #i32: Int32Array | undefined = undefined;
-  #f32: Float32Array | undefined = undefined;
-  #f64: Float64Array | undefined = undefined;
-  #u64: BigUint64Array | undefined = undefined;
-  #i64: BigInt64Array | undefined = undefined;
-  get i8(): Int8Array { return (this.#i8 ??= this.#whole(Int8Array)); }
-  get u16(): Uint16Array { return (this.#u16 ??= this.#whole(Uint16Array)); }
-  get i16(): Int16Array { return (this.#i16 ??= this.#whole(Int16Array)); }
-  get u32(): Uint32Array { return (this.#u32 ??= this.#whole(Uint32Array)); }
-  get i32(): Int32Array { return (this.#i32 ??= this.#whole(Int32Array)); }
-  get f32(): Float32Array { return (this.#f32 ??= this.#whole(Float32Array)); }
-  get f64(): Float64Array { return (this.#f64 ??= this.#whole(Float64Array)); }
-  get u64(): BigUint64Array { return (this.#u64 ??= this.#whole(BigUint64Array)); }
-  get i64(): BigInt64Array { return (this.#i64 ??= this.#whole(BigInt64Array)); }
+  // One field for all of them: nine fields cost every Reader nine stores, 10–24% of `new Reader`.
+  #w: (TypedArray | undefined)[] | undefined = undefined;
+  get i8(): Int8Array { return ((this.#w ??= [])[0] ??= this.#whole(Int8Array)) as Int8Array; }
+  get u16(): Uint16Array { return ((this.#w ??= [])[1] ??= this.#whole(Uint16Array)) as Uint16Array; }
+  get i16(): Int16Array { return ((this.#w ??= [])[2] ??= this.#whole(Int16Array)) as Int16Array; }
+  get u32(): Uint32Array { return ((this.#w ??= [])[3] ??= this.#whole(Uint32Array)) as Uint32Array; }
+  get i32(): Int32Array { return ((this.#w ??= [])[4] ??= this.#whole(Int32Array)) as Int32Array; }
+  get f32(): Float32Array { return ((this.#w ??= [])[5] ??= this.#whole(Float32Array)) as Float32Array; }
+  get f64(): Float64Array { return ((this.#w ??= [])[6] ??= this.#whole(Float64Array)) as Float64Array; }
+  get u64(): BigUint64Array { return ((this.#w ??= [])[7] ??= this.#whole(BigUint64Array)) as BigUint64Array; }
+  get i64(): BigInt64Array { return ((this.#w ??= [])[8] ??= this.#whole(BigInt64Array)) as BigInt64Array; }
 
   #whole<C extends TypedCtor>(ctor: C): View<C> {
     return this.typed(ctor, 0, Math.floor(this.bytes.byteLength / ctor.BYTES_PER_ELEMENT));
