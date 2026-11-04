@@ -91,7 +91,8 @@ export function createClient<R>(options: ClientOptions<R>): Client<R> {
     } else if (proc.output) {
       try {
         const mode = modeOf(path, opts);
-        result = mode === 'eager' ? proc.output.decode(bytes, { verify, limits }) : proc.output.view(bytes, { verify, limits });
+        // Rules are the server's to check on inputs; a response is only verified to be well formed.
+        result = mode === 'eager' ? proc.output.decode(bytes, { verify, rules: false, limits }) : proc.output.view(bytes, { verify, rules: false, limits });
       } catch (e) {
         if (!(e instanceof VerifyError)) throw e;
         error = new RpcError('BAD_RESPONSE', `invalid response: ${e.message}`, undefined, { status: res.status, cause: e });

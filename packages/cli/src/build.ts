@@ -1,6 +1,7 @@
 // Builds the Schema IR from a router, collecting every unsupported construct instead of stopping at the first.
 import type { Desc, PropDesc, TypeRef, TypeSource } from './source.ts';
-import { TYPED_ARRAYS, type Field, type IRType, type Location, type ObjectDef, type Procedure, type ScalarKind, type Schema } from './ir.ts';
+import { TYPED_ARRAYS, type Field, type IRType, type Location, type ObjectDef, type Procedure, type Rules, type ScalarKind, type Schema } from './ir.ts';
+import type { RawRules } from './source.ts';
 
 export interface SchemaError {
   path: string; // where in the contract: 'user.get → output → User.meta'
@@ -102,6 +103,11 @@ class Builder {
 
   type(ref: TypeRef, ctx: Ctx): IRType | undefined {
     const d = this.src.describe(ref);
+    const t = this.kind(d.of ?? ref, d, ctx);
+    return t && d.rules ? this.withRules(t, d.rules, ctx) : t;
+  }
+
+  private kind(ref: TypeRef, d: Desc, ctx: Ctx): IRType | undefined {
     switch (d.k) {
       case 'string': return { kind: 'string' };
       case 'number': return { kind: 'scalar', scalar: 'f64' };
@@ -135,11 +141,54 @@ class Builder {
     }
   }
 
+  // Rules go on numbers, strings and arrays; anything else, or an argument that is not a literal, is
+  // an error here rather than a rule that silently does nothing.
+  private withRules(t: IRType, raw: RawRules, ctx: Ctx): IRType | undefined {
+    const rules: Rules = {};
+    const numeric = t.kind === 'scalar' && t.scalar !== 'bool' && t.scalar !== 'timestamp';
+    const wide = t.kind === 'scalar' && (t.scalar === 'u64' || t.scalar === 'i64');
+    const sized = t.kind === 'string' || t.kind === 'bytes' || t.kind === 'typedArray' || t.kind === 'array';
+    let ok = true;
+    const bad = (message: string) => { this.fail(ctx, message); ok = false; };
+    for (const [name, v] of Object.entries(raw)) {
+      if (v === null) { bad(`${ruleName(name)} needs a literal argument`); continue; }
+      switch (name) {
+        case 'min': case 'max':
+          if (!numeric) bad(`${ruleName(name)} applies to numbers and bigints`);
+          else if (wide ? typeof v !== 'bigint' && typeof v !== 'number' : typeof v !== 'number') bad(`${ruleName(name)} on a number takes a number literal`);
+          else if (typeof v === 'number' && !Number.isFinite(v)) bad(`${ruleName(name)} takes a finite number`);
+          else if (wide && typeof v === 'number' && !Number.isInteger(v)) bad(`${ruleName(name)} on a 64-bit integer takes an integer`);
+          else rules[name] = wide ? BigInt(v).toString() : (v as number);
+          break;
+        case 'minLength': case 'maxLength':
+          if (!sized) bad(`${ruleName(name)} applies to strings, arrays and typed arrays`);
+          else if (typeof v !== 'number' || !Number.isInteger(v) || v < 0) bad(`${ruleName(name)} takes a non-negative integer`);
+          else rules[name] = v;
+          break;
+        case 'pattern':
+          if (t.kind !== 'string') bad('Pattern applies to strings');
+          else if (typeof v !== 'string') bad('Pattern takes a string literal');
+          else {
+            try { new RegExp(v); rules.pattern = v; } catch (e) { bad(`Pattern is not a valid regular expression: ${(e as Error).message}`); }
+          }
+          break;
+        default: bad(`unknown rule '${name}'`);
+      }
+    }
+    const num = (x: number | string) => (wide ? BigInt(x) : Number(x));
+    if (rules.min !== undefined && rules.max !== undefined && num(rules.min) > num(rules.max)) bad('Min is greater than Max');
+    if (rules.minLength !== undefined && rules.maxLength !== undefined && rules.minLength > rules.maxLength) bad('MinLength is greater than MaxLength');
+    if (!ok) return undefined;
+    return { ...t, rules: { ...(t as { rules?: Rules }).rules, ...rules } } as IRType;
+  }
+
   // Unions without null/undefined: booleans, string literal enums, discriminated unions of objects.
   private multi(whole: TypeRef, members: TypeRef[], alias: string | undefined, ctx: Ctx): IRType | undefined {
     const known = this.memo.get(whole.id);
     if (known) return known;
     const ds = members.map((m) => this.src.describe(m));
+    // `boolean & Max<1>` reaches here as `(false & Max<1>) | (true & Max<1>)`
+    if (ds.some((d) => d.rules)) { this.fail(ctx, `rules apply to numbers, strings and arrays, not to '${this.src.text(whole)}'`); return undefined; }
     if (ds.every((d) => d.k === 'literal' && typeof d.value === 'boolean')) return { kind: 'scalar', scalar: 'bool' };
 
     if (ds.every((d) => d.k === 'literal' && typeof d.value === 'string')) {
@@ -216,6 +265,10 @@ class Builder {
     }
     return name;
   }
+}
+
+function ruleName(k: string): string {
+  return k[0].toUpperCase() + k.slice(1);
 }
 
 function isNullish(d: Desc): boolean {

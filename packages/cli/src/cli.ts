@@ -8,7 +8,7 @@ import { decodeError, FLAG_ERROR, VerifyError, type Codec } from 'ts-bin-rpc/run
 import { buildSchema } from './build.ts';
 import { emitCodecs } from './emit.ts';
 import { emptyLock, parseLock, stringifyLock, updateLock, type Change, type Lock } from './lock.ts';
-import { formatLocation } from './ir.ts';
+import { formatLocation, type Schema } from './ir.ts';
 import { printErrors, printSchema } from './print.ts';
 import { Ts71Source } from './source.ts';
 
@@ -124,11 +124,23 @@ function check(src: Ts71Source, p: Paths, out: (s: string) => void): number {
   const { lock, changes } = updateLock(prev.lock, schema);
   if (stringifyLock(lock) === fs.readFileSync(p.lockPath, 'utf8')) {
     out(`${rel(p.lockPath)} is up to date\n`);
+    // Rules (`MaxLength<64>`) leave the lockfile and the types the client sees as they are, so only
+    // the generated file shows that one was added. A project that does not commit the file has none.
+    if (fs.existsSync(p.outPath) && fs.readFileSync(p.outPath, 'utf8').replace(/\r\n/g, '\n') !== codeOf(schema, lock, p)) {
+      out(`${rel(p.outPath)} is out of date; run tbr generate\n`);
+      return 1;
+    }
     return 0;
   }
   out(`${rel(p.lockPath)} is out of date:\n` + printChanges(changes));
   out(changes.some((c) => c.severity !== 'safe') ? 'the contract has breaking changes\n' : 'run tbr generate\n');
   return 1;
+}
+
+function codeOf(schema: Schema, lock: Lock, p: Paths): string {
+  let from = path.relative(path.dirname(p.outPath), p.router).split(path.sep).join('/');
+  if (!from.startsWith('.')) from = `./${from}`;
+  return emitCodecs(schema, lock, { router: { from, name: p.exportName } });
 }
 
 /**
@@ -158,9 +170,7 @@ function generate(src: Ts71Source, p: Paths, prev: LockState, o: { 'dry-run': bo
     fs.writeFileSync(p.lockPath, text);
     out(`${current === null ? 'created' : 'updated'} ${rel(p.lockPath)}\n`);
   }
-  let from = path.relative(path.dirname(p.outPath), p.router).split(path.sep).join('/');
-  if (!from.startsWith('.')) from = `./${from}`;
-  const code = emitCodecs(schema, lock, { router: { from, name: p.exportName } });
+  const code = codeOf(schema, lock, p);
   if (fs.existsSync(p.outPath) && fs.readFileSync(p.outPath, 'utf8') === code) out(`${rel(p.outPath)} is up to date\n`);
   else {
     fs.writeFileSync(p.outPath, code);

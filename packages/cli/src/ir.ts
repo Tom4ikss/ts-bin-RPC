@@ -15,14 +15,27 @@ export interface Location {
   column: number;
 }
 
+/**
+ * Validation rules from `Min`, `Max`, `MinLength`, `MaxLength`, `Pattern`. Not part of the wire format
+ * or of `signature()`: the server checks them when it decodes an input. Limits of 64-bit integers
+ * are decimal strings, so that the IR stays JSON.
+ */
+export interface Rules {
+  min?: number | string;
+  max?: number | string;
+  minLength?: number;
+  maxLength?: number;
+  pattern?: string;
+}
+
 export type IRType =
-  | { kind: 'scalar'; scalar: ScalarKind }
-  | { kind: 'string' }
-  | { kind: 'bytes' } //                         Uint8Array, zero-copy subarray
-  | { kind: 'typedArray'; array: TypedArrayKind } // zero-copy column
+  | { kind: 'scalar'; scalar: ScalarKind; rules?: Rules }
+  | { kind: 'string'; rules?: Rules }
+  | { kind: 'bytes'; rules?: Rules } //          Uint8Array, zero-copy subarray
+  | { kind: 'typedArray'; array: TypedArrayKind; rules?: Rules } // zero-copy column
   | { kind: 'const'; value: string | number | boolean } // single-literal field, not on the wire
   | { kind: 'enum'; name: string } //             string literal union, values in Schema.enums
-  | { kind: 'array'; element: IRType }
+  | { kind: 'array'; element: IRType; rules?: Rules }
   | { kind: 'object'; name: string } //           Schema.objects
   | { kind: 'union'; name: string }; //           discriminated union, Schema.unions
 

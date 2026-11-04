@@ -29,6 +29,36 @@ export class VerifyError extends Error {
   readonly code = 'BAD_INPUT';
 }
 
+const RULE_TEXT: Record<string, (limit: number | string) => string> = {
+  min: (l) => `is less than ${l}`,
+  max: (l) => `is greater than ${l}`,
+  minLength: (l) => `is shorter than ${l}`,
+  maxLength: (l) => `is longer than ${l}`,
+  pattern: (l) => `does not match /${l}/`,
+};
+
+/**
+ * A value that breaks a rule of its type (`Min`, `MaxLength`, `Pattern`…). The server answers it
+ * with BAD_INPUT and `{ field, rule, limit, index? }` as the error data.
+ */
+export class RuleError extends VerifyError {
+  override name = 'RuleError';
+  /** Type and field, `CreateUser.name`; an element of an array field ends with `[]`. */
+  readonly field: string;
+  readonly rule: 'min' | 'max' | 'minLength' | 'maxLength' | 'pattern';
+  /** The rule's argument; a decimal string for 64-bit integers. */
+  readonly limit: number | string;
+  /** Row of a column or element of an array; inside lists of lists it counts across all inner lists. */
+  readonly index?: number;
+  constructor(field: string, rule: RuleError['rule'], limit: number | string, index?: number) {
+    super(`${field}${index === undefined ? '' : ` (at ${index})`} ${RULE_TEXT[rule](limit)}`);
+    this.field = field;
+    this.rule = rule;
+    this.limit = limit;
+    if (index !== undefined) this.index = index;
+  }
+}
+
 export function bad(expected: string, got: unknown): never {
   throw new EncodeError(`expected ${expected}, got ${show(got)}`);
 }
@@ -82,7 +112,7 @@ export function catalog(dv: DataView, vec: number, spec: readonly number[]): Int
   return out;
 }
 
-export type { u8, i8, u16, i16, u32, i32, f32, f64, u64, i64 } from './brands.ts';
+export type { u8, i8, u16, i16, u32, i32, f32, f64, u64, i64, Min, Max, MinLength, MaxLength, Pattern } from './brands.ts';
 export type { Expect, Same, InputOf, InputOptional, OutputOf, ProcedurePath, StreamItemOf, TakesContext, IsQuery, Columns } from './router.ts';
 export { subscribe } from './stream-client.ts';
 import type { Columns } from './router.ts';
@@ -402,8 +432,8 @@ export class Reader {
   #ascii: string | undefined = undefined;
   #utf16: string | undefined;
 
-  /** `utf16` and `dv` come from `Check`, which has already decoded and wrapped the same aligned bytes. */
-  constructor(bytes: Uint8Array, utf16?: string, dv?: DataView) {
+  /** `utf16`, `dv` and `ascii` come from `Check`, which has already decoded and wrapped the same aligned bytes. */
+  constructor(bytes: Uint8Array, utf16?: string, dv?: DataView, ascii?: string) {
     if (bytes.byteOffset & 7) bytes = bytes.slice(); // typed array columns need an aligned start
     this.bytes = bytes;
     this.dv = dv ?? new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
@@ -418,6 +448,7 @@ export class Reader {
       this.#uLen = this.dv.getUint32(20, true);
     }
     this.#utf16 = utf16;
+    this.#ascii = ascii;
   }
 
   get ascii(): string {
@@ -620,11 +651,16 @@ export class Check {
   readonly flags: number;
   readonly asciiLen: number = 0;
   readonly utf16Len: number = 0;
+  /** Check the rules of the types; generated code tests it before every rule. */
+  readonly rules: boolean;
   readonly #utf16: string | undefined;
+  #ascii: string | undefined = undefined;
+  #aOff = 0;
   readonly #maxDepth: number;
   #nodes: number;
 
-  constructor(bytes: Uint8Array, limits: Partial<Limits> = {}) {
+  constructor(bytes: Uint8Array, limits: Partial<Limits> = {}, rules = true) {
+    this.rules = rules;
     if (bytes.byteOffset & 7) bytes = bytes.slice();
     this.bytes = bytes;
     this.dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
@@ -657,6 +693,7 @@ export class Check {
       }
       this.asciiLen = aLen;
       this.utf16Len = uLen;
+      this.#aOff = aOff;
     }
     this.#utf16 = utf16;
   }
@@ -665,9 +702,9 @@ export class Check {
     throw new VerifyError(message);
   }
 
-  /** A reader over the verified bytes that reuses the UTF-16 block decoded here. */
+  /** A reader over the verified bytes that reuses the blocks decoded here. */
   reader(): Reader {
-    return new Reader(this.bytes, this.#utf16, this.dv);
+    return new Reader(this.bytes, this.#utf16, this.dv, this.#ascii);
   }
 
   need(off: number, size: number) {
@@ -808,6 +845,89 @@ export class Check {
     return k;
   }
 
+  // ------------------------------------------------------------------------------ rules
+
+  broke(field: string, rule: RuleError['rule'], limit: number | bigint | string, index?: number): never {
+    throw new RuleError(field, rule, typeof limit === 'bigint' ? limit.toString() : limit, index);
+  }
+
+  // The generated code reads the value with the getter of its type, so that each call site sees
+  // one type: a shared reader switching on the kind made the checks of numbers megamorphic.
+  /** Number within inclusive limits; undefined is no limit. `!(v >= min)`: NaN breaks both. */
+  lim(v: number, min: number | undefined, max: number | undefined, field: string, index?: number) {
+    if (min !== undefined && !(v >= min)) this.broke(field, 'min', min, index);
+    if (max !== undefined && !(v <= max)) this.broke(field, 'max', max, index);
+  }
+
+  /**
+   * `lim` for the u64 or i64 at `at`, by its two 32-bit words: a BigInt per value made these checks
+   * the slowest. Limits come split into words, the high one signed for i64; NaN is no limit.
+   */
+  lim64(at: number, signed: boolean, minHi: number, minLo: number, maxHi: number, maxLo: number, field: string, index?: number) {
+    const dv = this.dv, lo = dv.getUint32(at, true), hi = signed ? dv.getInt32(at + 4, true) : dv.getUint32(at + 4, true);
+    if (hi < minHi || (hi === minHi && lo < minLo)) this.broke(field, 'min', (BigInt(minHi) << 32n) | BigInt(minLo), index);
+    if (hi > maxHi || (hi === maxHi && lo > maxLo)) this.broke(field, 'max', (BigInt(maxHi) << 32n) | BigInt(maxLo), index);
+  }
+
+  /** Length of a string, array or typed array. */
+  lenRule(n: number, min: number | undefined, max: number | undefined, field: string, index?: number) {
+    if (min !== undefined && n < min) this.broke(field, 'minLength', min, index);
+    if (max !== undefined && n > max) this.broke(field, 'maxLength', max, index);
+  }
+
+  /** Lengths of the n lists of a list body, from its offsets at `off`. */
+  lens(off: number, n: number, min: number | undefined, max: number | undefined, pres: number, nul: number, field: string) {
+    const dv = this.dv;
+    for (let i = 0; i < n; i++) {
+      if (this.has(pres, nul, i)) this.lenRule(dv.getUint32(off + 4 * i + 4, true) - dv.getUint32(off + 4 * i, true), min, max, field, i);
+    }
+  }
+
+  #text(start: number, lb: number): string {
+    const block = lb & 1 ? this.#utf16! : (this.#ascii ??= asciiDecoder.decode(this.bytes.subarray(this.#aOff, this.#aOff + this.asciiLen)));
+    return block.substring(start, start + (lb >>> 1));
+  }
+
+  /** String slot at `at`, after `str()`. */
+  strRule(at: number, min: number | undefined, max: number | undefined, re: RegExp | undefined, field: string, index?: number) {
+    const lb = this.dv.getUint32(at + 4, true);
+    this.lenRule(lb >>> 1, min, max, field, index);
+    if (re && !re.test(this.#text(this.dv.getUint32(at, true), lb))) this.broke(field, 'pattern', re.source, index);
+  }
+
+  /**
+   * String column body, after `strCol()`. A back-reference is checked as the row it points to, and
+   * skipped when that row had a value and so was checked already.
+   */
+  strRules(b: number, n: number, min: number | undefined, max: number | undefined, re: RegExp | undefined, pres: number, nul: number, field: string) {
+    const dv = this.dv;
+    if (re === undefined) {
+      // lengths only: they are in the refs, no text and no offsets needed
+      for (let i = 0; i < n; i++) {
+        let ref = dv.getUint32(b + 8 + 4 * i, true);
+        if (ref & 1) {
+          const j = ref >>> 1;
+          if (this.has(pres, nul, j)) continue;
+          ref = dv.getUint32(b + 8 + 4 * j, true);
+        }
+        if (this.has(pres, nul, i)) this.lenRule(ref >>> 2, min, max, field, i);
+      }
+      return;
+    }
+    const starts = new Uint32Array(n);
+    let a = dv.getUint32(b, true), u = dv.getUint32(b + 4, true);
+    for (let i = 0; i < n; i++) {
+      let ref = dv.getUint32(b + 8 + 4 * i, true), j = i;
+      if (ref & 1) ref = dv.getUint32(b + 8 + 4 * (j = ref >>> 1), true);
+      else if (ref & 2) (starts[i] = u), (u += ref >>> 2);
+      else (starts[i] = a), (a += ref >>> 2);
+      if (!this.has(pres, nul, i) || (j !== i && this.has(pres, nul, j))) continue;
+      const len = ref >>> 2;
+      this.lenRule(len, min, max, field, i);
+      if (re && !re.test(this.#text(starts[j], (len << 1) | ((ref >>> 1) & 1)))) this.broke(field, 'pattern', re.source, i);
+    }
+  }
+
   /**
    * Column set of an object vector (spec as in `catalog`, names for messages): verifies the catalog and
    * calls `body(k, data, n, presence, null)` for each column of a known field, k its spec index / 3.
@@ -847,6 +967,8 @@ export class Check {
 export interface ViewOptions {
   /** Verify the message before reading it. Default: true. */
   verify?: boolean;
+  /** With `verify`, also check the rules of the types (`Min`, `MaxLength`…). Default: true; the client passes false. */
+  rules?: boolean;
   limits?: Partial<Limits>;
 }
 
@@ -1013,7 +1135,7 @@ export function decoder<T>(d: DecoderDef<T>): Decoder<T> {
       if (r.flags & FLAG_ERROR) throw new VerifyError('message is an error envelope');
       return r;
     }
-    const c = new Check(bytes, o.limits);
+    const c = new Check(bytes, o.limits, o.rules !== false);
     if (c.flags & FLAG_ERROR) c.fail('message is an error envelope');
     c.need(c.root, d.size);
     d.check(c, c.root);

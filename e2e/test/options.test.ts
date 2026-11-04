@@ -181,3 +181,25 @@ describe('toNodeListener', () => {
     }
   });
 });
+
+describe('validation rules', () => {
+  const api = client(via(createHandler(appRouter, { procedures, prefix: '/rpc' })));
+
+  it('answer 400 BAD_INPUT with the field, the rule and the row', async () => {
+    await expect(api.rename({ name: '', nick: [], age: 1 })).rejects.toMatchObject({
+      code: 'BAD_INPUT',
+      status: 400,
+      message: 'rename:input.name is shorter than 1',
+      data: { field: 'rename:input.name', rule: 'minLength', limit: 1 },
+    });
+    await expect(api.rename({ name: 'Ann', nick: ['ann', 'Bo'], age: 1 })).rejects.toMatchObject({
+      code: 'BAD_INPUT',
+      data: { field: 'rename:input.nick[]', rule: 'pattern', limit: '^[a-z]+$', index: 1 },
+    });
+    await expect(api.rename({ name: 'Ann', nick: [], age: 151 })).rejects.toMatchObject({ data: { rule: 'max', limit: 150 } });
+  });
+
+  it('are not checked on outputs', async () => {
+    expect((await api.rename({ name: 'Annabel', nick: ['ann'], age: 30 })).name).toBe('Annabel');
+  });
+});

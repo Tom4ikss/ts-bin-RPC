@@ -1,6 +1,6 @@
 // createHandler: a Fetch API handler, `(Request) => Promise<Response>`, for Bun.serve, Deno.serve,
 // Cloudflare Workers, or Node through `ts-bin-rpc/node`.
-import { DEFAULT_LIMITS, EncodeError, encodeError, VerifyError, type Limits } from './runtime.ts';
+import { DEFAULT_LIMITS, EncodeError, encodeError, RuleError, VerifyError, type Limits } from './runtime.ts';
 import { CONTENT_TYPE, fromBase64Url, HASH_PARAM, INPUT_PARAM, RpcError, SCHEMA_HEADER, toBase64Url, type ServerEntry, type ServerProcedures } from './rpc.ts';
 import type { AnyProcedure, AnyRouter } from './router.ts';
 import { STREAM_CONTENT_TYPE } from './frames.ts';
@@ -136,6 +136,7 @@ export function createHandler<R extends AnyRouter>(router: R, options: HandlerOp
         try {
           input = proc.input.decode(bytes, { limits });
         } catch (e) {
+          if (e instanceof RuleError) throw new RpcError('BAD_INPUT', e.message, { field: e.field, rule: e.rule, limit: e.limit, ...(e.index !== undefined && { index: e.index }) });
           if (e instanceof VerifyError) throw new RpcError('BAD_INPUT', e.message);
           throw e;
         }

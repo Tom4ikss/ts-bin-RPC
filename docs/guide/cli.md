@@ -62,7 +62,8 @@ pnpm exec tbr check --router src/server/router.ts
 ```
 
 Exits with 1 if the lockfile is missing or does not match the types, and prints the changes with
-their severity. It never writes. Run it in CI.
+their severity. If the generated file exists, it must also be what `tbr generate` would write now:
+a [validation rule](./validation.md) changes nothing else. It never writes. Run it in CI.
 
 ## `tbr decode`
 

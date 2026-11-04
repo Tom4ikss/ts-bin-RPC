@@ -18,4 +18,15 @@ router.ts:33:3  overloaded: overloaded procedures are not supported
 router.ts:34:3  tooMany: a procedure takes at most (input, ctx)
 router.ts:35:3  maybe: a procedure result cannot be null or undefined; wrap it in an object with an optional field
 router.ts:36:3  nullInput: a procedure input cannot be null
-router.ts:37:3  version: router property must be a function or a namespace object, got 'number'
+router.ts:42:3  BadRules.a: Min applies to numbers and bigints
+router.ts:43:3  BadRules.b: MinLength applies to strings, arrays and typed arrays
+router.ts:44:3  BadRules.c: Pattern applies to strings
+router.ts:45:3  BadRules.d: Pattern is not a valid regular expression: Invalid regular expression: /(/: Unterminated group
+router.ts:46:3  BadRules.e: Min is greater than Max
+router.ts:47:3  BadRules.f: MinLength is greater than MaxLength
+router.ts:48:3  BadRules.g: Min needs a literal argument
+router.ts:49:3  BadRules.h: MinLength takes a non-negative integer
+router.ts:50:3  BadRules.i: MaxLength applies to strings, arrays and typed arrays
+router.ts:51:3  BadRules.j: rules apply to numbers, strings and arrays, not to 'boolean & Max<1>'
+router.ts:52:3  BadRules.k: Min on a 64-bit integer takes an integer
+router.ts:38:3  version: router property must be a function or a namespace object, got 'number'

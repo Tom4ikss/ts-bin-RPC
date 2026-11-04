@@ -14,6 +14,7 @@
     "echo": { "input": "object echo:input", "output": "object echo:output" },
     "events": { "input": "void", "output": "union Event[]" },
     "queryHits": { "input": "void", "output": "object queryHits:output" },
+    "rename": { "input": "object rename:input", "output": "object rename:output" },
     "series": { "input": "object series:input", "output": "object series:output" },
     "stream.countdown": { "input": "object stream.countdown:input", "output": "stream object stream.countdown:row" },
     "stream.failing": { "input": "void", "output": "stream object Tick" },
@@ -129,6 +130,18 @@
     "queryHits:output": {
       "fields": {
         "count": { "id": 0, "type": "u32" }
+      }
+    },
+    "rename:input": {
+      "fields": {
+        "name": { "id": 0, "type": "string" },
+        "nick": { "id": 1, "type": "string[]" },
+        "age": { "id": 2, "type": "u32" }
+      }
+    },
+    "rename:output": {
+      "fields": {
+        "name": { "id": 0, "type": "string" }
       }
     },
     "series:input": {

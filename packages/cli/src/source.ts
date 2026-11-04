@@ -19,7 +19,14 @@ export interface PropDesc {
   location?: Location;
 }
 
-export type Desc =
+/** Literals of `Min`, `Max`, `MinLength`, `MaxLength`, `Pattern` found on a type. */
+/** null: a rule whose argument is not a literal type (`MaxLength<number>`). */
+export type RawRules = Record<string, string | number | bigint | null>;
+
+/** `rules` and, for `T & Rule<…>`, `of` = T without the rule parts. */
+export type Desc = DescKind & { rules?: RawRules; of?: TypeRef };
+
+type DescKind =
   | { k: 'string' | 'number' | 'boolean' | 'bigint' | 'undefined' | 'null' | 'void' | 'any' | 'unknown' | 'never' | 'symbol' | 'nonPrimitive' }
   | { k: 'literal'; value: string | number | boolean }
   | { k: 'brand'; base: 'number' | 'bigint'; tag: string }
@@ -61,6 +68,7 @@ interface AstTypeNode {
 const BRAND_PREFIX = '__@tbr@';
 const STREAM_PREFIX = '__@tbrStream@';
 const QUERY_PREFIX = '__@tbrQuery@';
+const RULE_PREFIX = '__@tbrRule@';
 const ITERABLES = new Set(['AsyncIterable', 'AsyncIterableIterator', 'AsyncGenerator', 'ReadableStream']);
 const BUILTINS = new Set([
   'Date', 'Uint8Array', 'Int8Array', 'Uint16Array', 'Int16Array', 'Uint32Array', 'Int32Array', 'Float32Array',
@@ -183,7 +191,17 @@ export class Ts71Source implements TypeSource {
     if (t.isBooleanLiteralType()) return { k: 'literal', value: t.value };
 
     if (t.isIntersectionType()) {
-      const brand = this.brandOf(t.getTypes());
+      const parts = t.getTypes();
+      const ruleParts = parts.filter((p) => p.isObjectType() && p.getProperties().some((x) => x.name.startsWith(RULE_PREFIX)));
+      if (ruleParts.length) {
+        const rules = this.rulesOf(ruleParts);
+        const rest = parts.filter((p) => !ruleParts.includes(p));
+        if (rest.length !== 1) return { ...(this.brandOf(rest) ?? { k: 'other' as const, text: this.checker.typeToString(t) }), rules };
+        const of = new TsRef(rest[0]);
+        const inner = this.describe(of);
+        return { ...inner, rules: { ...inner.rules, ...rules }, of: inner.of ?? of };
+      }
+      const brand = this.brandOf(parts);
       if (brand) return brand;
     }
     if (t.isUnionType()) {
@@ -202,6 +220,24 @@ export class Ts71Source implements TypeSource {
     if (t.getCallSignatures().length || t.getConstructSignatures().length) return { k: 'function' };
     if (t.isObjectType() || t.isIntersectionType()) return this.describeObject(t);
     return { k: 'other', text: this.checker.typeToString(t) };
+  }
+
+  // `{ readonly [tbrRule]?: { readonly maxLength: 64 } }` parts → { maxLength: 64 }
+  private rulesOf(parts: readonly Type[]): RawRules {
+    const out: RawRules = {};
+    for (const part of parts) {
+      for (const prop of part.getProperties()) {
+        if (!prop.name.startsWith(RULE_PREFIX)) continue;
+        let obj = this.checker.getTypeOfSymbol(prop);
+        if (obj.isUnionType()) obj = obj.getTypes().find((m) => m.isObjectType()) ?? obj;
+        for (const r of obj.getProperties()) {
+          const v = this.checker.getTypeOfSymbol(r);
+          if (v.isNumberLiteralType() || v.isStringLiteralType() || v.isBigIntLiteralType()) out[r.name] = v.value as string | number | bigint;
+          else out[r.name] = null;
+        }
+      }
+    }
+    return out;
   }
 
   // `number & { readonly [tbr]?: 'u32' }` → brand u32

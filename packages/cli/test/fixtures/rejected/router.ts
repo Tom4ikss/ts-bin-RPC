@@ -1,4 +1,4 @@
-import type { u32 } from 'ts-bin-rpc';
+import type { Max, MaxLength, Min, MinLength, Pattern, u32, u64 } from 'ts-bin-rpc';
 import type { Item as OtherItem } from './other.ts';
 
 interface Item {
@@ -34,5 +34,20 @@ export const appRouter = {
   tooMany: async (a: string, b: string, c: string) => {},
   maybe: async (): Promise<string | null> => null,
   nullInput: async (input: string | null) => {},
+  badRules: async (input: BadRules) => {},
   version: 1,
 };
+
+export interface BadRules {
+  a: string & Min<1>;
+  b: u32 & MinLength<1>;
+  c: u32 & Pattern<'x'>;
+  d: string & Pattern<'('>;
+  e: u32 & Min<5> & Max<1>;
+  f: string & MinLength<3> & MaxLength<1>;
+  g: u32 & Min<number>;
+  h: string & MinLength<-1>;
+  i: Item & MaxLength<1>;
+  j: boolean & Max<1>;
+  k: u64 & Min<0.5>;
+}

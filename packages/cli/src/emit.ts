@@ -1,7 +1,7 @@
 // Emits one TypeScript module with a specialized encoder, view, verifier and plain-copy function per
 // type of the schema. Layout: docs/FORMAT.md; wire IDs, enum indices and union tags come from the lockfile.
 import { createHash } from 'node:crypto';
-import { signature, type Field, type IRType, type Procedure, type ScalarKind, type Schema } from './ir.ts';
+import { signature, type Field, type IRType, type Procedure, type Rules, type ScalarKind, type Schema } from './ir.ts';
 import type { Lock } from './lock.ts';
 
 interface Scalar {
@@ -44,6 +44,8 @@ const IDENT = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 const prop = (name: string) => (IDENT.test(name) ? name : JSON.stringify(name));
 const acc = (obj: string, name: string) => (IDENT.test(name) ? `${obj}.${name}` : `${obj}[${JSON.stringify(name)}]`);
 const lit = (v: string | number | boolean) => JSON.stringify(v);
+/** Type descriptions for error messages; rules are checked by the verifiers, not described. */
+const desc = (v: unknown) => JSON.stringify(v, (k, x) => (k === 'rules' ? undefined : x));
 
 interface WireField {
   f: Field;
@@ -144,7 +146,7 @@ class Emitter {
     const unions = Object.fromEntries(
       Object.keys(s.unions).sort().map((n) => [n, { discriminant: s.unions[n].discriminant, variants: Object.fromEntries(s.unions[n].variants.map((v) => [v.tag, v.object])) }]),
     );
-    this.out.push(`const SCHEMA: SchemaDesc = ${JSON.stringify({ objects, enums, unions })};\n`);
+    this.out.push(`const SCHEMA: SchemaDesc = ${desc({ objects, enums, unions })};\n`);
   }
 
   /** Type-level check that generated types still accept the same values as the router's (DESIGN §9). */
@@ -222,6 +224,10 @@ class Emitter {
   private enm(name: string) { return this.id(`enum:${name}`, name); }
   private uni(name: string) { return this.id(`union:${name}`, name); }
   private elem(t: IRType) { return this.id(`type:${signature(t)}`, `t_${signature(t)}`); }
+  /** Like elem, for verifiers: a type with rules gets one per field, whose name its errors carry. */
+  private checkElem(t: IRType, field: string) {
+    return hasRules(t) ? this.id(`check:${signature(t)}:${field}:${JSON.stringify(t)}`, `t_${signature(t)}`) : this.elem(t);
+  }
 
   private once(key: string, emit: () => string | string[]) {
     if (this.done.has(key)) return;
@@ -360,14 +366,59 @@ class Emitter {
     throw new Error('unreachable');
   }
 
-  private checkSlot(t: IRType, p: string, d: string): string {
+  // ------------------------------------------------------------------------------------- rules
+  // Rules run only under `c.rules`: the server checks them on inputs, the client skips them.
+
+  private limit(t: IRType, v: number | string | undefined): string {
+    if (v === undefined) return 'undefined';
+    return t.kind === 'scalar' && (t.scalar === 'u64' || t.scalar === 'i64') ? `${v}n` : String(v);
+  }
+
+  private regex(src: string | undefined): string {
+    if (src === undefined) return 'undefined';
+    const name = `RE_${this.id(`re:${src}`, 're')}`;
+    this.once(name, () => [`const ${name} = /* @__PURE__ */ new RegExp(${lit(src)});`, '']);
+    return name;
+  }
+
+  /** `c.lim(value, min, max, field)`: the value read with the getter of its type, see Check.lim. */
+  private limCall(t: IRType & { kind: 'scalar' }, r: Rules, read: string, at: string, field: string, index: string): string {
+    if (t.scalar !== 'u64' && t.scalar !== 'i64') return `c.lim(${read.replace(/^r\./, 'c.')}, ${this.limit(t, r.min)}, ${this.limit(t, r.max)}, ${lit(field)}${index})`;
+    const signed = t.scalar === 'i64';
+    const words = (v: number | string | undefined) => {
+      if (v === undefined) return 'NaN, NaN';
+      const b = BigInt(v);
+      return `${signed ? BigInt.asIntN(32, b >> 32n) : BigInt.asUintN(32, b >> 32n)}, ${BigInt.asUintN(32, b)}`;
+    };
+    return `c.lim64(${at}, ${signed}, ${words(r.min)}, ${words(r.max)}, ${lit(field)}${index})`;
+  }
+
+  /** Statement checking the length rules of a value whose length is `n`; '' without rules. */
+  private lenRules(t: IRType, n: string, field: string): string {
+    const r = 'rules' in t ? t.rules : undefined;
+    if (r?.minLength === undefined && r?.maxLength === undefined) return '';
+    return ` c.rules && c.lenRule(${n}, ${r.minLength ?? 'undefined'}, ${r.maxLength ?? 'undefined'}, ${lit(field)});`;
+  }
+
+  private checkSlot(t: IRType, p: string, d: string, field = 'input'): string {
+    const r = 'rules' in t ? t.rules : undefined;
+    const counted = (count: string) => {
+      const rules = this.lenRules(t, 'n', field);
+      return rules ? `{ const n = ${count};${rules} }` : `${count};`;
+    };
     switch (t.kind) {
-      case 'scalar': return t.scalar === 'bool' ? `c.bool(${p});` : '';
+      case 'scalar': {
+        const rule = r && (r.min !== undefined || r.max !== undefined) ? `c.rules && ${this.limCall(t, r, S[t.scalar].slot(p), p, field, '')};` : '';
+        return t.scalar === 'bool' ? `c.bool(${p});` : rule;
+      }
       case 'enum': return `c.enumIndex(${p}, ${this.enumWidth(t.name)}, EK_${this.enm(t.name)});`;
-      case 'string': return `c.str(${p});`;
-      case 'bytes': return `c.typed(c.u32(${p}), 1, ${d});`;
-      case 'typedArray': return `c.typed(c.u32(${p}), ${TYPED_SIZE[t.array]}, ${d});`;
-      case 'array': return `${this.vecCheck(t.element)}(c, c.u32(${p}), ${d});`;
+      case 'string': {
+        const rule = r ? ` c.rules && c.strRule(${p}, ${r.minLength ?? 'undefined'}, ${r.maxLength ?? 'undefined'}, ${this.regex(r.pattern)}, ${lit(field)});` : '';
+        return `c.str(${p});${rule}`;
+      }
+      case 'bytes': return counted(`c.typed(c.u32(${p}), 1, ${d})`);
+      case 'typedArray': return counted(`c.typed(c.u32(${p}), ${TYPED_SIZE[t.array]}, ${d})`);
+      case 'array': return counted(`${this.vecCheck(t.element, `${field}[]`)}(c, c.u32(${p}), ${d})`);
       case 'object': return `vT_${this.obj(t.name)}(c, c.u32(${p}), ${d});`;
       case 'union': return `vU_${this.uni(t.name)}(c, ${p}, ${d});`;
       case 'const': return '';
@@ -610,7 +661,7 @@ class Emitter {
     L.push(`function vT_${x}(c: Check, o: number, d: number): void {`, '  const vt = c.table(o, d);', '  let p = 0;');
     for (const wf of fields) {
       const f = wf.f;
-      const chk = this.checkSlot(f.type, 'p', 'd + 1');
+      const chk = this.checkSlot(f.type, 'p', 'd + 1', `${name}.${f.name}`);
       if (f.optional && f.nullable) {
         L.push(`  p = c.field(o, vt, ${wf.id}, ${wf.size + 1});`, `  if (p !== 0) { c.tag(p + ${wf.size}); if (c.bytes[p + ${wf.size}] === 1) { ${chk} } }`);
       } else {
@@ -771,7 +822,7 @@ class Emitter {
             '        const m = c.count(pres, nul, n), ptr = c.u32(b);',
             `        if ((m !== 0 || ptr !== 0) && vV_${this.obj(t.name)}(c, ptr, d + 1) !== m) c.fail(${lit(`${name}.${wf.f.name}: nested column has a wrong length`)});`,
           ]
-        : [`        ${this.bodyCheck(t, 'b', 'n', 'd + 1', 'pres', 'nul')}`];
+        : [`        ${this.bodyCheck(t, 'b', 'n', 'd + 1', 'pres', 'nul', `${name}.${wf.f.name}`)}`];
       if (body.join('').trim() === '') continue;
       L.push(`      case ${wf.k}: {`, ...body, '        break;', '      }');
     }
@@ -949,40 +1000,50 @@ class Emitter {
   }
 
   /** Statement verifying a body of n elements at b; rows without a value are skipped where it matters. */
-  private bodyCheck(t: IRType, b: string, n: string, d: string, pres: string, nul: string): string {
+  private bodyCheck(t: IRType, b: string, n: string, d: string, pres: string, nul: string, field = 'input'): string {
+    const r = 'rules' in t ? t.rules : undefined;
+    const lens = r && (r.minLength !== undefined || r.maxLength !== undefined) ? ` c.rules && c.lens(${b} + 4, ${n}, ${r.minLength ?? 'undefined'}, ${r.maxLength ?? 'undefined'}, ${pres}, ${nul}, ${lit(field)});` : '';
     switch (t.kind) {
-      case 'scalar': return t.scalar === 'bool' ? `c.bools(${b}, ${n});` : `c.need(${b}, ${n} * ${S[t.scalar].size});`;
+      case 'scalar': {
+        if (t.scalar === 'bool') return `c.bools(${b}, ${n});`;
+        const at = `${b} + i${S[t.scalar].size === 1 ? '' : ` * ${S[t.scalar].size}`}`;
+        const rule = r && (r.min !== undefined || r.max !== undefined) ? ` if (c.rules) for (let i = 0; i < ${n}; i++) ${pres === '-1' && nul === '-1' ? '' : `if (c.has(${pres}, ${nul}, i)) `}${this.limCall(t, r, S[t.scalar].slot(at), at, field, ', i')};` : '';
+        return `c.need(${b}, ${n} * ${S[t.scalar].size});${rule}`;
+      }
       case 'enum': return `c.enums(${b}, ${n}, ${this.enumWidth(t.name)}, EK_${this.enm(t.name)}, ${pres}, ${nul});`;
-      case 'string': return `c.strCol(${b}, ${n});`;
+      case 'string': {
+        const rule = r ? ` c.rules && c.strRules(${b}, ${n}, ${r.minLength ?? 'undefined'}, ${r.maxLength ?? 'undefined'}, ${this.regex(r.pattern)}, ${pres}, ${nul}, ${lit(field)});` : '';
+        return `c.strCol(${b}, ${n});${rule}`;
+      }
       case 'const': return '';
       case 'union': return `vB_${this.uni(t.name)}(c, ${b}, ${n}, ${d}, ${pres}, ${nul});`;
-      case 'bytes': return `c.typedList(${b}, ${n}, 1, ${d});`;
-      case 'typedArray': return `c.typedList(${b}, ${n}, ${TYPED_SIZE[t.array]}, ${d});`;
+      case 'bytes': return `c.typedList(${b}, ${n}, 1, ${d});${lens}`;
+      case 'typedArray': return `c.typedList(${b}, ${n}, ${TYPED_SIZE[t.array]}, ${d});${lens}`;
       case 'array': {
-        const name = `vL_${this.elem(t)}`;
+        const name = `vL_${this.checkElem(t, field)}`;
         this.once(name, () => [
           `function ${name}(c: Check, b: number, n: number, d: number): void {`,
           '  c.need(b, 4);',
           '  const ch = c.dv.getUint32(b, true);',
-          `  const cn = ch === 0 ? 0 : ${this.vecCheck(t.element)}(c, ch, d); // same level as the list`,
+          `  const cn = ch === 0 ? 0 : ${this.vecCheck(t.element, `${field}[]`)}(c, ch, d); // same level as the list`,
           '  c.offsets(b + 4, n, cn);',
           '}',
           '',
         ]);
-        return `${name}(c, ${b}, ${n}, ${d});`;
+        return `${name}(c, ${b}, ${n}, ${d});${lens}`;
       }
       case 'object': throw new Error('object bodies are column sets');
     }
   }
 
   /** (c, vec, d) => element count, after verifying the vector. */
-  private vecCheck(t: IRType): string {
+  private vecCheck(t: IRType, field = 'input'): string {
     if (t.kind === 'object') return `vV_${this.obj(t.name)}`;
-    const name = `vV_${this.elem(t)}`;
+    const name = `vV_${this.checkElem(t, field)}`;
     this.once(name, () => [
       `function ${name}(c: Check, vec: number, d: number): number {`,
       '  const n = c.vec(vec, d);',
-      `  ${this.bodyCheck(t, `align(vec + 4, ${this.bodyAlign(t)})`, 'n', 'd', '-1', '-1')}`,
+      `  ${this.bodyCheck(t, `align(vec + 4, ${this.bodyAlign(t)})`, 'n', 'd', '-1', '-1', field)}`,
       '  return n;',
       '}',
       '',
@@ -999,7 +1060,7 @@ class Emitter {
     const T = this.ts(t);
     this.out.push([
       `const KE${k}: Encoder<${T}> = /* @__PURE__ */ encoder<${T}>({`,
-      `  desc: { schema: SCHEMA, type: ${JSON.stringify(t)} },`,
+      `  desc: { schema: SCHEMA, type: ${desc(t)} },`,
       `  strings: ${this.hasStrings(t)},`,
       `  size: ${size},`,
       `  align: ${align},`,
@@ -1015,4 +1076,8 @@ class Emitter {
       '',
     ].join('\n'));
   }
+}
+
+function hasRules(t: IRType): boolean {
+  return ('rules' in t && t.rules !== undefined) || (t.kind === 'array' && hasRules(t.element));
 }

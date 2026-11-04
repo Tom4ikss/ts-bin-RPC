@@ -39,6 +39,15 @@ describe('tbr generate / check', () => {
     expect(tbr('check', ...at('v1'))).toMatchObject({ code: 0, output: expect.stringContaining('up to date') });
   });
 
+  it('check reports generated code that is out of date, and skips a file that is not there', () => {
+    // a rule (`MaxLength<64>`) changes only the generated file
+    fs.appendFileSync(gen, '// edited\n');
+    expect(tbr('check', ...at('v1'))).toMatchObject({ code: 1, output: expect.stringContaining('tbr.gen.ts is out of date; run tbr generate') });
+    fs.rmSync(gen);
+    expect(tbr('check', ...at('v1'))).toMatchObject({ code: 0, output: expect.stringContaining('up to date') });
+    expect(tbr('generate', ...at('v1')).code).toBe(0);
+  });
+
   it('check reports a stale lockfile with only safe changes', () => {
     const r = tbr('check', ...at('v2'));
     expect(r.code).toBe(1);
@@ -69,7 +78,7 @@ describe('tbr generate / check', () => {
   it('unsupported types fail generation', () => {
     const r = tbr('generate', '--dry-run', '--project', fixture('rejected', 'tsconfig.json'), '--router', 'router.ts');
     expect(r.code).toBe(1);
-    expect(r.output).toMatch(/^21 type\(s\) cannot be sent over the wire/);
+    expect(r.output).toMatch(/^32 type\(s\) cannot be sent over the wire/);
   });
 });
 

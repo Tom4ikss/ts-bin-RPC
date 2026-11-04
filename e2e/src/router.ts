@@ -1,5 +1,5 @@
 // Fixture app for end-to-end tests: every kind of procedure the protocol distinguishes.
-import { RpcError, type f32, type u32, type u64 } from 'ts-bin-rpc';
+import { RpcError, type f32, type Max, type MaxLength, type MinLength, type Pattern, type u32, type u64 } from 'ts-bin-rpc';
 import { around, channel, middleware, query, stream, use, type Call } from 'ts-bin-rpc/server';
 
 export interface Ctx {
@@ -92,6 +92,10 @@ export const appRouter = {
     { type: 'failure', code: 503, message: 'upstream 🔥' },
   ],
   echo: async (input: { text: string; bytes: Uint8Array }): Promise<{ text: string; bytes: Uint8Array }> => input,
+  /** Rules are checked on the server's inputs; the output breaks its own MaxLength, and the client lets it through. */
+  rename: async (input: { name: string & MinLength<1> & MaxLength<20>; nick: (string & Pattern<'^[a-z]+$'>)[]; age: u32 & Max<150> }): Promise<{ name: string & MaxLength<3> }> => ({
+    name: input.name,
+  }),
   crash: async (): Promise<string> => {
     throw new Error('secret stack details');
   },

@@ -53,7 +53,7 @@ export function subscribe(env: StreamEnv, path: string, proc: ClientEntry, args:
   };
 
   const deliver = (payload: Uint8Array) => {
-    const view = proc.output!.view(payload, { verify: env.verify, limits: env.limits }) as unknown[];
+    const view = proc.output!.view(payload, { verify: env.verify, rules: false, limits: env.limits }) as unknown[];
     const rows = env.mode(path, opts) === 'eager' ? (toPlain(view) as unknown[]) : view;
     if (h.batch) {
       Object.defineProperty(rows, 'columns', { get: () => columnsOf(view) ?? {} });
