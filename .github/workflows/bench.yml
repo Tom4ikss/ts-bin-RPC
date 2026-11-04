@@ -42,7 +42,7 @@ jobs:
       - name: Build the bench codecs
         run: pnpm --filter @tbr/bench gen
       - name: Generated codecs against JSON
-        run: node bench/run.mjs generated --repeat=5 --out=out
+        run: node bench/run.mjs generated --repeat=7 --out=out
       - name: Streams over HTTP
         run: node --experimental-strip-types --no-warnings bench/transport.mjs --out=out
       - name: Middleware overhead
@@ -69,7 +69,8 @@ jobs:
           git checkout -B main origin/main
           mkdir -p bench/results/ci
           cp out/* bench/results/ci/
-          git add bench/results/ci
+          node bench/readme.mjs
+          git add bench/results/ci README.md
           git commit -m "Bench results for ${GITHUB_SHA::7}"
           for i in 1 2 3; do
             git push origin main && break

@@ -40,6 +40,7 @@ console.log(`## Suite \`${after.suite}\`: ${short(before.commit)} (${before.date
 
 Ratio to the first variant of each group, before → after. ⚠ marks a drop of more than ${(threshold * 100).toFixed(0)}%.
 Largest change either way: ${(worst * 100).toFixed(0)}%.
+${before.cpu === after.cpu ? `Both on ${after.cpu}.` : `Different CPUs: ${before.cpu} → ${after.cpu}. Some rows move by 10–25% between runner CPU models alone.`}
 
 | Group | Variant | ${runtimes.join(' | ')} |
 |---|---|${runtimes.map(() => '---').join('|')}|

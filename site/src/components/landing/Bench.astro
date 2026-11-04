@@ -1,7 +1,7 @@
 ---
 // Benchmark section: speed against JSON per scenario and runtime, size after compression, bundle
-// size. All numbers come from src/data/bench.ts, which copies them from bench/results.
-import { BUNDLE, COMPRESSION, MACHINE, RUNTIMES, SCENARIOS, SOURCE } from '../../data/bench';
+// size. All numbers come from src/data/bench.ts: speed from the latest CI run, sizes from bench/results.
+import { BUNDLE, COMPRESSION, MACHINE, REPEAT, RUNTIMES, SCENARIOS, SOURCE } from '../../data/bench';
 import { GITHUB_BLOB } from '../../lib/guide.mjs';
 
 const NICE = [2, 2.5, 4, 5, 10, 20, 25, 40, 50, 100];
@@ -137,7 +137,7 @@ const signed = (v: number) => (v > 0 ? `+${v}%` : v < 0 ? `−${Math.abs(v)}%` :
 		</details>
 
 		<p class="fine">
-			{MACHINE}. Medians; run-to-run noise reaches 20–40% on some rows. Synthetic data, 30% of names in Cyrillic.
+			{MACHINE}. Median of {REPEAT} runs per runtime, each in a fresh process or browser. Runner CPUs vary between runs and move some rows by 10–25%; a few Firefox rows change by up to 2× between browser launches. Synthetic data, 30% of names in Cyrillic.
 			Source: <a href={`${GITHUB_BLOB}/${SOURCE.generated}`}>generated.md</a>.
 		</p>
 	</div>

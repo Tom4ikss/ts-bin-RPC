@@ -48,42 +48,54 @@ drawing response columns with uPlot, with a live chart over a stream.
 Generated codecs against `JSON.parse(new TextDecoder().decode(bytes))` and
 `TextEncoder.encode(JSON.stringify(value))`, speed relative to JSON (higher is better). The read rows
 include verification, which the client does by default in development and skips in production
-builds, so they are the slower case. Apple M3 Pro, Node
-22.13 and headless Chromium 156, Firefox 157 and WebKit 27.2 through Playwright, 2026-11-03.
-Full tables, with times: [generated.md](bench/results/generated.md).
+builds, so they are the slower case. The tables are written by the
+[bench workflow](.github/workflows/bench.yml) on a GitHub runner: each runtime runs the suite 7
+times in a fresh process or browser, and a row is the median ratio. Runner CPUs vary between runs,
+which moves some rows by 10–25%, and a few rows in Firefox change by up to 2× from one browser
+launch to the next.
+
+<!-- bench:start -->
+GitHub Actions `ubuntu-latest` (AMD EPYC 7763 64-Core Processor), Chromium 156, Firefox 157, WebKit 27.2, Node 22.23 through Playwright, 2026-11-04, commit [`47adeba`](https://github.com/Tom4ikss/ts-bin-RPC/commit/47adebaf80b7cb34aec90837c1980eac1192a0e3).
+Full tables, with times: [generated.md](bench/results/ci/generated.md).
 
 | Reading | Node | Chromium | Firefox | WebKit |
 |---|---|---|---|---|
-| 1000 users, every field | 7.1× | 2.6× | 3.7× | 3.7× |
-| 1000 users, 2 of 7 fields | 13× | 4.9× | 7.0× | 5.3× |
-| 1000 users, numeric fields only | 18× | 7.3× | 14× | 7.2× |
-| 100k points, every value | 136× | 18×¹ | 97× | 21×¹ |
-| 10 users, every field | 3.3× | 1.4× | 1.5× | 1.4× |
-| 500 products with long text | 4.0× | 1.6× | 2.7× | 2.1× |
-| 1 user | 1.6× | **0.94×** | **0.74×** | **0.92×** |
+| 1000 users, every field | 6.7× | 4.4× | 2.2× | 3.9× |
+| 1000 users, 2 of 7 fields | 14× | 8.7× | 5.2× | 5.9× |
+| 1000 users, numeric fields only | 25× | 15× | 16× | 7.7× |
+| 100k points, every value | 153× | 19× | 150× | 21× |
+| 10 users, every field | 2.0× | 1.1× | **0.67×** | 1.0× |
+| 500 products with long text | 3.3× | 1.8× | 1.2× | 2.7× |
+| 1 user | 1.3× | **0.93×** | **0.69×** | **0.67×** |
 
 | Encoding | Node | Chromium | Firefox | WebKit |
 |---|---|---|---|---|
-| 1000 users | 2.4× | 1.9× | 1.7× | 2.3× |
-| 500 products with long text | 1.4× | **0.93×** | 1.1× | **0.62×** |
-| 100k points | 496× | 90× | 179× | 146× |
+| 1000 users | 2.7× | 2.9× | 1.5× | 1.7× |
+| 500 products with long text | 1.6× | 1.0× | 1.1× | 1.0× |
+| 100k points | 97× | 39× | 41× | 25× |
+<!-- bench:end -->
 
 Users have 7 fields: three numbers, a boolean and three strings, 30% of names in Cyrillic. Products
 have a 12–52 word description. Points are four columns, a `Float64Array` time and three
 `Float32Array` values; JSON gets its best shape for them, an object of four number arrays.
 
-¹ Measured alone, summing the 100k points through a view takes 74–159 µs in every engine, the same
-as over a plain object. Next to the JSON case, which allocates about 13 MB per call, V8 and
-JavaScriptCore run the same loop 3–6× slower; the table keeps that slower number.
+In Chromium and WebKit the 100k points row is lower than in Node and Firefox for a reason outside
+the codec: measured alone on an Apple M3 Pro, summing the points through a view takes 74–159 µs in
+every engine, the same as over a plain object. Next to the JSON case, which allocates about 13 MB
+per call, V8 and JavaScriptCore run the same loop 3–6× slower; the table keeps that slower number.
 
 ### Where JSON wins
 
+From the CI run of 2026-11-04 at `47adeba` unless said otherwise; the tables above may be newer.
+
 - **One small object in browsers.** Verifying a message and setting up a view cost more than
-  parsing 150 bytes of JSON: 0.43–0.62 µs against 0.40–0.47 µs. Either way it is under a
-  microsecond.
-- **Encoding text in Chromium and WebKit.** On the products payload the generated encoder is 7%
-  slower than `JSON.stringify` in Chromium and 1.6× slower in WebKit, whose `JSON.stringify` is
-  2.5× faster than Chromium's here.
+  parsing 150 bytes of JSON: 0.90–1.63 µs against 0.84–1.12 µs. Either way it is under two
+  microseconds.
+- **Small responses in Firefox on Linux.** 10 users take 9.4 µs with verification against 6.3 µs
+  for JSON, and 6.7 µs without. On an Apple M3 Pro the same row is 1.5× faster than JSON.
+- **Encoding text in WebKit and Chromium on macOS.** On an Apple M3 Pro the products payload
+  encodes 7% slower than `JSON.stringify` in Chromium and 1.6× slower in WebKit. On the Linux
+  runner both are on par with JSON.
 - **Size of small and numeric responses after compression**, see below.
 
 ### Size
