@@ -26,7 +26,10 @@ export interface HandlerOptions<R> {
   procedures: ServerProcedures;
   /** Path prefix of every procedure. Default: `/`. */
   prefix?: string;
-  /** Builds the second argument of procedures, once per request. May throw RpcError. */
+  /**
+   * Builds the second argument of procedures, once per request, only for procedures that take one.
+   * May throw RpcError.
+   */
   context?: (request: Request) => RouterContext<R> | Promise<RouterContext<R>>;
   /**
    * The client was generated from another version of a procedure's contract. `warn` logs once per
@@ -113,7 +116,8 @@ export function createHandler<R extends AnyRouter>(router: R, options: HandlerOp
         }
       } else if (proc.input && !proc.inputOptional) throw new RpcError('BAD_INPUT', 'input is missing');
 
-      const ctx = context ? await context(request) : undefined;
+      // Only procedures that take ctx (and their middleware) pay for building it.
+      const ctx = context && proc.ctx !== false ? await context(request) : undefined;
       const result = await route.fn.call(route.self, input, ctx);
       if (proc.stream) {
         const source = toSource(result);

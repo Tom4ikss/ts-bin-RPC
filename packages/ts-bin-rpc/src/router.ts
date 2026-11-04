@@ -22,6 +22,9 @@ export type InputOptional<R, P extends string> = undefined extends Parameters<Ex
 
 export type OutputOf<R, P extends string> = Awaited<ReturnType<Extract<ProcedureAt<R, P>, AnyProcedure>>>;
 
+/** Whether a procedure declares a second parameter, `ctx`. */
+export type TakesContext<R, P extends string> = Parameters<Extract<ProcedureAt<R, P>, AnyProcedure>>['length'] extends 0 | 1 ? false : true;
+
 // ------------------------------------------------------------------------------------------ streams
 
 export declare const tbrStream: unique symbol;

@@ -59,6 +59,8 @@ export interface Procedure {
   output: IRType | null; // null: Promise<void>; for a stream, the row type
   /** Returns `Stream<T>`: output is the row type, and each frame on the wire is a `T[]` message. */
   stream?: boolean;
+  /** Takes a second parameter, `ctx`: the server builds the context only for these. */
+  ctx?: boolean;
   location?: Location;
 }
 

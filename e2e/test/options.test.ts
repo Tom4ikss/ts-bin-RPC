@@ -31,6 +31,24 @@ describe('createHandler', () => {
     expect(onError.mock.calls[0][1].path).toBe('user.list');
   });
 
+  it('builds the context only for procedures that take it', async () => {
+    const context = vi.fn(() => ({ user: 'ann' }));
+    const api = client(via(createHandler(appRouter, { procedures, prefix: '/rpc', context })));
+    await api.user.get({ id: 1 });
+    await api.series({ n: 1 });
+    expect(context).not.toHaveBeenCalled();
+    await api.whoami();
+    await api.account.me(); // a procedure behind middleware that needs it
+    expect(context).toHaveBeenCalledTimes(2);
+  });
+
+  it('builds it for every procedure with code generated before the ctx flag', async () => {
+    const context = vi.fn(() => ({ user: null }));
+    const old = Object.fromEntries(Object.entries(procedures).map(([p, { ctx: _, ...e }]) => [p, e]));
+    await client(via(createHandler(appRouter, { procedures: old, prefix: '/rpc', context }))).user.get({ id: 1 });
+    expect(context).toHaveBeenCalledTimes(1);
+  });
+
   it('limits the request size', async () => {
     const handler = createHandler(appRouter, { procedures, prefix: '/rpc', limits: { maxBytes: 64 } });
     await expect(client(via(handler)).echo({ text: 'x'.repeat(100), bytes: new Uint8Array() })).rejects.toMatchObject({ code: 'PAYLOAD_TOO_LARGE', status: 413 });

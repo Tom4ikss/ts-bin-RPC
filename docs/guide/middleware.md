@@ -89,6 +89,13 @@ Per call, on an Apple M3 Pro in Node 22
 A call through `createHandler` with no input and no output takes about 4 µs, so even the longest chain
 here adds under 6% to the cheapest call.
 
+## Where the context comes from
+
+`createHandler`'s `context` builds the context a chain starts from, and only for procedures that
+take one: those that declare `ctx`, or sit behind middleware that needs it. Keep it to what is
+cheap and always there (the request, a database handle) and look up the user in a middleware step,
+so that the lookup runs for the procedures that need a user and nowhere else.
+
 ## Notes
 
 - **Streams.** For a stream procedure, the chain ends when the procedure returns the stream. An

@@ -52,6 +52,11 @@ interface Entry<In, Out> {
   stream?: boolean;
   /** Of a streaming procedure in the client table: opens subscriptions. */
   subscribe?: typeof subscribe;
+  /**
+   * In the server table: whether the procedure takes `ctx`. Without it the handler does not call
+   * `context`. Absent in code generated before 0.1.0-alpha.3: the handler always calls it.
+   */
+  ctx?: boolean;
   /** Hash of the contract: the lockfile entries of every type the procedure reaches. */
   hash: string;
 }

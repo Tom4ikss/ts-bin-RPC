@@ -36,7 +36,7 @@ side only throws an error that tells you to run `tbr generate`.
 |---|---|---|
 | `procedures` | — | `serverProcedures` from the generated file (`procedures` works too) |
 | `prefix` | `/` | path prefix of every procedure |
-| `context` | — | `(request) => ctx`, once per request; may be async and may throw `RpcError` |
+| `context` | — | `(request) => ctx`, once per request to a procedure that takes `ctx`; may be async and may throw `RpcError` |
 | `schemaMismatch` | `'warn'` | the client was generated from another contract version: `'warn'` logs once per procedure, `'error'` answers 409, `'ignore'` |
 | `limits` | 64 MB, depth 64, 16M elements | `{ maxBytes, maxDepth, maxNodes }` for verifying inputs |
 | `onError` | `console.error` | `(error, { path, request })` for errors other than `RpcError` |
@@ -45,8 +45,22 @@ side only throws an error that tells you to run `tbr generate`.
 
 The second parameter of every procedure is the context, and its type comes from the procedures. If
 `context` throws an `RpcError`, for example `UNAUTHORIZED`, the client gets that error and the
-procedure does not run. To check or extend the context for a part of the router, see
-[Middleware](./middleware.md).
+procedure does not run.
+
+`context` runs only for procedures that declare `ctx`, directly or through middleware that needs
+it: `tbr generate` marks them in `serverProcedures`. A public `ping` does not pay for a session
+lookup. Keep `context` cheap anyway, and do the expensive part where it is needed:
+
+```ts
+context: (request) => ({ request, db }),        // no I/O here
+const authed = middleware(async ({ ctx }: Call<{ request: Request; db: Db }>) => {
+  const user = await ctx.db.session(ctx.request.headers.get('cookie'));
+  if (!user) throw new RpcError('UNAUTHORIZED', 'sign in first');
+  return { ...ctx, user };
+});
+```
+
+See [Middleware](./middleware.md).
 
 ## Client
 

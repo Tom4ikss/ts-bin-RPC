@@ -136,6 +136,7 @@ describe('stale generated code', () => {
     ['an optional field', v1.replace('name: string;\n  mail', 'name?: string;\n  mail'), '"get output"'],
     ['an input', v1.replace('input: { id: u32 }', 'input: { id: u32; full: boolean }'), '"get input"'],
     ['a procedure', v1.replace('  shapes:', '  count: async (): Promise<u32> => 0,\n  shapes:'), '"procedure list"'],
+    ['a ctx parameter', v1.replace('get: async (input: { id: u32 })', 'get: async (input: { id: u32 }, ctx: { user: string })'), '"get ctx"'],
   ])('changing %s without tbr generate fails to compile', (_, router, where) => {
     expect(tsc()).toBe('');
     fs.writeFileSync(routerFile, router);
