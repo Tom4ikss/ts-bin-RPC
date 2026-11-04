@@ -6,7 +6,15 @@ carries a format version in its header: a reader rejects a version it does not k
 lockfile and reports breaking changes. The `tbr` command ships in the same package as the runtime,
 so generated code and the runtime that reads it come from one version.
 
-## Unreleased
+From 0.2.0, a change to the wire format or another breaking change bumps the minor version (0.2 →
+0.3), and patch versions stay compatible: `^0.2.0` never picks up a new format. Versions before
+0.2.0 were prereleases under the `alpha` dist-tag.
+
+## 0.2.0
+
+The first version under `latest` without a prerelease tag: `npm install ts-bin-rpc`. Compatible
+with 0.1.0-alpha.3: the wire format is the same, and routers written for it compile as before.
+Regenerate with `tbr generate`.
 
 - Queries: `query(procedure, options?)` or `query(namespace, options?)` marks procedures without side
   effects. The client calls them with GET, the input in base64url in the URL (POST past 2 KB). The

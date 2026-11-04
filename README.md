@@ -10,7 +10,7 @@ views over the response bytes, and numeric arrays arrive as `TypedArray` columns
 the [security notes](SECURITY.md).
 
 ```sh
-npm install ts-bin-rpc@alpha
+npm install ts-bin-rpc
 npm install -D typescript@7.1.0-beta   # for the tbr code generator
 ```
 

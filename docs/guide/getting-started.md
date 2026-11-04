@@ -13,7 +13,7 @@ or later.
 The package is published as an alpha:
 
 ```sh
-npm install ts-bin-rpc@alpha
+npm install ts-bin-rpc
 npm install -D typescript@7.1.0-beta @types/node
 ```
 

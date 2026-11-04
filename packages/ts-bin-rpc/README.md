@@ -6,7 +6,7 @@ client gets lazy views over the response bytes, and numeric arrays arrive as `Ty
 with no parsing.
 
 ```sh
-npm install ts-bin-rpc@alpha
+npm install ts-bin-rpc
 npm install -D typescript@7.1.0-beta   # for tbr
 npx tbr generate                       # --watch to regenerate on save; tbr check in CI
 ```
