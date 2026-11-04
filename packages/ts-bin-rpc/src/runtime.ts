@@ -118,7 +118,7 @@ interface ColumnSet {
 /**
  * Column sets of arrays read by code that `tbr generate` of 0.2 emitted. Newer code does not
  * register arrays: a WeakMap key outlives minor GCs in SpiderMonkey, and with it the whole view,
- * which made a small response 1.5-2 times slower in Firefox.
+ * which made reading a small response 1.7 times slower in Firefox.
  */
 export const COLUMN_SETS: WeakMap<object, ColumnSet> = new WeakMap();
 
