@@ -13,10 +13,10 @@ From 0.2.0, a change to the wire format or another breaking change bumps the min
 ## Unreleased
 
 - Arrays of objects read numeric, boolean and `Date` columns from one typed array per element
-  type and message instead of a typed array per column. Viewing a small array is 20–50% faster;
-  reading every field of 1000 rows is up to 15% slower in Node on x86. `columns()` creates its
-  typed arrays on the first call. Run `tbr generate`: older generated code still works with this
-  runtime, new generated code needs it.
+  type and message instead of a typed array per column. Viewing 10 rows is 25–40% faster, reading
+  every field of them 3–10%; reading every field of 100–1000 rows is 1–6% slower. The client is
+  0.3 KB gz larger. `columns()` creates its typed arrays on the first call. Run `tbr generate`:
+  older generated code still works with this runtime, new generated code needs it.
 
 ## 0.2.3
 
