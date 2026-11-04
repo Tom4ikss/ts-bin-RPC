@@ -6,7 +6,7 @@ carries a format version in its header: a reader rejects a version it does not k
 lockfile and reports breaking changes. The `tbr` command ships in the same package as the runtime,
 so generated code and the runtime that reads it come from one version.
 
-## Unreleased
+## 0.1.0-alpha.3
 
 - Middleware: `use([...], router)` runs a chain around the procedures of a router or namespace.
   `middleware(fn)` derives the context, `around(fn)` wraps the rest of the chain with `next()`.

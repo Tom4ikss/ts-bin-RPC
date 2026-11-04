@@ -1,6 +1,6 @@
 {
   "name": "ts-bin-rpc",
-  "version": "0.1.0-alpha.2",
+  "version": "0.1.0-alpha.3",
   "description": "Code-first binary RPC for TypeScript: lazy views over the response bytes, numeric arrays as TypedArray columns, and the tbr code generator.",
   "keywords": [
     "rpc",
