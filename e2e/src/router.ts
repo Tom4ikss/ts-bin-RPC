@@ -1,6 +1,6 @@
 // Fixture app for end-to-end tests: every kind of procedure the protocol distinguishes.
 import { RpcError, type f32, type u32, type u64 } from 'ts-bin-rpc';
-import { around, channel, middleware, stream, use, type Call } from 'ts-bin-rpc/server';
+import { around, channel, middleware, query, stream, use, type Call } from 'ts-bin-rpc/server';
 
 export interface Ctx {
   user: string | null;
@@ -39,6 +39,8 @@ const tick = (seq: number, venue?: string): Tick => ({ seq, price: 100 + seq / 4
 
 /** Streams of `forever` that are running and that have run their cleanup: tests watch disconnects. */
 const streams = { running: 0, cleaned: 0 };
+/** Calls that reached the queries: a cached response does not get here. */
+export const queryCalls = { count: 0 };
 const quotes = channel<Tick>({ window: 5 });
 
 /** The context behind `authed`: a signed-in user. */
@@ -104,11 +106,32 @@ export const appRouter = {
     trace: use([traced], {
       get: async (_, ctx) => ({ trace: ctx.trace }),
     }),
+    /** A query behind middleware: private, revalidated every time. */
+    profile: query(async (_, ctx) => ({ name: ctx.user, trace: false })),
     ticks: async (input: { n: u32 }, ctx: Authed) => stream<Tick>((emit, { end }) => {
       for (let i = 0; i < input.n; i++) emit(tick(i, ctx.user));
       end();
     }),
   }),
+  /** Queries: GET, cacheable over HTTP. */
+  catalog: query(
+    {
+      user: async (input: { id: u32 }): Promise<User> => {
+        queryCalls.count++;
+        const user = users.find((u) => u.id === input.id);
+        if (!user) throw new RpcError('NOT_FOUND', `no user ${input.id}`);
+        return user;
+      },
+      size: async (): Promise<{ users: u32 }> => (queryCalls.count++, { users: users.length }),
+      /** Echoes its input: past 2 KB of base64 the client sends it by POST. */
+      echo: async (input: { text: string }) => (queryCalls.count++, input),
+    },
+    { maxAge: 60 },
+  ),
+  /** How many calls reached the queries of `catalog`: cached responses do not. Not a query itself. */
+  queryHits: async (): Promise<{ count: u32 }> => ({ count: queryCalls.count }),
+  /** A query for shared caches. */
+  version: query(async (): Promise<{ version: string }> => ({ version: '1.0' }), { public: true, maxAge: 300 }),
   /** Reads and clears what `audited` saw. */
   audit: async (): Promise<{ calls: string[] }> => ({ calls: audit.splice(0) }),
   stream: {

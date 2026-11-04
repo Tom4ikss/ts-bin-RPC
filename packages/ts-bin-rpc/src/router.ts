@@ -25,6 +25,16 @@ export type OutputOf<R, P extends string> = Awaited<ReturnType<Extract<Procedure
 /** Whether a procedure declares a second parameter, `ctx`. */
 export type TakesContext<R, P extends string> = Parameters<Extract<ProcedureAt<R, P>, AnyProcedure>>['length'] extends 0 | 1 ? false : true;
 
+// ------------------------------------------------------------------------------------------ queries
+
+export declare const tbrQuery: unique symbol;
+
+/** A procedure marked by `query()`: free of side effects, called with GET, cacheable over HTTP. */
+export type Query<F> = F & { readonly [tbrQuery]: true };
+
+/** Whether a procedure is a query. */
+export type IsQuery<R, P extends string> = ProcedureAt<R, P> extends { readonly [tbrQuery]: true } ? true : false;
+
 // ------------------------------------------------------------------------------------------ streams
 
 export declare const tbrStream: unique symbol;

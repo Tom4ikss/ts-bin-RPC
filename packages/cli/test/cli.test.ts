@@ -97,6 +97,12 @@ describe('streams', () => {
     expect(tbr('generate', '--dry-run', ...at('s1')).output).toContain('procedure feed: object feed:input -> stream object Tick');
   });
 
+  it('refuses a stream marked as a query', () => {
+    const r = tbr('generate', '--dry-run', '--project', fixture('streams', 'tsconfig.json'), '--router', 's3.ts');
+    expect(r.code).toBe(1);
+    expect(r.output).toContain('feed: a stream cannot be a query: streams are not cached; remove query()');
+  });
+
   it('turning a stream into a call, or a call into a stream, is breaking', () => {
     const r = tbr('check', ...at('s2'));
     expect(r.code).toBe(1);
@@ -137,6 +143,7 @@ describe('stale generated code', () => {
     ['an input', v1.replace('input: { id: u32 }', 'input: { id: u32; full: boolean }'), '"get input"'],
     ['a procedure', v1.replace('  shapes:', '  count: async (): Promise<u32> => 0,\n  shapes:'), '"procedure list"'],
     ['a ctx parameter', v1.replace('get: async (input: { id: u32 })', 'get: async (input: { id: u32 }, ctx: { user: string })'), '"get ctx"'],
+    ['query()', `import { query } from 'ts-bin-rpc/server';\n${v1.replace('get: async (input: { id: u32 }): Promise<User> => null!,', 'get: query(async (input: { id: u32 }): Promise<User> => null!),')}`, '"get query"'],
   ])('changing %s without tbr generate fails to compile', (_, router, where) => {
     expect(tsc()).toBe('');
     fs.writeFileSync(routerFile, router);

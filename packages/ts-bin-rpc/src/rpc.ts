@@ -57,6 +57,8 @@ interface Entry<In, Out> {
    * `context`. Absent in code generated before 0.1.0-alpha.3: the handler always calls it.
    */
   ctx?: boolean;
+  /** Marked by `query()`: the client sends GET with the input in the URL. */
+  get?: boolean;
   /** Hash of the contract: the lockfile entries of every type the procedure reaches. */
   hash: string;
 }
@@ -70,6 +72,53 @@ export type ServerEntry = Entry<Decoder<any>, Encoder<any>>;
 export type ClientProcedures = { readonly [path: string]: ClientEntry };
 /** `serverProcedures` of generated code (`procedures` fits too). */
 export type ServerProcedures = { readonly [path: string]: ServerEntry };
+
+/** Query parameters of a GET call: the contract hash, and the encoded input in base64url. */
+export const HASH_PARAM = 'h';
+export const INPUT_PARAM = 'i';
+/**
+ * Longest input, in base64url characters, that a client puts in a URL; longer inputs go by POST.
+ * Proxies and servers commonly refuse URLs past 8 KB; this leaves room for the rest of the URL.
+ */
+export const MAX_GET_INPUT = 2048;
+
+const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+const B64_INDEX = new Int16Array(128).fill(-1);
+for (let i = 0; i < 64; i++) B64_INDEX[B64.charCodeAt(i)] = i;
+
+/** base64url without padding (RFC 4648 §5). */
+export function toBase64Url(bytes: Uint8Array): string {
+  let s = '';
+  let i = 0;
+  for (; i + 2 < bytes.length; i += 3) {
+    const n = (bytes[i] << 16) | (bytes[i + 1] << 8) | bytes[i + 2];
+    s += B64[n >> 18] + B64[(n >> 12) & 63] + B64[(n >> 6) & 63] + B64[n & 63];
+  }
+  if (i < bytes.length) {
+    const n = (bytes[i] << 16) | ((bytes[i + 1] ?? 0) << 8);
+    s += B64[n >> 18] + B64[(n >> 12) & 63] + (i + 1 < bytes.length ? B64[(n >> 6) & 63] : '');
+  }
+  return s;
+}
+
+/** Bytes of base64url without padding; null when the text is not that. */
+export function fromBase64Url(text: string): Uint8Array | null {
+  if (text.length % 4 === 1) return null;
+  const out = new Uint8Array((text.length * 3) >> 2);
+  let o = 0, acc = 0, bits = 0;
+  for (let i = 0; i < text.length; i++) {
+    const c = text.charCodeAt(i);
+    const v = c < 128 ? B64_INDEX[c] : -1;
+    if (v < 0) return null;
+    acc = (acc << 6) | v;
+    bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      out[o++] = (acc >> bits) & 255;
+    }
+  }
+  return out;
+}
 
 export function codeForStatus(status: number): string {
   for (const code in STATUS) if (STATUS[code] === status) return code;

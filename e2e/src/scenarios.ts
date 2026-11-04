@@ -32,6 +32,7 @@ export async function scenarios(origin: string, fetchFn: typeof fetch = globalTh
   };
   const rpcError = (code: string, status: number) => (e: unknown) => e instanceof RpcError && e.code === code && e.status === status;
   const raw = (path: string, init: RequestInit = {}) => fetchFn(`${url}/${path}`, { method: 'POST', ...init });
+  const headers = { 'content-type': CONTENT_TYPE };
   const rawError = async (res: Response) => ({ status: res.status, ...decodeError(new Uint8Array(await res.arrayBuffer())), data: undefined });
 
   // Views over the response
@@ -102,8 +103,34 @@ export async function scenarios(origin: string, fetchFn: typeof fetch = globalTh
   const echo = await api.echo({ text: 'naïve 日本 \u{1F600}', bytes: new Uint8Array([0, 255, 7]) });
   same('strings and bytes round trip', [echo.text, [...echo.bytes]], ['naïve 日本 \u{1F600}', [0, 255, 7]]);
 
+  // Queries: GET, the input in the URL, cacheable
+  {
+    same('query: GET with input', (await api.catalog.user({ id: 2 })).name, 'Bob');
+    await rejects('query: errors', api.catalog.user({ id: 99 }), rpcError('NOT_FOUND', 404));
+    await rejects('query behind middleware: authed refuses', api.account.profile(), rpcError('UNAUTHORIZED', 401));
+    same('query behind middleware', await signedIn.account.profile(), { name: 'ann', trace: false });
+    same('query: public', await api.version(), { version: '1.0' });
+    const long = 'x'.repeat(3000);
+    same('query: a long input goes by POST', (await api.catalog.echo({ text: long })).text.length, 3000);
+    // Browsers keep the response for max-age=60: the second call does not reach the server.
+    const before = (await api.queryHits()).count;
+    await api.catalog.size();
+    await api.catalog.size();
+    const hits = (await api.queryHits()).count - before;
+    same('query: HTTP cache', hits, typeof document === 'undefined' ? 2 : 1);
+
+    const get = (path: string, init: RequestInit = {}) => fetchFn(`${url}/${path}?h=${procedures[path as 'version'].hash}`, init);
+    const first = await get('version');
+    const etag = first.headers.get('etag');
+    same('query: Cache-Control', first.headers.get('cache-control'), 'public, max-age=300');
+    check('query: ETag', etag && /^"[\w-]{11}"$/.test(etag), etag);
+    same('query: 304 Not Modified', (await get('version', { headers: { 'if-none-match': etag!, 'cache-control': 'no-cache' } })).status, 304);
+    const bad = await fetchFn(`${url}/catalog.user?i=***`, { cache: 'no-store' });
+    same('query: bad base64', [bad.status, bad.headers.get('cache-control')], [400, 'no-store']);
+    same('query: POST still works', (await raw('version', { headers })).status, 200);
+  }
+
   // Protocol, without the client
-  const headers = { 'content-type': CONTENT_TYPE };
   same('garbage input', await rawError(await raw('user.get', { headers, body: new Uint8Array([1, 2, 3]) })), { status: 400, code: 'BAD_INPUT', message: 'not a ts-bin-rpc message', data: undefined });
   same('missing input', (await rawError(await raw('user.get', { headers }))).code, 'BAD_INPUT');
   same('unknown procedure', (await raw('user.nope', { headers })).status, 404);

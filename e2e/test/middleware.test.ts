@@ -17,7 +17,7 @@ function serve(account: Account, onError?: (e: unknown) => void, user: string | 
 
 const me = async (_: void, ctx: Authed) => ({ name: ctx.user });
 /** A stand-in for the rest of `account`, so that only `me` matters. */
-const rest = (a: Account) => ({ deposit: a.deposit, trace: a.trace, ticks: a.ticks });
+const rest = (a: Account) => ({ deposit: a.deposit, trace: a.trace, profile: a.profile, ticks: a.ticks });
 
 describe('a chain', () => {
   it('runs outermost first, and the procedure gets the last context', async () => {

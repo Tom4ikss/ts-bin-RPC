@@ -3,12 +3,17 @@
   "procedures": {
     "account.deposit": { "input": "object account.deposit:input", "output": "object account.deposit:output" },
     "account.me": { "input": "void", "output": "object account.me:output" },
+    "account.profile": { "input": "void", "output": "object account.profile:output" },
     "account.ticks": { "input": "object account.ticks:input", "output": "stream object Tick" },
     "account.trace.get": { "input": "void", "output": "object account.trace.get:output" },
     "audit": { "input": "void", "output": "object audit:output" },
+    "catalog.echo": { "input": "object catalog.echo:input", "output": "object catalog.echo:input" },
+    "catalog.size": { "input": "void", "output": "object catalog.size:output" },
+    "catalog.user": { "input": "object catalog.user:input", "output": "object User" },
     "crash": { "input": "void", "output": "string" },
     "echo": { "input": "object echo:input", "output": "object echo:output" },
     "events": { "input": "void", "output": "union Event[]" },
+    "queryHits": { "input": "void", "output": "object queryHits:output" },
     "series": { "input": "object series:input", "output": "object series:output" },
     "stream.countdown": { "input": "object stream.countdown:input", "output": "stream object stream.countdown:row" },
     "stream.failing": { "input": "void", "output": "stream object Tick" },
@@ -20,6 +25,7 @@
     "user.get": { "input": "object user.get:input", "output": "object User" },
     "user.list": { "input": "object user.list:input?", "output": "object User[]" },
     "user.rename": { "input": "object user.rename:input", "output": "void" },
+    "version": { "input": "void", "output": "object version:output" },
     "whoami": { "input": "void", "output": "object whoami:output" }
   },
   "objects": {
@@ -72,6 +78,12 @@
         "name": { "id": 0, "type": "string" }
       }
     },
+    "account.profile:output": {
+      "fields": {
+        "name": { "id": 0, "type": "string" },
+        "trace": { "id": 1, "type": "bool" }
+      }
+    },
     "account.ticks:input": {
       "fields": {
         "n": { "id": 0, "type": "u32" }
@@ -87,6 +99,21 @@
         "calls": { "id": 0, "type": "string[]" }
       }
     },
+    "catalog.echo:input": {
+      "fields": {
+        "text": { "id": 0, "type": "string" }
+      }
+    },
+    "catalog.size:output": {
+      "fields": {
+        "users": { "id": 0, "type": "u32" }
+      }
+    },
+    "catalog.user:input": {
+      "fields": {
+        "id": { "id": 0, "type": "u32" }
+      }
+    },
     "echo:input": {
       "fields": {
         "text": { "id": 0, "type": "string" },
@@ -97,6 +124,11 @@
       "fields": {
         "text": { "id": 0, "type": "string" },
         "bytes": { "id": 1, "type": "bytes" }
+      }
+    },
+    "queryHits:output": {
+      "fields": {
+        "count": { "id": 0, "type": "u32" }
       }
     },
     "series:input": {
@@ -163,6 +195,11 @@
       "fields": {
         "id": { "id": 0, "type": "u32" },
         "name": { "id": 1, "type": "string" }
+      }
+    },
+    "version:output": {
+      "fields": {
+        "version": { "id": 0, "type": "string" }
       }
     },
     "whoami:output": {

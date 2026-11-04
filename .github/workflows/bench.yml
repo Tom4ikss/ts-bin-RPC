@@ -47,6 +47,8 @@ jobs:
         run: node --experimental-strip-types --no-warnings bench/transport.mjs --out=out
       - name: Middleware overhead
         run: node --experimental-strip-types --no-warnings bench/middleware.mjs --out=out
+      - name: Queries, GET against POST
+        run: node --experimental-strip-types --no-warnings bench/query.mjs --out=out
       - name: Summary
         run: |
           if [ -f bench/results/ci/generated.json ]; then

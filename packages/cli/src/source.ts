@@ -37,6 +37,8 @@ export interface RawProcedure {
   /** For a streaming procedure, the row type. */
   returns: TypeRef;
   stream: boolean;
+  /** Marked by `query()`: called with GET. */
+  query: boolean;
   overloads: number;
   location?: Location;
 }
@@ -58,6 +60,7 @@ interface AstTypeNode {
 
 const BRAND_PREFIX = '__@tbr@';
 const STREAM_PREFIX = '__@tbrStream@';
+const QUERY_PREFIX = '__@tbrQuery@';
 const ITERABLES = new Set(['AsyncIterable', 'AsyncIterableIterator', 'AsyncGenerator', 'ReadableStream']);
 const BUILTINS = new Set([
   'Date', 'Uint8Array', 'Int8Array', 'Uint16Array', 'Int16Array', 'Uint32Array', 'Int32Array', 'Float32Array',
@@ -135,7 +138,8 @@ export class Ts71Source implements TypeSource {
         let ret = sig.getReturnType();
         if (ret.isTypeReference() && ret.getSymbol()?.name === 'Promise') ret = this.checker.getTypeArguments(ret)[0];
         const row = this.streamRow(ret);
-        out.push({ path: p, params, returns: new TsRef(row ?? ret), stream: row !== undefined, overloads: sigs.length, location });
+        const query = t.getProperties().some((s) => s.name.startsWith(QUERY_PREFIX));
+        out.push({ path: p, params, returns: new TsRef(row ?? ret), stream: row !== undefined, query, overloads: sigs.length, location });
       } else if (t.isObjectType() && !t.isTypeReference()) {
         this.walkRouter(t, p, out);
       } else {

@@ -1,6 +1,7 @@
-// createClient<AppRouter>: a proxy whose calls POST the encoded input and return views over the response.
+// createClient<AppRouter>: a proxy whose calls POST the encoded input (GET for queries) and return views
+// over the response.
 import { FLAG_ERROR, toPlain, VerifyError, type Limits } from './runtime.ts';
-import { codeForStatus, CONTENT_TYPE, readError, RpcError, SCHEMA_HEADER, type ClientEntry, type ClientProcedures } from './rpc.ts';
+import { codeForStatus, CONTENT_TYPE, HASH_PARAM, INPUT_PARAM, MAX_GET_INPUT, readError, RpcError, SCHEMA_HEADER, toBase64Url, type ClientEntry, type ClientProcedures } from './rpc.ts';
 import type { StreamEnv } from './stream-client.ts';
 import type { CallOptions, Client, DecodeMode, ProcedurePath } from './router.ts';
 
@@ -48,9 +49,14 @@ export function createClient<R>(options: ClientOptions<R>): Client<R> {
   const warned = new Set<string>();
   const modeOf = (path: string, opts: CallOptions) => opts.decode ?? (typeof decode === 'string' ? decode : decode?.[path]);
 
-  async function requestHeaders(proc: ClientEntry, opts: CallOptions): Promise<Headers> {
+  async function userHeaders(opts: CallOptions): Promise<Headers> {
     const headers = new Headers(typeof options.headers === 'function' ? await options.headers() : options.headers);
     if (opts.headers) new Headers(opts.headers).forEach((v, k) => headers.set(k, v));
+    return headers;
+  }
+
+  async function requestHeaders(proc: ClientEntry, opts: CallOptions): Promise<Headers> {
+    const headers = await userHeaders(opts);
     headers.set('content-type', CONTENT_TYPE);
     headers.set(SCHEMA_HEADER, proc.hash);
     return headers;
@@ -63,11 +69,17 @@ export function createClient<R>(options: ClientOptions<R>): Client<R> {
     const [input, opts = {}] = (proc.input ? args : [undefined, args[0]]) as [unknown, CallOptions | undefined];
     opts.signal?.throwIfAborted();
     const body = proc.input && !(input === undefined && proc.inputOptional) ? proc.input.encode(input) : new Uint8Array(0);
-    const headers = await requestHeaders(proc, opts);
+    // A query goes by GET, the input in the URL, so that HTTP caches can keep the response; the
+    // contract hash goes there too, so that a new contract gets new URLs. Without our headers the
+    // request stays simple: no CORS preflight unless the caller adds headers.
+    const encoded = proc.get ? toBase64Url(body) : '';
+    const get = proc.get === true && encoded.length <= MAX_GET_INPUT;
 
     const t0 = debug ? performance.now() : 0;
     const fetchFn = options.fetch ?? globalThis.fetch;
-    const res = await fetchFn(`${base}/${path}`, { method: 'POST', body, headers, signal: opts.signal });
+    const res = get
+      ? await fetchFn(`${base}/${path}?${HASH_PARAM}=${proc.hash}${encoded ? `&${INPUT_PARAM}=${encoded}` : ''}`, { method: 'GET', headers: await userHeaders(opts), signal: opts.signal })
+      : await fetchFn(`${base}/${path}`, { method: 'POST', body, headers: await requestHeaders(proc, opts), signal: opts.signal });
     const bytes = new Uint8Array(await res.arrayBuffer());
 
     let result: unknown;
@@ -88,7 +100,7 @@ export function createClient<R>(options: ClientOptions<R>): Client<R> {
 
     if (debug) {
       const ms = (performance.now() - t0).toFixed(1);
-      console.groupCollapsed(`tbr ${path} ${error ? error.code : res.status} ${ms} ms, ${body.length} B → ${bytes.length} B`);
+      console.groupCollapsed(`tbr ${get ? 'GET ' : ''}${path} ${error ? error.code : res.status} ${ms} ms, ${body.length} B → ${bytes.length} B`);
       if (proc.input) console.log('input', input);
       if (error) console.log('error', error);
       else console.log('output', toPlain(result));

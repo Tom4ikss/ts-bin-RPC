@@ -1,7 +1,7 @@
 // Middleware (DESIGN §15): code that runs around procedures of a router subtree. `use()` wraps the
 // procedures once; createHandler flattens nested wrappers into one chain per procedure at startup,
 // so a request pays for the middleware it has and nothing for lookup or composition.
-import type { AnyProcedure, AnyRouter } from './router.ts';
+import type { AnyProcedure, AnyRouter, Query, tbrQuery } from './router.ts';
 
 /** What every middleware sees of a call. One object per request, shared along the chain. */
 export interface Call<C> {
@@ -88,8 +88,9 @@ export type ChainNeeds<M, Inner> = M extends readonly [infer H, ...infer T]
     : never
   : Inner;
 
-/** A procedure with its `ctx` parameter typed as `C` (dropped when `C` is `unknown`). */
-type WithCtxFn<F, C> = F extends (...args: infer P) => infer O
+/** A procedure with its `ctx` parameter typed as `C` (dropped when `C` is `unknown`); a query stays one. */
+type WithCtxFn<F, C> = F extends { readonly [tbrQuery]: true } ? Query<CtxFn<F, C>> : CtxFn<F, C>;
+type CtxFn<F, C> = F extends (...args: infer P) => infer O
   ? P extends []
     ? () => O
     : P extends [infer I, ...unknown[]]

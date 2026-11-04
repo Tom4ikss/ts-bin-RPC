@@ -7,5 +7,5 @@
     "allowImportingTsExtensions": true,
     "skipLibCheck": true
   },
-  "files": ["s1.ts", "s2.ts"]
+  "files": ["s1.ts", "s2.ts", "s3.ts"]
 }

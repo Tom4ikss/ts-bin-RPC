@@ -83,7 +83,7 @@ export function catalog(dv: DataView, vec: number, spec: readonly number[]): Int
 }
 
 export type { u8, i8, u16, i16, u32, i32, f32, f64, u64, i64 } from './brands.ts';
-export type { Expect, Same, InputOf, InputOptional, OutputOf, ProcedurePath, StreamItemOf, TakesContext, Columns } from './router.ts';
+export type { Expect, Same, InputOf, InputOptional, OutputOf, ProcedurePath, StreamItemOf, TakesContext, IsQuery, Columns } from './router.ts';
 export { subscribe } from './stream-client.ts';
 import type { Columns } from './router.ts';
 

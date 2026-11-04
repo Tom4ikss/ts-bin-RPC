@@ -139,7 +139,7 @@ the client gets `500 INTERNAL` without details.
 | `UNAUTHORIZED` | 401 | your code |
 | `FORBIDDEN` | 403 | your code |
 | `NOT_FOUND` | 404 | your code, or the server: no such procedure |
-| `METHOD_NOT_ALLOWED` | 405 | the server: not a POST |
+| `METHOD_NOT_ALLOWED` | 405 | the server: not a POST, or not a GET or POST for a query |
 | `CONFLICT` | 409 | your code |
 | `SCHEMA_MISMATCH` | 409 | the server, with `schemaMismatch: 'error'` |
 | `PAYLOAD_TOO_LARGE` | 413 | the server: over `limits.maxBytes` |
@@ -162,7 +162,7 @@ ts-bin-rpc: procedure 'user.list' returned an invalid value at [17].manager.age:
 ## Protocol
 
 - **A call is `POST {prefix}/{procedure path}`** with the encoded input as the body. A procedure
-  without input sends an empty body.
+  without input sends an empty body. A [query](./queries.md) is a `GET` with the input in the URL.
 - **Requests and responses use `content-type: application/vnd.tbr`.** The server refuses anything
   else with 415. Browsers cannot send this content type from a form or a "simple" cross-origin
   request, which protects against CSRF.

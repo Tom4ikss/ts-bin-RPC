@@ -61,6 +61,8 @@ export interface Procedure {
   stream?: boolean;
   /** Takes a second parameter, `ctx`: the server builds the context only for these. */
   ctx?: boolean;
+  /** Marked by `query()`: the client calls it with GET. */
+  get?: boolean;
   location?: Location;
 }
 

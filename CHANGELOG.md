@@ -8,6 +8,11 @@ so generated code and the runtime that reads it come from one version.
 
 ## Unreleased
 
+- Queries: `query(procedure, options?)` or `query(namespace, options?)` marks procedures without side
+  effects. The client calls them with GET, the input in base64url in the URL (POST past 2 KB). The
+  server sets `Cache-Control` from `maxAge` and `public` (`private, no-cache` by default), an
+  `ETag`, and answers `304` to a matching `If-None-Match`; errors are `no-store`. Run `tbr generate`
+  after adding `query()`. See the [queries guide](docs/guide/queries.md).
 - Inside `use()`, procedure parameters without a type get them from the chain: `ctx` is the
   context the chain gives, and an untyped input means no input. `me: async (_, ctx) => ctx.user`
   replaces `me: async (_: void, ctx: Authed) => ctx.user`; annotated procedures work as before.
