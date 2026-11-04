@@ -6,6 +6,15 @@ carries a format version in its header: a reader rejects a version it does not k
 lockfile and reports breaking changes. The `tbr` command ships in the same package as the runtime,
 so generated code and the runtime that reads it come from one version.
 
+## Unreleased
+
+- Inside `use()`, procedure parameters without a type get them from the chain: `ctx` is the
+  context the chain gives, and an untyped input means no input. `me: async (_, ctx) => ctx.user`
+  replaces `me: async (_: void, ctx: Authed) => ctx.user`; annotated procedures work as before.
+  A procedure that needs more context than its chain gives now gets the type error itself.
+- Benchmarks run on GitHub Actions (`bench.yml`); the README tables and the landing page come from
+  the latest published run.
+
 ## 0.1.0-alpha.3
 
 - Middleware: `use([...], router)` runs a chain around the procedures of a router or namespace.

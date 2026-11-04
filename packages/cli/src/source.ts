@@ -117,14 +117,14 @@ export class Ts71Source implements TypeSource {
     const sym = mod.getExports().get(exportName as never);
     if (!sym) throw new Error(`${abs} has no export named '${exportName}'`);
     const out: RouterEntry[] = [];
-    this.walkRouter(this.checker.getTypeOfSymbol(sym), '', out);
+    this.walkRouter(bare(this.checker.getTypeOfSymbol(sym)), '', out);
     return out;
   }
 
   private walkRouter(type: Type, prefix: string, out: RouterEntry[]) {
     for (const prop of type.getProperties()) {
       const p = prefix ? `${prefix}.${prop.name}` : prop.name;
-      const t = this.checker.getTypeOfSymbol(prop);
+      const t = bare(this.checker.getTypeOfSymbol(prop));
       const sigs = t.getCallSignatures();
       const location = this.locate(prop);
       if (sigs.length) {
@@ -289,4 +289,10 @@ function skipTrivia(text: string, pos: number): number {
     if (c === 47 && text.charCodeAt(pos + 1) === 42) { const end = text.indexOf('*/', pos + 2); pos = end < 0 ? text.length : end + 2; continue; }
     return pos;
   }
+}
+
+/** `T` for `NoInfer<T>`: what use() returns, so that nested calls do not infer back through it. */
+function bare(t: Type): Type {
+  while (t.isSubstitutionType()) t = t.getBaseType();
+  return t;
 }

@@ -97,3 +97,30 @@ export const typeChecks = () => {
   around(async (_, next) => next({}));
   return [outer, whole, outside];
 };
+
+// Unannotated parameters inside use(): ctx gets the chain's context, an unused input `never` (none).
+export const contextualChecks = () => {
+  const authed = middleware(({ ctx }: Call<Ctx>): Authed => ({ ...ctx, user: ctx.user ?? '' }));
+  const timed = around(async (_, next) => next());
+  const tx = around<Authed, Authed & { tx: number }>(async ({ ctx }, next) => next({ ...ctx, tx: 1 }));
+  const r = use([timed, authed], {
+    me: async (_, ctx) => ctx.user,
+    rename: async (input: { name: string }, ctx) => `${ctx.user}:${input.name}`,
+    plain: async (input: { n: number }) => input.n,
+    annotated: async (_: void, ctx: Authed) => ctx.user,
+    nested: use([tx], { t: async (_, ctx) => ctx.tx }),
+  });
+  const me: Eq<Parameters<typeof r.me>, [_: never, ctx: Ctx]> = true;
+  const meOut: Eq<Awaited<ReturnType<typeof r.me>>, string> = true;
+  const rename: Eq<Parameters<typeof r.rename>[0], { name: string }> = true;
+  const nested: Eq<Parameters<typeof r.nested.t>[1], Ctx> = true;
+  const nestedOut: Eq<Awaited<ReturnType<typeof r.nested.t>>, number> = true;
+  // @ts-expect-error an input without a type is no input: reading it is an error
+  use([authed], { bad: async (input, ctx) => input.id + ctx.user });
+  // A chain that only passes the context on: the procedure may need more, callers give it.
+  const keep = use([timed], { me: async (_: void, ctx: Authed) => ctx.user });
+  const keepCtx: Eq<Parameters<typeof keep.me>[1], Authed> = true;
+  // @ts-expect-error the chain gives Authed, the procedure needs a database too
+  use([authed], { x: async (_: void, ctx: Authed & { db: string }) => ctx.db });
+  return [me, meOut, rename, nested, nestedOut, keepCtx];
+};

@@ -53,8 +53,9 @@ class Builder {
     let inputOptional = false;
     const p0 = entry.params[0];
     const k0 = p0 && this.src.describe(p0.type).k;
-    // `(_: void, ctx)`: a procedure that needs ctx but takes no input.
-    if (p0 && k0 !== 'void' && k0 !== 'undefined') {
+    // `(_: void, ctx)`: a procedure that needs ctx but takes no input. Inside use(), an unannotated
+    // `(_, ctx)` gets `never` for its input from the chain's type, which also means none.
+    if (p0 && k0 !== 'void' && k0 !== 'undefined' && k0 !== 'never') {
       const r = this.slot(p0.type, { path: `${entry.path} → input`, anon: `${entry.path}:input`, location: entry.location });
       if (r?.nullable) this.fail(ctx, 'a procedure input cannot be null');
       input = r?.type ?? null;

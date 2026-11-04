@@ -102,9 +102,36 @@ type WithCtxFn<F, C> = F extends (...args: infer P) => infer O
 /** The router as seen from outside a chain: every procedure takes the chain's outer context. */
 export type WithContext<R, C> = { readonly [K in keyof R]: R[K] extends AnyProcedure ? WithCtxFn<R[K], C> : WithContext<R[K], C> };
 
+type Fold<M, Cur> = M extends readonly [infer H, ...infer T]
+  ? H extends Middleware<infer In, infer Out>
+    ? Fold<T, [Out] extends [Keep] ? (unknown extends Cur ? In : Cur & In) : Out>
+    : Cur
+  : Cur;
+/** The context a chain gives its procedures, as far as the chain itself knows it. */
+export type ChainGives<M> = Fold<M, unknown>;
+
+/** Whether a chain has a step that derives the context, rather than only passing it on. */
+type Derives<M> = M extends readonly [infer H, ...infer T] ? (H extends Middleware<any, infer Out> ? ([Out] extends [Keep] ? Derives<T> : true) : false) : false;
+
+// After a deriving step, a procedure takes what the chain gives or less: strict function types check
+// the ctx parameter contravariantly. A chain that only passes the context on knows a lower bound at
+// most, and its procedures may need more from outside: method syntax makes the parameters bivariant.
+type ProcedureWith<C> = (input: never, ctx: C) => unknown;
+type ProcedureWithAtLeast<C> = { m(input: never, ctx: C): unknown }['m'];
+type RouterWith<P> = { readonly [key: string]: P | RouterWith<P> };
+
+/**
+ * What use() accepts: procedures whose `ctx` fits the chain. Unannotated parameters get their types
+ * from here, `ctx` the chain's context and the input `never`, that is none.
+ */
+export type RouterIn<M> = RouterWith<Derives<M> extends true ? ProcedureWith<ChainGives<M>> : ProcedureWithAtLeast<ChainGives<M>>>;
+
 type Chain = readonly Middleware<any, any>[];
-/** No arguments when the chain fits its procedures; otherwise one that no call can pass, named for the error. */
-type Checked<M extends Chain, R> = [ChainNeeds<M, InnerContext<R>>] extends [ContextMismatch<infer N, infer G>] ? [contextMismatch: ContextMismatch<N, G>] : [];
+/**
+ * No arguments when every step of the chain gets the context it needs from the steps before it;
+ * otherwise one that no call can pass, named for the error. The procedures are checked by RouterIn.
+ */
+type Checked<M extends Chain> = [ChainNeeds<M, unknown>] extends [ContextMismatch<infer N, infer G>] ? [contextMismatch: ContextMismatch<N, G>] : [];
 
 // ------------------------------------------------------------------------------------------ runtime
 
@@ -113,15 +140,21 @@ const CHAINS = new WeakMap<AnyProcedure, { chain: readonly Step[]; inner: AnyPro
 /**
  * Runs middleware around every procedure of a router or namespace, outermost first. Procedures
  * inside take the context the chain gives; callers outside give the context the chain needs.
+ * Parameters left without a type get them from the chain: `ctx` its context, an unused input none.
  *
  * ```ts
  * export const appRouter = use([timed], {
  *   ping: async () => 'pong',
- *   user: use([authed], { get: async (input: { id: u32 }, ctx: Authed) => ctx.db.user(input.id) }),
+ *   user: use([authed], {
+ *     me: async (_, ctx) => ctx.user,
+ *     get: async (input: { id: u32 }, ctx) => ctx.db.user(input.id),
+ *   }),
  * });
  * ```
  */
-export function use<const M extends Chain, R extends AnyRouter>(chain: M, router: R, ...mismatch: Checked<M, R>): WithContext<R, ChainNeeds<M, InnerContext<R>>> {
+// The result is NoInfer: a use() nested in another's router gets a contextual type from the outer
+// chain, and inferring R back through WithContext from it is circular.
+export function use<const M extends Chain, R extends RouterIn<M>>(chain: M, router: R, ...mismatch: Checked<M>): NoInfer<WithContext<R, ChainNeeds<M, InnerContext<R>>>> {
   const steps = chain.map((m) => m.step);
   const wrap = (node: AnyRouter, prefix: string): AnyRouter => {
     const out: Record<string, unknown> = {};

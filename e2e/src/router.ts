@@ -95,13 +95,14 @@ export const appRouter = {
   },
   /** Procedures behind middleware: `audited` around all, `authed` for each. */
   account: use([audited, authed], {
-    me: async (_: void, ctx: Authed): Promise<{ name: string }> => ({ name: ctx.user }),
-    deposit: async (input: { amount: u32 }, ctx: Authed): Promise<{ user: string; amount: u32 }> => {
+    // Unannotated parameters take their types from the chain: ctx is Authed, `_` is no input.
+    me: async (_, ctx) => ({ name: ctx.user }),
+    deposit: async (input: { amount: u32 }, ctx): Promise<{ user: string; amount: u32 }> => {
       if (input.amount === 0) throw new RpcError('BAD_INPUT', 'nothing to deposit');
       return { user: ctx.user, amount: input.amount };
     },
     trace: use([traced], {
-      get: async (_: void, ctx: Authed & { trace: string }): Promise<{ trace: string }> => ({ trace: ctx.trace }),
+      get: async (_, ctx) => ({ trace: ctx.trace }),
     }),
     ticks: async (input: { n: u32 }, ctx: Authed) => stream<Tick>((emit, { end }) => {
       for (let i = 0; i < input.n; i++) emit(tick(i, ctx.user));

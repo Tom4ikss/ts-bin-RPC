@@ -77,7 +77,8 @@ export const appRouter = {
 Procedures follow a few rules:
 
 - **The first parameter is the input** and may be optional (`input?:`). Use `_: void` when a
-  procedure takes no input but needs the context.
+  procedure takes no input but needs the context. Behind [middleware](./middleware.md), `(_, ctx)`
+  needs no types at all: they come from the chain.
 - **The second parameter is the context.** The server builds it for every request. The client's
   signature does not have it.
 - **The return type is the output**, with or without `Promise`. It may be `void`.

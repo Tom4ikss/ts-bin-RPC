@@ -32,8 +32,8 @@ const timed = around(async ({ path }, next) => {
 export const appRouter = use([timed], {
   ping: async () => 'pong',
   account: use([authed], {
-    me: async (_: void, ctx: Authed) => ctx.user,
-    rename: async (input: { name: string }, ctx: Authed) => ctx.db.rename(ctx.user.id, input.name),
+    me: async (_, ctx) => ctx.user,
+    rename: async (input: { name: string }, ctx) => ctx.db.rename(ctx.user.id, input.name),
   }),
 });
 ```
@@ -63,11 +63,16 @@ adds its steps after the outer ones. Errors from any step are handled as errors 
 an `RpcError` reaches the client as is, anything else goes to `onError` and arrives as
 `INTERNAL`.
 
-Types follow the chain. In the example, `account.me` declares `ctx: Authed`; from outside the
-chain it takes `Ctx`, so `createHandler`'s `context` option still produces `Ctx`. When a chain
-does not produce what its procedures need, `use()` fails to type-check with
-`Expected 3 arguments, but got 2`; the missing argument, `contextMismatch`, shows the context that
-was needed and the one the chain gives.
+Types follow the chain. Inside `use()`, parameters without a type get them from the chain: `ctx`
+is the context the chain gives, here `Authed`, and an input without a type is no input. Type the
+input when there is one; reading an untyped input is a type error. Outside `use()` there is no
+chain to take the context from, so procedures there declare it, as in `(_: void, ctx: Ctx)`.
+
+From outside, `account.me` takes `Ctx`, so `createHandler`'s `context` option still produces
+`Ctx`. A procedure may also declare its `ctx`. When it needs more than the chain gives, the error
+is on the procedure: `Property 'db' is missing in type 'Authed'`. When the steps of a chain do not
+fit each other, `use()` fails with `Expected 3 arguments, but got 2`; the missing argument,
+`contextMismatch`, shows the context that was needed and the one the chain gives.
 
 ## Cost
 
