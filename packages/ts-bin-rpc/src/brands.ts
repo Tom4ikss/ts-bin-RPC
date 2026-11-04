@@ -33,3 +33,20 @@ export type MinLength<N extends number> = Rule<{ readonly minLength: N }>;
 export type MaxLength<N extends number> = Rule<{ readonly maxLength: N }>;
 /** A string matching the regular expression `P` (source text, no flags; anchor it with `^…$`). */
 export type Pattern<P extends string> = Rule<{ readonly pattern: P }>;
+/**
+ * A named check the server runs on the decoded value, for what `Min`… cannot say. On any type,
+ * objects included. Its implementation goes to `createHandler({ checks: { [name]: … } })`:
+ * a function returning `true`, `false` or an error message, or a Standard Schema.
+ */
+export type Check<Name extends string> = Rule<{ readonly check: Name }>;
+
+/** `name@domain.tld`, checked by `formats.email` from `ts-bin-rpc/formats`. */
+export type Email = string & Check<'email'>;
+/** `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx` in hex, any version, checked by `formats.uuid`. */
+export type Uuid = string & Check<'uuid'>;
+/** An absolute URL that `new URL()` accepts, checked by `formats.url`. */
+export type Url = string & Check<'url'>;
+/** A calendar date, `YYYY-MM-DD`, checked by `formats.isoDate`. */
+export type IsoDate = string & Check<'isoDate'>;
+/** A date and time with an offset (RFC 3339), `2026-11-04T18:00:00Z`, checked by `formats.isoDateTime`. */
+export type IsoDateTime = string & Check<'isoDateTime'>;

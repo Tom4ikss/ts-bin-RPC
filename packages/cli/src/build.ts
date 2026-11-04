@@ -1,7 +1,7 @@
 // Builds the Schema IR from a router, collecting every unsupported construct instead of stopping at the first.
 import type { Desc, PropDesc, TypeRef, TypeSource } from './source.ts';
 import { TYPED_ARRAYS, type Field, type IRType, type Location, type ObjectDef, type Procedure, type Rules, type ScalarKind, type Schema } from './ir.ts';
-import type { RawRules } from './source.ts';
+import type { RawChecks, RawRules } from './source.ts';
 
 export interface SchemaError {
   path: string; // where in the contract: 'user.get → output → User.meta'
@@ -104,7 +104,7 @@ class Builder {
   type(ref: TypeRef, ctx: Ctx): IRType | undefined {
     const d = this.src.describe(ref);
     const t = this.kind(d.of ?? ref, d, ctx);
-    return t && d.rules ? this.withRules(t, d.rules, ctx) : t;
+    return t && (d.rules || d.checks) ? this.withRules(t, d.rules ?? {}, d.checks ?? [], ctx) : t;
   }
 
   private kind(ref: TypeRef, d: Desc, ctx: Ctx): IRType | undefined {
@@ -143,7 +143,7 @@ class Builder {
 
   // Rules go on numbers, strings and arrays; anything else, or an argument that is not a literal, is
   // an error here rather than a rule that silently does nothing.
-  private withRules(t: IRType, raw: RawRules, ctx: Ctx): IRType | undefined {
+  private withRules(t: IRType, raw: RawRules, checks: RawChecks, ctx: Ctx): IRType | undefined {
     const rules: Rules = {};
     const numeric = t.kind === 'scalar' && t.scalar !== 'bool' && t.scalar !== 'timestamp';
     const wide = t.kind === 'scalar' && (t.scalar === 'u64' || t.scalar === 'i64');
@@ -178,8 +178,17 @@ class Builder {
     const num = (x: number | string) => (wide ? BigInt(x) : Number(x));
     if (rules.min !== undefined && rules.max !== undefined && num(rules.min) > num(rules.max)) bad('Min is greater than Max');
     if (rules.minLength !== undefined && rules.maxLength !== undefined && rules.minLength > rules.maxLength) bad('MinLength is greater than MaxLength');
+    // Checks run on the decoded value, so they go on any type, objects included.
+    for (const name of checks) {
+      if (name === null) bad('Check needs a string literal argument');
+      else if (!CHECK_NAME.test(name)) bad(`Check name '${name}' must be an identifier`);
+      else (rules.checks ??= []).includes(name) || rules.checks.push(name);
+    }
     if (!ok) return undefined;
-    return { ...t, rules: { ...(t as { rules?: Rules }).rules, ...rules } } as IRType;
+    const prev = (t as { rules?: Rules }).rules;
+    const merged: Rules = { ...prev, ...rules };
+    if (prev?.checks && rules.checks) merged.checks = [...new Set([...prev.checks, ...rules.checks])];
+    return { ...t, rules: merged } as IRType;
   }
 
   // Unions without null/undefined: booleans, string literal enums, discriminated unions of objects.
@@ -188,7 +197,7 @@ class Builder {
     if (known) return known;
     const ds = members.map((m) => this.src.describe(m));
     // `boolean & Max<1>` reaches here as `(false & Max<1>) | (true & Max<1>)`
-    if (ds.some((d) => d.rules)) { this.fail(ctx, `rules apply to numbers, strings and arrays, not to '${this.src.text(whole)}'`); return undefined; }
+    if (ds.some((d) => d.rules || d.checks)) { this.fail(ctx, `rules and checks do not apply to '${this.src.text(whole)}'; TypeScript splits it into a union`); return undefined; }
     if (ds.every((d) => d.k === 'literal' && typeof d.value === 'boolean')) return { kind: 'scalar', scalar: 'bool' };
 
     if (ds.every((d) => d.k === 'literal' && typeof d.value === 'string')) {
@@ -266,6 +275,8 @@ class Builder {
     return name;
   }
 }
+
+const CHECK_NAME = /^[A-Za-z_$][\w$]*$/;
 
 function ruleName(k: string): string {
   return k[0].toUpperCase() + k.slice(1);

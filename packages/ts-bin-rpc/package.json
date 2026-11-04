@@ -34,6 +34,10 @@
     "./node": {
       "types": "./src/node.ts",
       "default": "./src/node.ts"
+    },
+    "./formats": {
+      "types": "./src/formats.ts",
+      "default": "./src/formats.ts"
     }
   },
   "files": [
@@ -74,6 +78,10 @@
       "./node": {
         "types": "./dist/node.d.ts",
         "default": "./dist/node.js"
+      },
+      "./formats": {
+        "types": "./dist/formats.d.ts",
+        "default": "./dist/formats.js"
       }
     },
     "bin": {

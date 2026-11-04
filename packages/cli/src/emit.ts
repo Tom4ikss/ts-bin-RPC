@@ -45,7 +45,15 @@ const prop = (name: string) => (IDENT.test(name) ? name : JSON.stringify(name));
 const acc = (obj: string, name: string) => (IDENT.test(name) ? `${obj}.${name}` : `${obj}[${JSON.stringify(name)}]`);
 const lit = (v: string | number | boolean) => JSON.stringify(v);
 /** Type descriptions for error messages; rules are checked by the verifiers, not described. */
-const desc = (v: unknown) => JSON.stringify(v, (k, x) => (k === 'rules' ? undefined : x));
+// Of the rules only the checks are described: the server runs them on the decoded value, the
+// verifiers check the rest.
+const desc = (v: unknown) =>
+  JSON.stringify(v, (k, x) => {
+    if (k === 'rules') return undefined;
+    if (typeof x !== 'object' || x === null || Array.isArray(x) || !('kind' in x)) return x;
+    const checks = (x as { rules?: Rules }).rules?.checks;
+    return checks ? { ...x, checks } : x;
+  });
 
 interface WireField {
   f: Field;
@@ -111,7 +119,7 @@ class Emitter {
     const table = (name: string, inp: string, out: string, client: boolean, server: boolean) => {
       const rows = this.schema.procedures.map(
         (p) =>
-          `  ${lit(p.path)}: { input: ${p.input ? inp + root(p.input) : 'null'}, inputOptional: ${p.inputOptional}, output: ${p.output ? out + root(p.stream ? { kind: 'array', element: p.output } : p.output) : 'null'}, ${p.stream ? (client ? 'stream: true, subscribe, ' : 'stream: true, ') : ''}${server ? `ctx: ${!!p.ctx}, ` : ''}${p.get ? 'get: true, ' : ''}hash: ${lit(this.contractHash(p))} },`,
+          `  ${lit(p.path)}: { input: ${p.input ? inp + root(p.input) : 'null'}, inputOptional: ${p.inputOptional}, output: ${p.output ? out + root(p.stream ? { kind: 'array', element: p.output } : p.output) : 'null'}, ${p.stream ? (client ? 'stream: true, subscribe, ' : 'stream: true, ') : ''}${server ? `ctx: ${!!p.ctx}, ` : ''}${p.get ? 'get: true, ' : ''}hash: ${lit(this.contractHash(p))}${server && p.input ? `, inputDesc: { schema: SCHEMA, type: ${desc(p.input)} }` : ''} },`,
       );
       return `export const ${name} = {\n${rows.join('\n')}\n} as const;\n`;
     };
@@ -402,13 +410,13 @@ class Emitter {
 
   /** Statement checking the length rules of a value whose length is `n`; '' without rules. */
   private lenRules(t: IRType, n: string, field: string): string {
-    const r = 'rules' in t ? t.rules : undefined;
+    const r = verified(t);
     if (r?.minLength === undefined && r?.maxLength === undefined) return '';
     return ` c.rules && ${this.rule('ruleLen')}(${n}, ${r.minLength ?? 'undefined'}, ${r.maxLength ?? 'undefined'}, ${lit(field)});`;
   }
 
   private checkSlot(t: IRType, p: string, d: string, field = 'input'): string {
-    const r = 'rules' in t ? t.rules : undefined;
+    const r = verified(t);
     const counted = (count: string) => {
       const rules = this.lenRules(t, 'n', field);
       return rules ? `{ const n = ${count};${rules} }` : `${count};`;
@@ -1008,7 +1016,7 @@ class Emitter {
 
   /** Statement verifying a body of n elements at b; rows without a value are skipped where it matters. */
   private bodyCheck(t: IRType, b: string, n: string, d: string, pres: string, nul: string, field = 'input'): string {
-    const r = 'rules' in t ? t.rules : undefined;
+    const r = verified(t);
     const lens = r && (r.minLength !== undefined || r.maxLength !== undefined) ? ` c.rules && ${this.rule('ruleLens')}(c, ${b} + 4, ${n}, ${r.minLength ?? 'undefined'}, ${r.maxLength ?? 'undefined'}, ${pres}, ${nul}, ${lit(field)});` : '';
     switch (t.kind) {
       case 'scalar': {
@@ -1085,6 +1093,13 @@ class Emitter {
   }
 }
 
+/** Rules the verifiers check: all but `checks`, which run on the decoded value. */
+function verified(t: IRType): Rules | undefined {
+  if (!('rules' in t) || t.rules === undefined) return undefined;
+  const { checks: _, ...rest } = t.rules;
+  return Object.keys(rest).length ? rest : undefined;
+}
+
 function hasRules(t: IRType): boolean {
-  return ('rules' in t && t.rules !== undefined) || (t.kind === 'array' && hasRules(t.element));
+  return verified(t) !== undefined || (t.kind === 'array' && hasRules(t.element));
 }

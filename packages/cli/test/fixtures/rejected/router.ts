@@ -1,4 +1,4 @@
-import type { Max, MaxLength, Min, MinLength, Pattern, u32, u64 } from 'ts-bin-rpc';
+import type { Check, Max, MaxLength, Min, MinLength, Pattern, u32, u64 } from 'ts-bin-rpc';
 import type { Item as OtherItem } from './other.ts';
 
 interface Item {
@@ -50,4 +50,6 @@ export interface BadRules {
   i: Item & MaxLength<1>;
   j: boolean & Max<1>;
   k: u64 & Min<0.5>;
+  l: string & Check<string>;
+  m: string & Check<'not-a-name'>;
 }

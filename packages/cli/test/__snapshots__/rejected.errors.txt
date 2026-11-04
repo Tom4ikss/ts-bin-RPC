@@ -27,6 +27,8 @@ router.ts:47:3  BadRules.f: MinLength is greater than MaxLength
 router.ts:48:3  BadRules.g: Min needs a literal argument
 router.ts:49:3  BadRules.h: MinLength takes a non-negative integer
 router.ts:50:3  BadRules.i: MaxLength applies to strings, arrays and typed arrays
-router.ts:51:3  BadRules.j: rules apply to numbers, strings and arrays, not to 'boolean & Max<1>'
+router.ts:51:3  BadRules.j: rules and checks do not apply to 'boolean & Max<1>'; TypeScript splits it into a union
 router.ts:52:3  BadRules.k: Min on a 64-bit integer takes an integer
+router.ts:53:3  BadRules.l: Check needs a string literal argument
+router.ts:54:3  BadRules.m: Check name 'not-a-name' must be an identifier
 router.ts:38:3  version: router property must be a function or a namespace object, got 'number'

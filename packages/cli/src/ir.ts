@@ -16,7 +16,7 @@ export interface Location {
 }
 
 /**
- * Validation rules from `Min`, `Max`, `MinLength`, `MaxLength`, `Pattern`. Not part of the wire format
+ * Validation rules from `Min`, `Max`, `MinLength`, `MaxLength`, `Pattern`, `Check`. Not part of the wire format
  * or of `signature()`: the server checks them when it decodes an input. Limits of 64-bit integers
  * are decimal strings, so that the IR stays JSON.
  */
@@ -26,6 +26,8 @@ export interface Rules {
   minLength?: number;
   maxLength?: number;
   pattern?: string;
+  /** `Check<'name'>`: named checks the server runs on the decoded value, in source order. */
+  checks?: string[];
 }
 
 export type IRType =
@@ -34,10 +36,10 @@ export type IRType =
   | { kind: 'bytes'; rules?: Rules } //          Uint8Array, zero-copy subarray
   | { kind: 'typedArray'; array: TypedArrayKind; rules?: Rules } // zero-copy column
   | { kind: 'const'; value: string | number | boolean } // single-literal field, not on the wire
-  | { kind: 'enum'; name: string } //             string literal union, values in Schema.enums
+  | { kind: 'enum'; name: string; rules?: Rules } //             string literal union, values in Schema.enums
   | { kind: 'array'; element: IRType; rules?: Rules }
-  | { kind: 'object'; name: string } //           Schema.objects
-  | { kind: 'union'; name: string }; //           discriminated union, Schema.unions
+  | { kind: 'object'; name: string; rules?: Rules } //           Schema.objects
+  | { kind: 'union'; name: string; rules?: Rules }; //           discriminated union, Schema.unions
 
 export interface Field {
   name: string;

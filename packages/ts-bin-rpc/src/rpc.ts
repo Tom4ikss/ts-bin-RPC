@@ -1,6 +1,6 @@
 // Protocol pieces shared by the server and the client (DESIGN §10): errors, statuses, headers and the
 // procedure table that generated code exports.
-import { decodeError, type Decoder, type Encoder } from './runtime.ts';
+import { decodeError, type Decoder, type Encoder, type SchemaDesc, type TypeDesc } from './runtime.ts';
 import type { subscribe } from './stream-client.ts';
 
 export const CONTENT_TYPE = 'application/vnd.tbr';
@@ -44,6 +44,7 @@ export class RpcError<Data = unknown> extends Error {
   }
 }
 
+
 interface Entry<In, Out> {
   input: In | null;
   inputOptional: boolean;
@@ -61,6 +62,8 @@ interface Entry<In, Out> {
   get?: boolean;
   /** Hash of the contract: the lockfile entries of every type the procedure reaches. */
   hash: string;
+  /** In the server table: the input type and the schema, for `checks` and `refine`. Absent before 0.2.3. */
+  inputDesc?: { schema: SchemaDesc; type: TypeDesc };
 }
 
 /** What the client needs of a procedure: encode the input, read the output. */

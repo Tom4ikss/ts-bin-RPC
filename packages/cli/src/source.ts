@@ -24,7 +24,9 @@ export interface PropDesc {
 export type RawRules = Record<string, string | number | bigint | null>;
 
 /** `rules` and, for `T & Rule<…>`, `of` = T without the rule parts. */
-export type Desc = DescKind & { rules?: RawRules; of?: TypeRef };
+/** `Check<'name'>` arguments in source order; null for one that is not a string literal. */
+export type RawChecks = (string | null)[];
+export type Desc = DescKind & { rules?: RawRules; checks?: RawChecks; of?: TypeRef };
 
 type DescKind =
   | { k: 'string' | 'number' | 'boolean' | 'bigint' | 'undefined' | 'null' | 'void' | 'any' | 'unknown' | 'never' | 'symbol' | 'nonPrimitive' }
@@ -194,12 +196,12 @@ export class Ts71Source implements TypeSource {
       const parts = t.getTypes();
       const ruleParts = parts.filter((p) => p.isObjectType() && p.getProperties().some((x) => x.name.startsWith(RULE_PREFIX)));
       if (ruleParts.length) {
-        const rules = this.rulesOf(ruleParts);
+        const { rules, checks } = this.rulesOf(ruleParts);
         const rest = parts.filter((p) => !ruleParts.includes(p));
-        if (rest.length !== 1) return { ...(this.brandOf(rest) ?? { k: 'other' as const, text: this.checker.typeToString(t) }), rules };
+        if (rest.length !== 1) return { ...(this.brandOf(rest) ?? { k: 'other' as const, text: this.checker.typeToString(t) }), rules, checks };
         const of = new TsRef(rest[0]);
         const inner = this.describe(of);
-        return { ...inner, rules: { ...inner.rules, ...rules }, of: inner.of ?? of };
+        return { ...inner, rules: { ...inner.rules, ...rules }, checks: [...(inner.checks ?? []), ...checks], of: inner.of ?? of };
       }
       const brand = this.brandOf(parts);
       if (brand) return brand;
@@ -223,8 +225,9 @@ export class Ts71Source implements TypeSource {
   }
 
   // `{ readonly [tbrRule]?: { readonly maxLength: 64 } }` parts → { maxLength: 64 }
-  private rulesOf(parts: readonly Type[]): RawRules {
+  private rulesOf(parts: readonly Type[]): { rules: RawRules; checks: RawChecks } {
     const out: RawRules = {};
+    const checks: RawChecks = [];
     for (const part of parts) {
       for (const prop of part.getProperties()) {
         if (!prop.name.startsWith(RULE_PREFIX)) continue;
@@ -234,12 +237,13 @@ export class Ts71Source implements TypeSource {
         if (!obj) continue;
         for (const r of obj.getProperties()) {
           const v = this.checker.getTypeOfSymbol(r);
-          if (v.isNumberLiteralType() || v.isStringLiteralType() || v.isBigIntLiteralType()) out[r.name] = v.value as string | number | bigint;
+          if (r.name === 'check') checks.push(v.isStringLiteralType() ? v.value : null);
+          else if (v.isNumberLiteralType() || v.isStringLiteralType() || v.isBigIntLiteralType()) out[r.name] = v.value as string | number | bigint;
           else out[r.name] = null;
         }
       }
     }
-    return out;
+    return { rules: out, checks };
   }
 
   // `number & { readonly [tbr]?: 'u32' }` → brand u32

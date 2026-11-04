@@ -1,6 +1,6 @@
 ---
 title: Validation
-description: "Min, Max, MinLength, MaxLength and Pattern: rules in the types, checked by the server while it verifies the input."
+description: "Rules (Min, MaxLength, Pattern…), formats (Email, Uuid…), custom checks and refine: validation in the types, run by the server on every input."
 ---
 
 # Validation
@@ -90,9 +90,109 @@ The check stops at the first broken rule. The input is in a binary message, not 
 the server does not decode it to collect every error. Check a form on the client first if you want
 all the errors at once.
 
+A failed check or refinement answers `400 BAD_INPUT` too, with the path of the value:
+
+```ts
+e.message; // 'guests[1].email is not a valid email'
+e.data;    // { field: 'Guest.email', rule: 'check', name: 'email', path: 'guests[1].email', message: 'is not a valid email' }
+
+e.message; // 'events[0].range: starts after it ends'
+e.data;    // { field: 'DateRange', rule: 'refine', name: 'DateRange', path: 'events[0].range', message: 'starts after it ends' }
+```
+
+The rules run first, while the server verifies the message; checks and refinements after it has
+decoded the input, in the order of the value: a field before the object that holds it.
+
+## Formats and custom checks
+
+`Check<'name'>` names a check that the rules above cannot express. The server runs it on the
+decoded value, and you give the implementation to `createHandler`. The formats are checks with
+names and implementations ready:
+
+```ts
+import type { Check, Email, IsoDate, u32, Url, Uuid } from 'ts-bin-rpc';
+
+type Slug = string & Check<'slug'>;
+
+interface Guest {
+  email: Email; // string & Check<'email'>
+  id: Uuid;
+  site?: Url;
+  tags: Slug[];
+  seats: u32 & Check<'even'>;
+}
+```
+
+```ts
+import { formats } from 'ts-bin-rpc/formats';
+
+createHandler(appRouter, {
+  procedures: serverProcedures,
+  checks: {
+    ...formats,
+    slug: (v: string) => /^[a-z0-9-]+$/.test(v),
+    even: (v: number) => v % 2 === 0 || 'must be even',
+  },
+});
+```
+
+| Format | Accepts |
+|---|---|
+| `Email` | what `<input type="email">` accepts: `name@domain`, no quoted names or IP domains, at most 254 characters |
+| `Uuid` | 8-4-4-4-12 hex digits, any version, either case |
+| `Url` | an absolute URL that `new URL()` accepts, any scheme |
+| `IsoDate` | `YYYY-MM-DD`, a date that exists |
+| `IsoDateTime` | RFC 3339: `2026-11-04T18:00:00Z`, `…T18:00:00.5+03:00` |
+
+A check is a function that returns `true` (or nothing) to pass, `false` to fail with "is not a
+valid slug", or a string to fail with that message. It may be async. A
+[Standard Schema](https://standardschema.dev) works in its place, so a Zod or Valibot schema you
+already have plugs in: `checks: { slug: z.string().regex(/^[a-z-]+$/) }`.
+
+`Check` goes on any type: strings, numbers, arrays, objects. Several checks run in the order they
+are written. Formats are a module of their own, `ts-bin-rpc/formats`: a server that does not import
+it does not carry them.
+
+If an input uses a check that `checks` does not implement, `createHandler` throws when it starts:
+
+```
+check 'slug' on Guest.tags[] has no implementation; pass it in createHandler({ checks })
+```
+
+## Refine
+
+Rules across the fields of a type go to `refine`, by the type's name:
+
+```ts
+interface DateRange {
+  start: IsoDate;
+  end: IsoDate;
+}
+
+createHandler(appRouter, {
+  procedures: serverProcedures,
+  checks: formats,
+  refine: {
+    DateRange: (r: DateRange) => r.start <= r.end || 'starts after it ends',
+  },
+});
+```
+
+A refinement runs on every value of its type in an input, nested or in arrays, after the checks of
+its fields: `r.start` is a valid date by then. It takes the same results as a check, a Standard
+Schema included. A union is refined by its alias name, after the refinement of the variant.
+
+Name the types you refine: an anonymous input type is named after its procedure, `createUser:input`.
+A name that no input contains makes `createHandler` throw, so a typo does not switch a check off.
+
+Checks and refinements see the plain decoded value and cannot change it. They have no `ctx`: a check
+that needs the database, such as a free user name, belongs in the procedure or a
+[middleware](./middleware.md).
+
 ## Where rules are checked
 
-Only the server checks rules, and only on procedure inputs, stream inputs included. The client does
+Only the server checks rules, checks and refinements, and only on procedure inputs, stream inputs
+included. The client does
 not check the outputs it receives. A rule on an output type documents the value; nothing enforces
 it. Code that verifies a message itself can switch the rules off:
 
@@ -121,8 +221,5 @@ Measured on an input with 1000 objects (Node 22, Apple M3). A verified view with
 one more string of each object adds another 30 µs. Decoding the same input into plain objects
 takes 90 µs.
 
-## Not yet
-
-- Formats (`Email`, `Uuid`, `Url`) as named checks.
-- Rules across fields (`end > start`) and checks that need the database. Write them in the procedure
-  for now, or in a [middleware](./middleware.md), and throw `RpcError('BAD_INPUT', …)`.
+Checks and refinements cost what your functions cost, plus a walk over the parts of the input
+that lead to them. An input that reaches no check and no refined type is not walked at all.

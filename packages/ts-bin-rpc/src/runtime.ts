@@ -112,7 +112,7 @@ export function catalog(dv: DataView, vec: number, spec: readonly number[]): Int
   return out;
 }
 
-export type { u8, i8, u16, i16, u32, i32, f32, f64, u64, i64, Min, Max, MinLength, MaxLength, Pattern } from './brands.ts';
+export type { u8, i8, u16, i16, u32, i32, f32, f64, u64, i64, Min, Max, MinLength, MaxLength, Pattern, Email, Uuid, Url, IsoDate, IsoDateTime } from './brands.ts';
 export type { Expect, Same, InputOf, InputOptional, OutputOf, ProcedurePath, StreamItemOf, TakesContext, IsQuery, Columns } from './router.ts';
 export { subscribe } from './stream-client.ts';
 import type { Columns } from './router.ts';
@@ -992,7 +992,7 @@ export interface Codec<T> extends Encoder<T>, Decoder<T> {}
 // ------------------------------------------------------------------------------------ type descriptors
 
 /** The schema as data, emitted next to the codecs. Only read after an encode fails, to find where. */
-export type TypeDesc =
+export type TypeDesc = (
   | { kind: 'scalar'; scalar: string }
   | { kind: 'string' }
   | { kind: 'bytes' }
@@ -1001,7 +1001,11 @@ export type TypeDesc =
   | { kind: 'enum'; name: string }
   | { kind: 'array'; element: TypeDesc }
   | { kind: 'object'; name: string }
-  | { kind: 'union'; name: string };
+  | { kind: 'union'; name: string }
+) & {
+  /** `Check<'name'>` on the type, run by the server on decoded inputs. */
+  checks?: readonly string[];
+};
 
 export interface SchemaDesc {
   objects: Record<string, readonly { name: string; type: TypeDesc; optional?: boolean; nullable?: boolean }[]>;

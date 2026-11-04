@@ -3,6 +3,7 @@
 import { DEFAULT_LIMITS, EncodeError, encodeError, RuleError, VerifyError, type Limits } from './runtime.ts';
 import { CONTENT_TYPE, fromBase64Url, HASH_PARAM, INPUT_PARAM, RpcError, SCHEMA_HEADER, toBase64Url, type ServerEntry, type ServerProcedures } from './rpc.ts';
 import type { AnyProcedure, AnyRouter } from './router.ts';
+import { Validation, type InputValidation, type Validator } from './validate.ts';
 import { STREAM_CONTENT_TYPE } from './frames.ts';
 import { SINKS, Sink, toSource } from './stream-server.ts';
 import { compose, unwrap } from './middleware.ts';
@@ -47,6 +48,18 @@ export interface HandlerOptions<R> {
    * Default: console.error.
    */
   onError?: (error: unknown, info: { path: string; request: Request }) => void;
+  /**
+   * Implementations of the `Check<'name'>` checks in the input types, by name. The formats (`Email`,
+   * `Uuid`…) come from `ts-bin-rpc/formats`. A check the inputs use without an implementation
+   * fails createHandler. A function returns `true`, `false` or an error message; a Standard Schema
+   * (Zod, Valibot…) works too.
+   */
+  checks?: Record<string, Validator>;
+  /**
+   * Checks across the fields of a type, by type name: `{ DateRange: (r) => r.start <= r.end || 'starts after it ends' }`.
+   * They run on every value of the type in an input, after the checks of its fields. Same results as `checks`.
+   */
+  refine?: Record<string, Validator>;
 }
 
 interface Route {
@@ -55,6 +68,8 @@ interface Route {
   proc: ServerEntry;
   /** `Cache-Control` of a query, which also takes GET; undefined for other procedures. */
   cache?: string;
+  /** Checks and refinements of the input; null when the input has none. */
+  validate: InputValidation | null;
 }
 
 const encoder = new TextEncoder();
@@ -65,6 +80,7 @@ export function createHandler<R extends AnyRouter>(router: R, options: HandlerOp
   let prefix = options.prefix ?? '/';
   if (!prefix.endsWith('/')) prefix += '/';
 
+  const validation = new Validation(options.checks, options.refine);
   const routes = new Map<string, Route>();
   const walk = (node: AnyRouter, path: string) => {
     for (const [key, value] of Object.entries(node)) {
@@ -78,12 +94,16 @@ export function createHandler<R extends AnyRouter>(router: R, options: HandlerOp
         const q = queryOptions(value) ?? queryOptions(fn);
         if (q && proc.stream) throw new Error(`procedure '${p}' is a stream and cannot be a query`);
         if (proc.get && !q) throw new Error(`generated code calls '${p}' with GET, but the router does not mark it with query(); run tbr generate`);
-        routes.set(p, { fn: chain.length ? compose(chain, fn, self, p) : fn, self, proc, cache: q && cacheControl(q) });
+        if (proc.input && !proc.inputDesc && !validation.empty) throw new Error(`generated code for '${p}' predates checks and refine; run tbr generate`);
+        const validate = proc.inputDesc ? validation.plan(proc.inputDesc.schema, proc.inputDesc.type) : null;
+        routes.set(p, { fn: chain.length ? compose(chain, fn, self, p) : fn, self, proc, cache: q && cacheControl(q), validate });
       } else if (value !== null && typeof value === 'object') walk(value, p + '.');
     }
   };
   walk(router, '');
   for (const p in procedures) if (!routes.has(p)) throw new Error(`generated code has procedure '${p}' that the router does not; run tbr generate`);
+  const unused = validation.unused();
+  if (unused.length) throw new Error(`refine names ${unused.map((n) => `'${n}'`).join(', ')}, which no procedure input contains`);
 
   const warned = new Set<string>();
 
@@ -141,6 +161,10 @@ export function createHandler<R extends AnyRouter>(router: R, options: HandlerOp
           throw e;
         }
       } else if (proc.input && !proc.inputOptional) throw new RpcError('BAD_INPUT', 'input is missing');
+      if (route.validate && input !== undefined) {
+        const f = await route.validate(input);
+        if (f) throw new RpcError('BAD_INPUT', `${f.path || 'input'}${f.message.startsWith('is ') ? ' ' : ': '}${f.message}`, { ...f });
+      }
 
       // Only procedures that take ctx (and their middleware) pay for building it.
       const ctx = context && proc.ctx !== false ? await context(request) : undefined;
