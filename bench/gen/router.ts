@@ -11,6 +11,12 @@ export interface User {
   city: string;
 }
 
+/** Rows inside an object: decode reads the array through the table. */
+export interface Page {
+  users: User[];
+  total: u32;
+}
+
 /** Text-heavy rows: a description of 12–52 words. */
 export interface Product {
   id: u32;
@@ -40,6 +46,7 @@ export interface Tick {
 export const appRouter = {
   users: async (): Promise<User[]> => [],
   user: async (): Promise<User> => null!,
+  page: async (): Promise<Page> => null!,
   products: async (): Promise<Product[]> => [],
   series: async (): Promise<Series> => null!,
   tick: async (): Promise<Tick> => null!,

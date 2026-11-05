@@ -128,9 +128,10 @@ class Emitter {
     // encoders and the output decoders, and drops the rest (every root is a pure call).
     // Client tables of streaming procedures reference `subscribe`: only clients of routers with streams ship it.
     const table = (name: string, inp: string, out: string, client: boolean, server: boolean) => {
+      const outOf = (k: string) => (out === 'KD' && !server && this.fastRoots.has(k) ? 'KC' : out) + k;
       const rows = this.schema.procedures.map(
         (p) =>
-          `  ${lit(p.path)}: { input: ${p.input ? inp + root(p.input) : 'null'}, inputOptional: ${p.inputOptional}, output: ${p.output ? out + root(p.stream ? { kind: 'array', element: p.output } : p.output) : 'null'}, ${p.stream ? (client ? 'stream: true, subscribe, ' : 'stream: true, ') : ''}${server ? `ctx: ${!!p.ctx}, ` : ''}${p.get ? 'get: true, ' : ''}hash: ${lit(this.contractHash(p))}${server && p.input ? `, inputDesc: { schema: SCHEMA, type: ${desc(p.input)} }` : ''} },`,
+          `  ${lit(p.path)}: { input: ${p.input ? inp + root(p.input) : 'null'}, inputOptional: ${p.inputOptional}, output: ${p.output ? outOf(root(p.stream ? { kind: 'array', element: p.output } : p.output)) : 'null'}, ${p.stream ? (client ? 'stream: true, subscribe, ' : 'stream: true, ') : ''}${server ? `ctx: ${!!p.ctx}, ` : ''}${p.get ? 'get: true, ' : ''}hash: ${lit(this.contractHash(p))}${server && p.input ? `, inputDesc: { schema: SCHEMA, type: ${desc(p.input)} }` : ''} },`,
       );
       return `export const ${name} = {\n${rows.join('\n')}\n} as const;\n`;
     };
@@ -1034,6 +1035,59 @@ class Emitter {
     return name;
   }
 
+  /** Roots whose server decoder has the fast path; the client table takes KC, without it. */
+  private fastRoots = new Set<string>();
+  #listy = new Map<string, boolean>();
+  /** The object holds an array of objects, directly or in a nested object: decode skips its views. */
+  private listy(name: string): boolean {
+    const known = this.#listy.get(name);
+    if (known !== undefined) return known;
+    this.#listy.set(name, false); // a cycle adds nothing through itself
+    const r = this.schema.objects[name].fields.some(({ type: t }) => (t.kind === 'array' && t.element.kind === 'object') || (t.kind === 'object' && this.listy(t.name)));
+    this.#listy.set(name, r);
+    return r;
+  }
+
+  /** Plain value of type t in slot p, read from the message; arrays of objects go through dV_. */
+  private decodeSlot(t: IRType, p: string): string {
+    const ptr = `r.dv.getUint32(${p}, true)`;
+    if (t.kind === 'array' && t.element.kind === 'object') return `${this.vecDecode(t.element.name)}(r, ${ptr})`;
+    if (t.kind === 'object' && this.listy(t.name)) return `${this.tableDecode(t.name)}(r, ${ptr})`;
+    const read = this.readSlot(t, p);
+    if (this.fixed(t) || t.kind === 'string' || t.kind === 'const') return read;
+    return this.plain(t, read) ?? read;
+  }
+
+  /** (r, o) => plain object of the table at o, for types that hold arrays of objects. */
+  private tableDecode(name: string): string {
+    const x = this.obj(name);
+    const fn = `dT_${x}`;
+    this.once(fn, () => {
+      const def = this.schema.objects[name];
+      const { fields } = this.wireFields(name);
+      const L = [`function ${fn}(r: Reader, o: number): T_${x} {`, '  const vt = r.vt(o);', '  let p = 0;'];
+      const req: string[] = [], opt: string[] = [];
+      for (const f of def.fields) {
+        if (f.type.kind === 'const') {
+          if (f.optional) opt.push(`  ${acc('out', f.name)} = ${lit(f.type.value)};`);
+          else req.push(`    ${prop(f.name)}: ${lit(f.type.value)},`);
+          continue;
+        }
+        const wf = fields.find((w) => w.f === f)!;
+        const val = this.decodeSlot(f.type, 'p');
+        let v = val;
+        if (f.optional && f.nullable) v = `p === 0 ? undefined : r.bytes[p + ${wf.size}] === 0 ? null : ${val}`;
+        else if (f.optional) v = `p === 0 ? undefined : ${val}`;
+        else if (f.nullable) v = `p === 0 ? null : ${val}`;
+        L.push(`  p = r.at(o, vt, ${wf.id});`, `  const x${wf.k} = ${v};`);
+        if (f.optional) opt.push(`  if (x${wf.k} !== undefined) ${acc('out', f.name)} = x${wf.k};`);
+        else req.push(`    ${prop(f.name)}: x${wf.k},`);
+      }
+      return [...L, `  const out: T_${x} = {`, ...req, '  };', ...opt, '  return out;', '}', ''];
+    });
+    return fn;
+  }
+
   /** (r, vec) => plain objects of a vector of objects, built from the columns without row views. */
   private vecDecode(name: string): string {
     const x = this.obj(name);
@@ -1128,6 +1182,17 @@ class Emitter {
     const { size, align } = this.slot(t);
     const plain = this.plain(t, 'v') ?? 'v';
     const T = this.ts(t);
+    const fast = (t.kind === 'array' && t.element.kind === 'object') || (t.kind === 'object' && this.listy(t.name));
+    if (fast) this.fastRoots.add(k);
+    const dec = (name: string, hook: boolean) => [
+      `const ${name}${k}: Decoder<${T}> = /* @__PURE__ */ decoder<${T}>({`,
+      `  size: ${size},`,
+      `  read: (r, at) => ${this.readSlot(t, 'at')},`,
+      `  check: (c, at) => { ${this.checkSlot(t, 'at', '0')} },`,
+      `  plain: (v) => ${plain},`,
+      ...(hook && fast ? [`  decode: (r, at) => ${this.decodeSlot(t, 'at')},`] : []),
+      '});',
+    ];
     this.out.push([
       `const KE${k}: Encoder<${T}> = /* @__PURE__ */ encoder<${T}>({`,
       `  desc: { schema: SCHEMA, type: ${desc(t)} },`,
@@ -1136,13 +1201,10 @@ class Emitter {
       `  align: ${align},`,
       `  write: (w, at, v) => { ${this.writeSlot(t, 'at', 'v')} },`,
       '});',
-      `const KD${k}: Decoder<${T}> = /* @__PURE__ */ decoder<${T}>({`,
-      `  size: ${size},`,
-      `  read: (r, at) => ${this.readSlot(t, 'at')},`,
-      `  check: (c, at) => { ${this.checkSlot(t, 'at', '0')} },`,
-      `  plain: (v) => ${plain},`,
-      ...(t.kind === 'array' && t.element.kind === 'object' ? [`  decode: (r, at) => ${this.vecDecode(t.element.name)}(r, r.dv.getUint32(at, true)),`] : []),
-      '});',
+      ...dec('KD', true),
+      // The client decodes only with `decode: 'eager'`: it keeps a decoder without the fast path,
+      // which costs 0.2–0.4 KB gz per app (2026-11-05). The server decodes every input.
+      ...(fast ? dec('KC', false) : []),
       `const K${k}: Codec<${T}> = /* @__PURE__ */ codec(KE${k}, KD${k});`,
       '',
     ].join('\n'));

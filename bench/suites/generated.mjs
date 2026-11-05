@@ -58,6 +58,20 @@ export function groups({ quick = false } = {}) {
       ],
     });
   }
+  {
+    const page = { users: makeUsers(1000), total: 1000 };
+    const KG = procedures.page.output;
+    const [sJson, sGen, sDecode] = Array.from({ length: 3 }, () => sumOf(all));
+    const bytes = KG.encode(page);
+    out.push({
+      group: 'page of 1000 users, all fields',
+      cases: [
+        { label: 'JSON', fn: (b) => sJson(JSON.parse(td.decode(b)).users), input: te.encode(JSON.stringify(page)) },
+        { label: 'generated', fn: (b) => sGen(KG.view(b, { verify: false }).users), input: bytes },
+        { label: 'generated, decode (plain)', fn: (b) => sDecode(KG.decode(b, { verify: false }).users), input: bytes },
+      ],
+    });
+  }
   const products = makeProducts(500);
   const KP = procedures.products.output;
   {
