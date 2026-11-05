@@ -40,6 +40,15 @@ ticks: async (input: { symbol: string }) => stream<Tick>((emit) => feed.on(input
 const sub = api.ticks.subscribe({ symbol: 'BTC' }, { batch: (b) => chart.append(b.columns.price!) });
 ```
 
+With TanStack Query, `ts-bin-rpc/tanstack` gives options for every procedure, with typed keys and
+invalidation by path ([guide](docs/guide/tanstack-query.md)):
+
+```ts
+const rq = createQueryOptions(api);
+const { data } = useQuery(rq.user.get.queryOptions({ id: 1 }));
+queryClient.invalidateQueries({ queryKey: rq.user.pathKey() });
+```
+
 A whole app: [`examples/dashboard`](examples/dashboard), a Node server and a Vite + React client
 drawing response columns with uPlot, with a live chart over a stream.
 

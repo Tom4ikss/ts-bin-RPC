@@ -101,5 +101,5 @@ shared with others. With `public: true`, the response must not depend on who ask
 ## What it does not do
 
 `query()` is HTTP caching. It does not keep responses in memory in your app, deduplicate calls or
-invalidate anything. For that, use a client cache such as TanStack Query (see the
-[FAQ](./faq.md)).
+invalidate anything. For that, use a client cache such as
+[TanStack Query](./tanstack-query.md).

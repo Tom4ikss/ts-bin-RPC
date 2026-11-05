@@ -2,6 +2,7 @@
 // procedure table that generated code exports.
 import { decodeError, type Decoder, type Encoder, type SchemaDesc, type TypeDesc } from './runtime.ts';
 import type { subscribe } from './stream-client.ts';
+import type { CallOptions } from './router.ts';
 
 export const CONTENT_TYPE = 'application/vnd.tbr';
 /** Request: the client's hash of the procedure's contract. Response: the server's. */
@@ -145,4 +146,14 @@ export function readError(bytes: Uint8Array, status?: number): RpcError {
     }
   }
   return new RpcError(e.code, e.message, data, { status });
+}
+
+/**
+ * `client.user.get[CALL]`: the procedure as `(input, options)` whether it takes an input or not, for
+ * adapters that hold the input apart from the options (`ts-bin-rpc/tanstack`). Not part of `Client<R>`.
+ */
+export const CALL: unique symbol = Symbol.for('ts-bin-rpc.call');
+export interface Callable {
+  readonly input: boolean;
+  call(input: unknown, options?: CallOptions): Promise<unknown>;
 }

@@ -64,8 +64,8 @@ chart.setData([m.t, m.cpu]); // typed arrays over the response bytes, nothing co
 - **The payloads are small and mostly text.** Twenty users with names and emails are about the
   same size as JSON after gzip, sometimes a few percent larger. The gain grows with numbers, with
   many objects, and when you read only some fields.
-- **You need tRPC's ecosystem today:** TanStack Query bindings, WebSocket
-  subscriptions, request batching. These are not there yet. See the [FAQ](./faq.md).
+- **You need tRPC's ecosystem today:** WebSocket subscriptions, request batching. These are not
+  there yet. [TanStack Query](./tanstack-query.md) is. See the [FAQ](./faq.md).
 
 > [!WARNING]
 > ts-bin-rpc is an alpha: `npm install ts-bin-rpc`. The wire format may still change before 1.0; such changes bump the minor version, so `^0.2.0` stays compatible.

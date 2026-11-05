@@ -14,7 +14,7 @@ for small text-heavy responses JSON is as compact as this format.
 ts-bin-rpc is for apps where the payloads hurt: dashboards, tables of thousands of rows, telemetry,
 maps, anything with numbers in bulk. There it reads several times faster, hands typed arrays to
 your charts without copying, and checks schema evolution, which JSON APIs usually leave to luck.
-What it lacks today: TanStack Query bindings, WebSocket subscriptions and request batching. Server-to-client streams over HTTP are there, see [Streams](./streams.md).
+What it lacks today: WebSocket subscriptions and request batching. Server-to-client streams over HTTP are there, see [Streams](./streams.md), and so are [TanStack Query](./tanstack-query.md) options.
 
 ## Why not protobuf, Connect or gRPC-web?
 
@@ -41,20 +41,22 @@ checks evolution.
 
 Not for shape. The server verifies every input against the generated schema, so a handler never
 sees a missing field, a string where a `u32` should be, or an out-of-range enum. Rules about
-values, such as an email format or `from < to`, are yours: check them in the procedure and throw
-`RpcError('BAD_INPUT', …)`.
+values go in the types too: `string & MaxLength<64>`, `Email`, `u8 & Min<18>`, and `refine` for
+rules across fields. A Zod or Valibot schema you already have plugs in as a check. See
+[Validation](./validation.md).
 
 ## Does it work with TanStack Query?
 
-Yes, call the client in `queryFn`:
+Yes. `ts-bin-rpc/tanstack` gives `queryOptions` and `mutationOptions` for every procedure, with
+typed keys and invalidation by path, for every TanStack Query adapter:
 
 ```ts
-const { data } = useQuery({ queryKey: ['user', id], queryFn: () => api.user.get({ id }) });
+const rq = createQueryOptions(api);
+const { data } = useQuery(rq.user.get.queryOptions({ id }));
 ```
 
-`data` is a view. Structural sharing treats views as new values on each fetch, which is correct, so
-components re-render when data arrives. If you persist the cache, it is serialized through `toJSON`,
-which works. First-class bindings are planned.
+The cache holds plain objects, so structural sharing, DevTools and `dehydrate` work. See
+[TanStack Query](./tanstack-query.md).
 
 ## SSR, React Server Components, workers?
 

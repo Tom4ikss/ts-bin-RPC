@@ -30,7 +30,7 @@ export const GUIDE_BASE = 'guide';
 /** Planned pages in sidebar order, grouped. Slugs are file names without `.md`. */
 export const PLAN = [
   { label: 'Start here', items: ['index', 'getting-started'] },
-  { label: 'Concepts', items: ['types', 'validation', 'views', 'server-client', 'middleware', 'queries', 'streams', 'evolution'] },
+  { label: 'Concepts', items: ['types', 'validation', 'views', 'server-client', 'middleware', 'queries', 'tanstack-query', 'streams', 'evolution'] },
   { label: 'Reference', items: ['cli', 'performance', 'faq'] },
 ];
 

@@ -33,9 +33,18 @@ importers:
         specifier: workspace:*
         version: link:../packages/ts-bin-rpc
     devDependencies:
+      '@tanstack/query-core':
+        specifier: ^5.106.1
+        version: 5.106.1
+      '@tanstack/react-query':
+        specifier: ^5.106.1
+        version: 5.106.1(@types/react@19.3.0)(react@19.3.1)
       '@tbr/cli':
         specifier: workspace:*
         version: link:../packages/cli
+      '@types/react':
+        specifier: ^19
+        version: 19.3.0
       playwright:
         specifier: ^1.64.1
         version: 1.64.1
@@ -80,6 +89,7 @@ importers:
         specifier: ^8.3.5
         version: 8.3.5(@types/node@22.20.5)
 
+
   packages/cli:
     dependencies:
       ts-bin-rpc:
@@ -95,6 +105,9 @@ importers:
 
   packages/ts-bin-rpc:
     devDependencies:
+      '@tanstack/query-core':
+        specifier: ^5.106.1
+        version: 5.106.1
       '@types/node':
         specifier: '22'
         version: 22.20.5
@@ -1496,6 +1509,24 @@ packages:
   /@shikijs/vscode-textmate@10.1.0:
     resolution: {integrity: sha512-cVBuhDQjBZaNMTwBquYfPydrUP+E3hE6oYGasx8h6ZrODIM7/r+gxLDXdd66oszbrggZHEntdE6j+5gYIVyMWQ==}
     dev: false
+
+  /@tanstack/query-core@5.106.1:
+    resolution: {integrity: sha512-erYv/UACddcdgjOL2ixmFdK6tO/AVBeUcTCOtX2N51yZpDQ2U7KJ+xgB/bCNfsF3uoCDTqGHEEbDiFsIO9YUmQ==}
+    dev: true
+
+  /@tanstack/react-query@5.106.1(@types/react@19.3.0)(react@19.3.1):
+    resolution: {integrity: sha512-ORDvJG/DSfmlFL9lQ8GDkE0VjtQbLeRDY7BL8xjKkQFGLfjFGfNWNuteWgPqA2gPJgLLuWfQ7IX0FlsHCJriyg==}
+    peerDependencies:
+      '@types/react': ^18 || ^19
+      react: ^18 || ^19
+    peerDependenciesMeta:
+      '@types/react':
+        optional: true
+    dependencies:
+      '@tanstack/query-core': 5.106.1
+      '@types/react': 19.3.0
+      react: 19.3.1
+    dev: true
 
   /@tybys/wasm-util@0.10.4:
     resolution: {integrity: sha512-W3c4gRigFS0T/Ma4qIYF3GDAc5AQdHb1yL5znJT1Zv1YaD9Kitx656wBjvr19qbiosmZT8lWDM5BEMynUqX65A==}
@@ -3711,7 +3742,6 @@ packages:
   /react@19.3.1:
     resolution: {integrity: sha512-QNhWdt7nrgVWWQG58QuGsAR3jv3Hbe4mb4vz7w2csnHavciZJgda1CPNaldF6eVxv90ud3jUXpKlHL69gO38yw==}
     engines: {node: '>=0.10.0'}
-    dev: false
 
   /readdirp@5.1.1:
     resolution: {integrity: sha512-Kko+Y5XQ6fM+Ce3dq3m9YGxnacYZYl9cA1wZjaF3Vbry2L3i1qVg8+CAgNPsXRArPMUMCaOR7oa9Nqntc43JKA==}

@@ -348,7 +348,7 @@ JSDoc-тега, вход — бинарный base64url (читаемые пар
 ## После alpha (ориентир, не план)
 
 Порядок определяет обратная связь. Кандидаты:
-1. Адаптер TanStack Query (`queryOptions` из клиента, материализация через `toPlain` на границе кэша).
+1. ~~Адаптер TanStack Query~~ — сделано: `ts-bin-rpc/tanstack`, `queryOptions`/`mutationOptions`/`queryKey`/`pathKey` из клиента, в кэше обычные объекты (`decode: 'eager'`), view по `tbr: { decode: 'lazy' }` ([руководство](guide/tanstack-query.md)). Дальше по запросу: `infiniteQueryOptions`, стримы через `streamedQuery`.
 2. Стриминг — фаза 5 выше; после неё WebSocket, живое состояние и WebTransport.
 3. ~~Мидлвары поверх `ctx`~~ — сделано: `use()`, `middleware()`, `around()` ([DESIGN §15](DESIGN.md#15-мидлвары)).
    Бизнес-валидация (бывший `extendValidation`) — сделана: правила в типах, `Check`, форматы и `refine`.

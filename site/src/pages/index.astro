@@ -54,7 +54,7 @@ const skipIt = [
 	{ b: 'Public APIs and other languages.', t: 'Use JSON, OpenAPI or protobuf; this is for one TypeScript app talking to its own backend.' },
 	{ b: 'Small, text-heavy responses.', t: '20 users come out 9–13% larger than JSON after compression; long product descriptions come out 0–9% smaller.' },
 	{ b: 'Debugging with curl | jq.', t: 'Bodies are binary. debug: true and tbr decode help, but the Network tab shows bytes.' },
-	{ b: 'You need the tRPC ecosystem today.', t: 'TanStack Query bindings, subscriptions, batching and middleware are not there yet.' },
+	{ b: 'You need the tRPC ecosystem today.', t: 'WebSocket subscriptions and request batching are not there yet.' },
 	{ b: 'You need a stable release.', t: 'This is an alpha, and the wire format may change before 1.0.' },
 ];
 ---

@@ -1,7 +1,7 @@
 // createClient<AppRouter>: a proxy whose calls POST the encoded input (GET for queries) and return views
 // over the response.
 import { FLAG_ERROR, toPlain, VerifyError, type Limits } from './runtime.ts';
-import { codeForStatus, CONTENT_TYPE, HASH_PARAM, INPUT_PARAM, MAX_GET_INPUT, readError, RpcError, SCHEMA_HEADER, toBase64Url, type ClientEntry, type ClientProcedures } from './rpc.ts';
+import { CALL, codeForStatus, CONTENT_TYPE, HASH_PARAM, INPUT_PARAM, MAX_GET_INPUT, readError, RpcError, SCHEMA_HEADER, toBase64Url, type Callable, type ClientEntry, type ClientProcedures } from './rpc.ts';
 import type { StreamEnv } from './stream-client.ts';
 import type { CallOptions, Client, DecodeMode, ProcedurePath } from './router.ts';
 
@@ -120,6 +120,10 @@ export function createClient<R>(options: ClientOptions<R>): Client<R> {
     const children = new Map<string, unknown>();
     return new Proxy(() => {}, {
       get(_, key) {
+        if (key === CALL) {
+          const input = !!procedures[path]?.input;
+          return { input, call: (i, o) => call(path, input ? [i, o] : [o]) } satisfies Callable;
+        }
         // `then` stays undefined so that `await api.user` does not try to call a procedure.
         if (typeof key !== 'string' || key === 'then') return undefined;
         let child = children.get(key);
