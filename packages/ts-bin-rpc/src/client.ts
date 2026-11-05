@@ -1,7 +1,7 @@
 // createClient<AppRouter>: a proxy whose calls POST the encoded input (GET for queries) and return views
 // over the response.
 import { FLAG_ERROR, toPlain, VerifyError, type Limits } from './runtime.ts';
-import { CALL, codeForStatus, CONTENT_TYPE, HASH_PARAM, INPUT_PARAM, MAX_GET_INPUT, readError, RpcError, SCHEMA_HEADER, toBase64Url, type Callable, type ClientEntry, type ClientProcedures } from './rpc.ts';
+import { CALL, codeForStatus, CONTENT_TYPE, devtoolsHook, HASH_PARAM, INPUT_PARAM, MAX_GET_INPUT, readError, RpcError, SCHEMA_HEADER, toBase64Url, type Callable, type ClientEntry, type ClientProcedures } from './rpc.ts';
 import type { StreamEnv } from './stream-client.ts';
 import type { CallOptions, Client, DecodeMode, ProcedurePath } from './router.ts';
 
@@ -75,7 +75,8 @@ export function createClient<R>(options: ClientOptions<R>): Client<R> {
     const encoded = proc.get ? toBase64Url(body) : '';
     const get = proc.get === true && encoded.length <= MAX_GET_INPUT;
 
-    const t0 = debug ? performance.now() : 0;
+    const hook = devtoolsHook();
+    const t0 = performance.now();
     const fetchFn = options.fetch ?? globalThis.fetch;
     const res = get
       ? await fetchFn(`${base}/${path}?${HASH_PARAM}=${proc.hash}${encoded ? `&${INPUT_PARAM}=${encoded}` : ''}`, { method: 'GET', headers: await userHeaders(opts), signal: opts.signal })
@@ -99,6 +100,7 @@ export function createClient<R>(options: ClientOptions<R>): Client<R> {
       }
     }
 
+    hook?.call(path, get, input, body, res, bytes, proc, error, t0);
     if (debug) {
       const ms = (performance.now() - t0).toFixed(1);
       console.groupCollapsed(`tbr ${get ? 'GET ' : ''}${path} ${error ? error.code : res.status} ${ms} ms, ${body.length} B → ${bytes.length} B`);

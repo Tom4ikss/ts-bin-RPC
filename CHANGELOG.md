@@ -10,6 +10,13 @@ From 0.2.0, a change to the wire format or another breaking change bumps the min
 0.3), and patch versions stay compatible: `^0.2.0` never picks up a new format. Versions before
 0.2.0 were prereleases under the `alpha` dist-tag.
 
+## Unreleased
+
+- DevTools extension: a panel in Chrome DevTools with the page's calls and streams, inputs and
+  decoded responses ([guide](https://tom4ikss.github.io/ts-bin-RPC/guide/devtools/)). Clients report
+  to it when it is installed; without it a call costs one property lookup more. The client runtime
+  grows by 47 B gz.
+
 ## 0.3.1
 
 Compatible with 0.3.0: the wire format and the generated code are unchanged, so there is no need to

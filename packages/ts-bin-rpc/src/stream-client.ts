@@ -2,7 +2,7 @@
 // Each data frame is a batch of rows; rows go to the handler, batches with their columns, and
 // to iterators of the subscription.
 import { columnsOf, toPlain, VerifyError, type Limits } from './runtime.ts';
-import { CONTENT_TYPE, codeForStatus, readError, RpcError, type ClientEntry } from './rpc.ts';
+import { CONTENT_TYPE, codeForStatus, devtoolsHook, readError, RpcError, type ClientEntry, type DevtoolsTap } from './rpc.ts';
 import { FrameReader, FRAME_DATA, FRAME_END, FRAME_ERROR, STREAM_CONTENT_TYPE } from './frames.ts';
 import type { CallOptions, DecodeMode, StreamHandler, Subscription } from './router.ts';
 
@@ -35,6 +35,7 @@ export function subscribe(env: StreamEnv, path: string, proc: ClientEntry, args:
   let started = false;
   let over = false; // stopped, ended or failed: nothing more is delivered
   let stopped = false;
+  let tap: DevtoolsTap | undefined;
 
   const wakeAll = () => {
     for (const q of queues) q.wake?.();
@@ -48,11 +49,13 @@ export function subscribe(env: StreamEnv, path: string, proc: ClientEntry, args:
       else if (!queues.size) console.error(`ts-bin-rpc: stream '${path}' failed:`, error);
       for (const q of queues) q.error = error;
     } else if (!stopped) h.end && safely(h.end);
+    tap?.end(error, stopped);
     for (const q of queues) q.done = true;
     wakeAll();
   };
 
   const deliver = (payload: Uint8Array) => {
+    tap?.batch(payload);
     const view = proc.output!.view(payload, { verify: env.verify, rules: false, limits: env.limits }) as unknown[];
     const rows = env.mode(path, opts) === 'eager' ? (toPlain(view) as unknown[]) : view;
     if (h.batch) {
@@ -68,6 +71,7 @@ export function subscribe(env: StreamEnv, path: string, proc: ClientEntry, args:
 
   const run = async () => {
     started = true;
+    tap = devtoolsHook()?.stream(path, input, proc);
     let frames = 0, bytes = 0;
     const t0 = env.debug ? performance.now() : 0;
     try {

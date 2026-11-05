@@ -98,6 +98,9 @@ const copy = await api.user.get({ id: 1 }, { decode: 'eager' }); // plain object
 
 ### Debugging
 
+The [DevTools extension](./devtools.md) lists calls and streams with their inputs and decoded
+responses.
+
 `debug: true` logs one collapsed group per call: the procedure, status, time and sizes, followed
 by the input and the output as plain objects. It also warns when the server's contract hash
 differs from the client's.

@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "ts-bin-rpc DevTools",
+  "version": "0.1.0",
+  "description": "A DevTools panel for ts-bin-rpc: calls and streams of the page with their inputs and decoded responses.",
+  "homepage_url": "https://tom4ikss.github.io/ts-bin-RPC/guide/devtools/",
+  "icons": { "16": "icon-16.png", "32": "icon-32.png", "48": "icon-48.png", "128": "icon-128.png" },
+  "devtools_page": "devtools.html",
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["hook.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    }
+  ]
+}

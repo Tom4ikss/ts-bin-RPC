@@ -30,6 +30,10 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter tbr-site build
+      - name: The DevTools extension, downloaded from the guide
+        run: |
+          node packages/devtools/build.mjs --zip
+          cp packages/devtools/ts-bin-rpc-devtools-*.zip site/dist/ts-bin-rpc-devtools.zip
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site/dist

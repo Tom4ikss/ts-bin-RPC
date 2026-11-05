@@ -59,8 +59,9 @@ chart.setData([m.t, m.cpu]); // typed arrays over the response bytes, nothing co
 
 - **Your API is public**, or other languages call it. ts-bin-rpc is for a TypeScript client and
   a TypeScript server that ship together. Use JSON, OpenAPI or protobuf there.
-- **You need to debug in the Network tab.** Bodies are binary. `debug: true` on the client logs
-  every call as plain objects, and `tbr decode` prints a captured body, but `curl | jq` won't work.
+- **You need to read bodies outside the browser.** They are binary: `curl | jq` won't work, and
+  `tbr decode` prints a captured body instead. In the browser the [DevTools panel](./devtools.md)
+  shows every call decoded, and `debug: true` logs them to the console.
 - **The payloads are small and mostly text.** Twenty users with names and emails are about the
   same size as JSON after gzip, sometimes a few percent larger. The gain grows with numbers, with
   many objects, and when you read only some fields.

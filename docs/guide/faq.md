@@ -84,7 +84,8 @@ only tested with 7.1 so far.
 
 ## Can I see the requests in DevTools?
 
-The bodies are binary, so the Network tab shows bytes. Pass `debug: true` to `createClient` to log
+The bodies are binary, so the Network tab shows bytes. The [DevTools extension](./devtools.md) adds
+a panel with every call and stream decoded. Without it, pass `debug: true` to `createClient` to log
 every call with its input and output as plain objects, or save a body and run
 `tbr decode body.bin --proc user.get`.
 

@@ -15,6 +15,7 @@
     "@tanstack/query-core": "^5.106.1",
     "@tanstack/react-query": "^5.106.1",
     "@tbr/cli": "workspace:*",
+    "@tbr/devtools": "workspace:*",
     "@types/react": "^19",
     "playwright": "^1.64.1",
     "typescript": "7.1.0-beta"

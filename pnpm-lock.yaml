@@ -42,6 +42,9 @@ importers:
       '@tbr/cli':
         specifier: workspace:*
         version: link:../packages/cli
+      '@tbr/devtools':
+        specifier: workspace:*
+        version: link:../packages/devtools
       '@types/react':
         specifier: ^19
         version: 19.3.0
@@ -104,6 +107,18 @@ importers:
       vite:
         specifier: ^8.3.5
         version: 8.3.5(@types/node@22.20.5)
+
+  packages/devtools:
+    devDependencies:
+      esbuild:
+        specifier: ^0.28.2
+        version: 0.28.2
+      ts-bin-rpc:
+        specifier: workspace:*
+        version: link:../ts-bin-rpc
+      typescript:
+        specifier: 7.1.0-beta
+        version: 7.1.0-beta
 
   packages/ts-bin-rpc:
     devDependencies:

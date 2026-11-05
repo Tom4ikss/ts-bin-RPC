@@ -149,6 +149,29 @@ export function readError(bytes: Uint8Array, status?: number): RpcError {
 }
 
 /**
+ * The hook of the ts-bin-rpc DevTools extension, `globalThis.__TBR_DEVTOOLS__`, which it defines
+ * before the page's scripts run. Clients report every call and stream to it with the codecs to read
+ * them, so the panel needs no schema. Without the extension it is undefined: a lookup per call.
+ * Arguments are positional to keep the client small.
+ */
+export interface DevtoolsHook {
+  /**
+   * After a call: `input` as the caller passed it, `sent` the encoded input, `received` the response
+   * body (a message of `proc.output` or an error envelope), `start` the `performance.now()` before
+   * the request.
+   */
+  call(path: string, get: boolean, input: unknown, sent: Uint8Array, res: Response, received: Uint8Array, proc: ClientEntry, error: RpcError | undefined, start: number): void;
+  /** When a subscription starts; `proc.output` reads a batch, `T[]`. */
+  stream(path: string, input: unknown, proc: ClientEntry): DevtoolsTap | undefined;
+}
+export interface DevtoolsTap {
+  batch(payload: Uint8Array): void;
+  /** `stopped`: the client stopped the subscription. */
+  end(error: RpcError | undefined, stopped: boolean): void;
+}
+export const devtoolsHook = (): DevtoolsHook | undefined => (globalThis as { __TBR_DEVTOOLS__?: DevtoolsHook }).__TBR_DEVTOOLS__;
+
+/**
  * `client.user.get[CALL]`: the procedure as `(input, options)` whether it takes an input or not, for
  * adapters that hold the input apart from the options (`ts-bin-rpc/tanstack`). Not part of `Client<R>`.
  */

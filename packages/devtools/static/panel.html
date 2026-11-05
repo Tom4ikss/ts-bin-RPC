@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>ts-bin-rpc</title>
+<link rel="stylesheet" href="panel.css">
+<body>
+  <header class="toolbar">
+    <button id="clear" title="Clear">⃠</button>
+    <input id="filter" type="search" placeholder="Filter procedures" spellcheck="false">
+    <span id="counts"></span>
+  </header>
+  <main>
+    <section id="list-scroll">
+      <table id="list">
+        <thead>
+          <tr><th>Procedure</th><th>Kind</th><th>Status</th><th>Size</th><th>Time</th><th>Started</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <div id="empty"></div>
+    </section>
+    <section id="detail"></section>
+  </main>
+  <script src="panel.js"></script>
+</body>
+</html>
