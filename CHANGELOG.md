@@ -10,6 +10,21 @@ From 0.2.0, a change to the wire format or another breaking change bumps the min
 0.3), and patch versions stay compatible: `^0.2.0` never picks up a new format. Versions before
 0.2.0 were prereleases under the `alpha` dist-tag.
 
+## 0.4.0
+
+Compatible with 0.3.2 for routers without live state: their wire format and generated code are
+unchanged. Live procedures use two new stream frames, which earlier clients reject.
+
+- Live state: `live<T>().by(key)` on the server keeps rows by key, and every subscriber keeps a copy
+  in a `Map` ([guide](https://tom4ikss.github.io/ts-bin-RPC/guide/live/)). A subscriber gets a
+  snapshot, then once per window a delta with the rows set, the fields changed and the keys
+  removed, encoded once for every subscriber. A client that falls behind gets a fresh snapshot
+  instead of `SLOW_CONSUMER`. For 100 entities where 5% move per frame, a delta is 345 B against
+  3 498 B for the whole state.
+- `tbr generate` reads `LiveStream<T, K>` and records the procedure as `live object T by K`, with a
+  `LiveDelta<T, "K">` type in the lockfile.
+- DevTools show live subscriptions with their snapshots and deltas.
+
 ## 0.3.2
 
 Compatible with 0.3.1: the wire format and the generated code are unchanged.
