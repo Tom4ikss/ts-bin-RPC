@@ -10,7 +10,9 @@ From 0.2.0, a change to the wire format or another breaking change bumps the min
 0.3), and patch versions stay compatible: `^0.2.0` never picks up a new format. Versions before
 0.2.0 were prereleases under the `alpha` dist-tag.
 
-## Unreleased
+## 0.2.5
+
+Compatible with 0.2.4. No changes to generated code: `tbr generate` is not needed.
 
 - `ts-bin-rpc/tanstack`: TanStack Query options from a client. `createQueryOptions(api)` mirrors the
   router: `rq.user.get.queryOptions(input, options)`, `mutationOptions()`, `queryKey(input)` typed
