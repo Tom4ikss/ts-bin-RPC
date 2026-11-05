@@ -17,6 +17,9 @@ From 0.2.0, a change to the wire format or another breaking change bumps the min
   every field of them 3–10%; reading every field of 100–1000 rows is 1–6% slower. The client is
   0.3 KB gz larger. `columns()` creates its typed arrays on the first call. Run `tbr generate`:
   older generated code still works with this runtime, new generated code needs it.
+- `decode` of an array of objects builds plain objects straight from the columns, without a view
+  per row: 1000 rows decode 40–45% faster in Node, 10–25% in browsers. Arrays inside objects still
+  go through views.
 
 ## 0.2.3
 

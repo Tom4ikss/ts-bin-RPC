@@ -830,24 +830,39 @@ class Emitter {
     // exposes or clones the whole column set. Public string keys leaked it; #private cost Firefox up
     // to 20% on numeric reads, defineProperty 2-10x on every read (bench, 2026-11-03).
     L.push(`class R_${x} implements ${T} {`, `  declare readonly [S_COLS]: C_${x};`, '  declare readonly [S_ROW]: number;', `  constructor(c: C_${x}, i: number) {`, '    this[S_COLS] = c;', '    this[S_ROW] = i;', '  }');
+    // Plain row straight from the columns, for decode: no row view, the getters' expressions inlined.
+    const q: string[] = [], qOpt: string[] = [];
     for (const f of def.fields) {
       if (f.type.kind === 'const') {
         L.push(`  get ${prop(f.name)}(): ${this.fieldTs(f)} { return ${lit(f.type.value)}; }`);
+        if (f.optional) qOpt.push(`  ${acc('o', f.name)} = ${lit(f.type.value)};`);
+        else q.push(`    ${prop(f.name)}: ${lit(f.type.value)},`);
         continue;
       }
       const wf = fields.find((w) => w.f === f)!;
       const k = wf.k;
       const fx = this.fixed(f.type);
-      let expr: string;
-      if (fx) expr = fx.elem(`c.a${k}[c.b${k} + i]`);
-      else if (f.type.kind === 'object') expr = `c.o${k}().row(c.k${k}(i))`;
-      else expr = `c.a${k}.get(i)`;
+      let expr: string, value: string;
+      if (fx) expr = value = fx.elem(`c.a${k}[c.b${k} + i]`);
+      else if (f.type.kind === 'object') {
+        expr = `c.o${k}().row(c.k${k}(i))`;
+        value = `q_${this.obj(f.type.name)}(c.o${k}(), c.k${k}(i))`;
+      } else {
+        expr = `c.a${k}.get(i)`;
+        value = this.plain(f.type, expr) ?? expr;
+      }
+      const absent = `c.d${k} < 0 || (c.p${k} >= 0 && !bit(c.r.bytes, c.p${k}, i))`;
+      const isNull = `c.n${k} >= 0 && bit(c.r.bytes, c.n${k}, i)`;
       L.push(`  get ${prop(f.name)}(): ${this.fieldTs(f)} {`, '    const c = this[S_COLS], i = this[S_ROW];');
-      if (f.optional) L.push(`    if (c.d${k} < 0 || (c.p${k} >= 0 && !bit(c.r.bytes, c.p${k}, i))) return undefined;`);
-      if (f.nullable) L.push(`    if (c.n${k} >= 0 && bit(c.r.bytes, c.n${k}, i)) return null;`);
+      if (f.optional) L.push(`    if (${absent}) return undefined;`);
+      if (f.nullable) L.push(`    if (${isNull}) return null;`);
       L.push(`    return ${expr};`, '  }');
+      const v = f.nullable ? `${isNull} ? null : ${value}` : value;
+      if (f.optional) qOpt.push(`  if (!(${absent})) ${acc('o', f.name)} = ${v};`);
+      else q.push(`    ${prop(f.name)}: ${v},`);
     }
     L.push(`  toJSON(): ${T} { return p_${x}(this); }`, `  [PLAIN](): ${T} { return p_${x}(this); }`, `  [INSPECT](): ${T} { return p_${x}(this); }`, '}', '');
+    L.push(`function q_${x}(c: C_${x}, i: number): ${T} {`, `  const o: ${T} = {`, ...q, '  };', ...qOpt, '  return o;', '}', '');
 
     // Verifier: the catalog is checked by the runtime, bodies here.
     L.push(
@@ -1019,6 +1034,21 @@ class Emitter {
     return name;
   }
 
+  /** (r, vec) => plain objects of a vector of objects, built from the columns without row views. */
+  private vecDecode(name: string): string {
+    const x = this.obj(name);
+    const fn = `dV_${x}`;
+    this.once(fn, () => [
+      `function ${fn}(r: Reader, vec: number): T_${x}[] {`,
+      `  const c = new C_${x}(r, vec), n = c.n, out = new Array<T_${x}>(n);`,
+      `  for (let i = 0; i < n; i++) out[i] = q_${x}(c, i);`,
+      '  return out;',
+      '}',
+      '',
+    ]);
+    return fn;
+  }
+
   /** (r, vec) => Array of the vector's elements. */
   private vecRead(t: IRType): string {
     const name = `rV_${this.elem(t)}`;
@@ -1111,6 +1141,7 @@ class Emitter {
       `  read: (r, at) => ${this.readSlot(t, 'at')},`,
       `  check: (c, at) => { ${this.checkSlot(t, 'at', '0')} },`,
       `  plain: (v) => ${plain},`,
+      ...(t.kind === 'array' && t.element.kind === 'object' ? [`  decode: (r, at) => ${this.vecDecode(t.element.name)}(r, r.dv.getUint32(at, true)),`] : []),
       '});',
       `const K${k}: Codec<${T}> = /* @__PURE__ */ codec(KE${k}, KD${k});`,
       '',

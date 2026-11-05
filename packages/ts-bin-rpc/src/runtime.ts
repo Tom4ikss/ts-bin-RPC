@@ -1154,6 +1154,8 @@ export interface DecoderDef<T> {
   read(r: Reader, at: number): T;
   check(c: Check, at: number): void;
   plain(v: T): T;
+  /** Plain value straight from the message, where it beats `plain(read())`; generated code before 0.2.4 has none. */
+  decode?(r: Reader, at: number): T;
 }
 
 export function encoder<T>(d: EncoderDef<T>): Encoder<T> {
@@ -1196,7 +1198,7 @@ export function decoder<T>(d: DecoderDef<T>): Decoder<T> {
     },
     decode(bytes, o) {
       const r = open(bytes, o);
-      return d.plain(d.read(r, r.root));
+      return d.decode ? d.decode(r, r.root) : d.plain(d.read(r, r.root));
     },
     verify(bytes, limits) {
       open(bytes, { limits });
