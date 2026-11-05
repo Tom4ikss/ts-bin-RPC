@@ -4,7 +4,7 @@
     "noEmit": false,
     "allowImportingTsExtensions": false,
     "rewriteRelativeImportExtensions": true,
-    "declaration": false,
+    "declaration": true,
     "outDir": "../ts-bin-rpc/dist/cli",
     "rootDir": "src"
   }

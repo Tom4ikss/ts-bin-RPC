@@ -1,6 +1,6 @@
 // Packs ts-bin-rpc as it would be published, installs the tarball into an empty project with npm
 // and runs it: tbr generate and check, tsc, a server and a client over HTTP,
-// tbr decode. Catches what workspace tests cannot: missing files, unbuilt dist, wrong exports.
+// tbr decode, a Vite build with ts-bin-rpc/vite. Catches what workspace tests cannot: missing files, unbuilt dist, wrong exports.
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -11,7 +11,8 @@ const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tbr-smoke-'));
 const run = (cmd, args, cwd = dir) => execFileSync(cmd, args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'] });
 
 const tarball = run('pnpm', ['pack', '--pack-destination', dir], path.join(root, 'packages/ts-bin-rpc')).trim().split('\n').at(-1);
-const ts = JSON.parse(fs.readFileSync(path.join(root, 'packages/ts-bin-rpc/package.json'), 'utf8')).peerDependencies.typescript;
+const pkg = JSON.parse(fs.readFileSync(path.join(root, 'packages/ts-bin-rpc/package.json'), 'utf8'));
+const ts = pkg.peerDependencies.typescript;
 
 const files = {
   'package.json': JSON.stringify({ name: 'tbr-smoke', private: true, type: 'module' }),
@@ -71,6 +72,15 @@ server.close();
 fs.writeFileSync('user.bin', procedures['user.get'].output!.encode(toPlain(user)));
 console.log(JSON.stringify({ user: toPlain(user), t: t instanceof Float64Array, v: Array.from(v), error, counted, column, seen }));
 `,
+  'src/web.ts': `import { createClient } from 'ts-bin-rpc/client';
+import type { appRouter } from './router.ts';
+import { clientProcedures } from './tbr.gen.ts';
+export const api = createClient<typeof appRouter>({ url: '/rpc', procedures: clientProcedures });
+`,
+  'index.html': '<script type="module" src="/src/web.ts"></script>\n',
+  'vite.config.ts': `import { tbr } from 'ts-bin-rpc/vite';
+export default { plugins: [tbr()] };
+`,
 };
 for (const [name, text] of Object.entries(files)) {
   fs.mkdirSync(path.dirname(path.join(dir, name)), { recursive: true });
@@ -78,7 +88,7 @@ for (const [name, text] of Object.entries(files)) {
 }
 
 run('npm', ['install', '--no-audit', '--no-fund', tarball]);
-run('npm', ['install', '-D', '--no-audit', '--no-fund', `typescript@${ts}`, '@types/node@22']);
+run('npm', ['install', '-D', '--no-audit', '--no-fund', `typescript@${ts}`, '@types/node@22', `vite@${pkg.devDependencies.vite}`]);
 run('npx', ['tbr', 'generate']);
 run('npx', ['tbr', 'check']);
 run('npx', ['tsc', '-p', '.']);
@@ -87,5 +97,10 @@ const expected = { user: { id: 1, name: 'Ада', role: 'admin', createdAt: '197
 if (JSON.stringify(result) !== JSON.stringify(expected)) throw new Error(`unexpected result: ${JSON.stringify(result)}`);
 const decoded = JSON.parse(run('npx', ['tbr', 'decode', 'user.bin', '--proc', 'user.get']));
 if (decoded.name !== 'Ада') throw new Error(`tbr decode printed ${JSON.stringify(decoded)}`);
+// the plugin generates the codecs again before the build
+fs.rmSync(path.join(dir, 'src/tbr.gen.ts'));
+run('npx', ['vite', 'build', '--logLevel', 'warn']);
+const assets = fs.readdirSync(path.join(dir, 'dist/assets'));
+if (!fs.existsSync(path.join(dir, 'src/tbr.gen.ts')) || !assets.some((f) => f.endsWith('.js'))) throw new Error(`vite build: ${assets.join(', ')}`);
 fs.rmSync(dir, { recursive: true, force: true });
 console.log(`pack smoke: ok (${path.basename(tarball)})`);

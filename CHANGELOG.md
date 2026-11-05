@@ -12,6 +12,10 @@ From 0.2.0, a change to the wire format or another breaking change bumps the min
 
 ## Unreleased
 
+- Vite plugin: `ts-bin-rpc/vite` runs `tbr generate` before `vite build`, and in the dev server at
+  start and on every save. Errors show in the terminal and in the browser's error overlay.
+  `vite` is an optional peer dependency.
+
 - Hovers show numeric brands by name: `u32 & Min<1>` reads `number & Wire<"u32"> & Min<1>` instead
   of `number & { readonly [tbr]?: "u32" } & Min<1>`. Types only; no changes to generated code.
 

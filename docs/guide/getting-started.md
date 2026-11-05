@@ -106,6 +106,9 @@ While you work, keep the watcher running:
 pnpm exec tbr generate --watch --router src/router.ts
 ```
 
+In a Vite app, the [Vite plugin](./cli.md#vite-plugin) does this instead, and generates before
+`vite build`.
+
 ## 4. Serve
 
 `createHandler` returns a Fetch API handler: `(Request) => Promise<Response>`.
@@ -172,5 +175,5 @@ like `StaleCodegen_RunTbrGenerate<"user.get output">`.
 ## A full example
 
 [`examples/dashboard`](https://github.com/Tom4ikss/ts-bin-RPC/tree/main/examples/dashboard) is a
-metrics dashboard built with Vite, React and uPlot. Its Vite plugin serves the router and runs
-the watcher, and the charts take typed-array columns straight from responses.
+metrics dashboard built with Vite, React and uPlot. It generates with the Vite plugin, serves the
+router from the dev server, and the charts take typed-array columns straight from responses.

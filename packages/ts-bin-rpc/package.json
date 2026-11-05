@@ -10,7 +10,8 @@
     "zero-copy",
     "typed-array",
     "codegen",
-    "cli"
+    "cli",
+    "vite-plugin"
   ],
   "type": "module",
   "sideEffects": false,
@@ -42,6 +43,10 @@
     "./tanstack": {
       "types": "./src/tanstack.ts",
       "default": "./src/tanstack.ts"
+    },
+    "./vite": {
+      "types": "./src/vite.ts",
+      "default": "./src/vite.ts"
     }
   },
   "files": [
@@ -90,6 +95,10 @@
       "./tanstack": {
         "types": "./dist/tanstack.d.ts",
         "default": "./dist/tanstack.js"
+      },
+      "./vite": {
+        "types": "./dist/cli/vite.d.ts",
+        "default": "./dist/cli/vite.js"
       }
     },
     "bin": {
@@ -103,7 +112,8 @@
   },
   "peerDependencies": {
     "@tanstack/query-core": "^5.62.0",
-    "typescript": "7.1.0-beta"
+    "typescript": "7.1.0-beta",
+    "vite": ">=6"
   },
   "peerDependenciesMeta": {
     "@tanstack/query-core": {
@@ -111,11 +121,15 @@
     },
     "typescript": {
       "optional": true
+    },
+    "vite": {
+      "optional": true
     }
   },
   "devDependencies": {
     "@tanstack/query-core": "^5.106.1",
     "@types/node": "22",
-    "typescript": "7.1.0-beta"
+    "typescript": "7.1.0-beta",
+    "vite": "^8.3.5"
   }
 }

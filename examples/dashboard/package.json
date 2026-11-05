@@ -4,8 +4,8 @@
   "type": "module",
   "scripts": {
     "gen": "tbr generate --router src/server/router.ts",
-    "dev": "tbr generate --router src/server/router.ts && vite",
-    "build": "tbr generate --router src/server/router.ts && vite build",
+    "dev": "vite",
+    "build": "vite build",
     "start": "node --experimental-strip-types --no-warnings src/server/main.ts",
     "typecheck": "tbr generate --router src/server/router.ts && tsc -p tsconfig.json"
   },

@@ -51,9 +51,42 @@ regeneration takes 10–20 ms. A type that cannot be sent is reported, and watch
 stops it. The watcher compares types with the lockfile as it was when watching started; see
 [watch mode](./evolution.md#watch-mode) for why.
 
-In a Vite app you can start it from a plugin; the
-[dashboard example](https://github.com/Tom4ikss/ts-bin-RPC/blob/main/examples/dashboard/vite.config.ts)
-does.
+In a Vite app, the [Vite plugin](#vite-plugin) runs the watcher for you.
+
+## Vite plugin
+
+`ts-bin-rpc/vite` runs `tbr generate` inside Vite: once before `vite build`, and in the dev server
+at start and on every save, as `--watch` does. Install `vite` (6 or later) next to `ts-bin-rpc`.
+
+```ts
+// vite.config.ts
+import { defineConfig } from 'vite';
+import { tbr } from 'ts-bin-rpc/vite';
+
+export default defineConfig({
+  plugins: [tbr({ router: 'src/server/router.ts' })],
+});
+```
+
+| Option | Default | |
+| --- | --- | --- |
+| `router` | `src/router.ts#appRouter` | the router, `file#export` |
+| `project` | `tsconfig.json` | the TypeScript project, relative to Vite's root |
+| `lock` | `tbr.lock.json` | the lockfile |
+| `out` | `tbr.gen.ts` next to the router | the generated codecs |
+| `allowBreaking` | `false` | accept breaking changes |
+
+`router`, `lock` and `out` are relative to the tsconfig's directory, as on the command line.
+
+A type that cannot be sent fails `vite build`. In the dev server it shows in the terminal and in
+the browser's error overlay, and the last good codecs stay on disk; the overlay goes away with the
+next save that generates. Breaking changes are not written unless `allowBreaking` is set, the same
+as without `--allow-breaking`. Keep `tbr check` in CI: the plugin writes the lockfile, it does not
+guard it.
+
+The plugin only generates. To serve the router from the dev server, see the
+[dashboard example](https://github.com/Tom4ikss/ts-bin-RPC/blob/main/examples/dashboard/vite.config.ts),
+which hands `/rpc/*` to the handler.
 
 ## `tbr check`
 
