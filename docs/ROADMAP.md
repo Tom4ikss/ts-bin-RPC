@@ -354,6 +354,7 @@ JSDoc-тега, вход — бинарный base64url (читаемые пар
    Бизнес-валидация (бывший `extendValidation`) — сделана: правила в типах, `Check`, форматы и `refine`.
 4. Vite-плагин: кодоген в dev-сервере, шаг генерации не виден.
 5. ~~`Map`, `Record`, кортежи~~ — сделано: синтетические tables `{ keys, values }` и `{ 0, 1 }` ([руководство](guide/types.md#maps-records-and-tuples)). Дальше: struct-раскладка, квантование (`f32` → `i16` с масштабом).
-6. Эксперимент с адаптерами к tRPC и oRPC.
-7. Бенчи против Arrow JS / Flechette и Colyseus, импорт и экспорт Arrow IPC.
-8. Батчинг, WebTransport. ~~GET-кэширование~~ — сделано в 0.2.0: `query()` ([DESIGN §16](DESIGN.md#16-запросы-и-http-кэш)).
+6. Валидатор входа на клиенте: правила и `Check` из типов как Standard Schema из сгенерированного кода, чтобы формы (TanStack Form, react-hook-form) показывали ошибку до запроса тем же текстом, что сервер.
+7. Эксперимент с адаптерами к tRPC и oRPC.
+8. Бенчи против Arrow JS / Flechette и Colyseus, импорт и экспорт Arrow IPC.
+9. Батчинг, WebTransport. ~~GET-кэширование~~ — сделано в 0.2.0: `query()` ([DESIGN §16](DESIGN.md#16-запросы-и-http-кэш)).
