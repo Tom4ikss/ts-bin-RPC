@@ -11,15 +11,15 @@ A Node HTTP server on 127.0.0.1 sends ticks `{ t: f64, price: f32, size: u32, si
 
 | Load | Transport | Wall | Delay p50 | Delay p99 | Page main thread | Server CPU | Bytes |
 |---|---|---|---|---|---|---|---|
-| 1 000 ticks/s for 5 s | ts-bin-rpc, window 16 ms (default) | 5002 ms | 8.77 ms | 16.6 ms | 26.7 ms | 161 ms | 106 KB |
-| 1 000 ticks/s for 5 s | ts-bin-rpc, window 0 | 5001 ms | 0.15 ms | 0.19 ms | 194 ms | 422 ms | 354 KB |
-| 1 000 ticks/s for 5 s | NDJSON over fetch | 5002 ms | 0.16 ms | 0.20 ms | 226 ms | 376 ms | 334 KB |
-| 1 000 ticks/s for 5 s | SSE, EventSource | 5001 ms | 0.14 ms | 0.18 ms | 163 ms | 423 ms | 368 KB |
-| 20 000 ticks/s for 3 s | ts-bin-rpc, window 16 ms (default) | 3002 ms | 8.86 ms | 16.8 ms | 69.9 ms | 69.3 ms | 1010 KB |
-| 20 000 ticks/s for 3 s | ts-bin-rpc, window 0 | 3002 ms | 0.16 ms | 0.22 ms | 185 ms | 293 ms | 1.2 MB |
-| 20 000 ticks/s for 3 s | NDJSON over fetch | 3003 ms | 0.19 ms | 0.24 ms | 253 ms | 326 ms | 3.7 MB |
-| 20 000 ticks/s for 3 s | SSE, EventSource | 3002 ms | 0.24 ms | 0.89 ms | 441 ms | 919 ms | 4.1 MB |
-| 200 000 ticks, as fast as possible | ts-bin-rpc, window 16 ms (default) | 111 ms | 39.6 ms | 52.9 ms | 138 ms | 60.6 ms | 3.3 MB |
-| 200 000 ticks, as fast as possible | ts-bin-rpc, window 0 | 99.3 ms | 32.7 ms | 51.8 ms | 128 ms | 49.0 ms | 3.3 MB |
-| 200 000 ticks, as fast as possible | NDJSON over fetch | 197 ms | 27.4 ms | 47.8 ms | 260 ms | 152 ms | 12.2 MB |
-| 200 000 ticks, as fast as possible | SSE, EventSource | 2769 ms | 1204 ms | 2487 ms | 1732 ms | 1806 ms | 13.6 MB |
+| 1 000 ticks/s for 5 s | ts-bin-rpc, window 16 ms (default) | 5002 ms | 8.79 ms | 16.7 ms | 33.6 ms | 167 ms | 106 KB |
+| 1 000 ticks/s for 5 s | ts-bin-rpc, window 0 | 5002 ms | 0.14 ms | 0.19 ms | 204 ms | 440 ms | 372 KB |
+| 1 000 ticks/s for 5 s | NDJSON over fetch | 5001 ms | 0.15 ms | 0.20 ms | 244 ms | 398 ms | 336 KB |
+| 1 000 ticks/s for 5 s | SSE, EventSource | 5001 ms | 0.13 ms | 0.17 ms | 173 ms | 442 ms | 370 KB |
+| 20 000 ticks/s for 3 s | ts-bin-rpc, window 16 ms (default) | 3002 ms | 8.86 ms | 16.8 ms | 64.8 ms | 70.0 ms | 1010 KB |
+| 20 000 ticks/s for 3 s | ts-bin-rpc, window 0 | 3002 ms | 0.16 ms | 0.20 ms | 185 ms | 291 ms | 1.2 MB |
+| 20 000 ticks/s for 3 s | NDJSON over fetch | 3003 ms | 0.18 ms | 0.24 ms | 254 ms | 313 ms | 3.7 MB |
+| 20 000 ticks/s for 3 s | SSE, EventSource | 3002 ms | 0.24 ms | 1.09 ms | 449 ms | 924 ms | 4.1 MB |
+| 200 000 ticks, as fast as possible | ts-bin-rpc, window 16 ms (default) | 99.2 ms | 32.4 ms | 51.7 ms | 127 ms | 47.0 ms | 3.3 MB |
+| 200 000 ticks, as fast as possible | ts-bin-rpc, window 0 | 105 ms | 32.8 ms | 53.1 ms | 132 ms | 52.5 ms | 3.3 MB |
+| 200 000 ticks, as fast as possible | NDJSON over fetch | 200 ms | 28.4 ms | 48.3 ms | 262 ms | 155 ms | 12.2 MB |
+| 200 000 ticks, as fast as possible | SSE, EventSource | 2855 ms | 1282 ms | 2560 ms | 1814 ms | 1956 ms | 13.6 MB |
