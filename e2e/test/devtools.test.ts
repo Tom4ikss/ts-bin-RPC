@@ -76,6 +76,24 @@ describe('hook in process', () => {
     expect(hook.detail(s.id, 'batch', 0)).toMatchObject({ $tbr: 'error' });
   });
 
+  it('tells snapshots from deltas of live state and decodes each with its codec', async () => {
+    const id = 77 as never;
+    const sub = api.stream.units.subscribe();
+    for (let i = 0; i < 200 && !sub.state.size; i++) await new Promise((r) => setTimeout(r, 5));
+    await api.stream.move({ id, x: 1, y: 2 });
+    for (let i = 0; i < 200 && !sub.state.has(id); i++) await new Promise((r) => setTimeout(r, 5));
+    await api.stream.move({ id, x: 3, y: 2 });
+    for (let i = 0; i < 200 && sub.state.get(id)?.x !== 3; i++) await new Promise((r) => setTimeout(r, 5));
+    sub.stop();
+    await api.stream.kill({ id });
+    const s = last('stream.units');
+    expect(s).toMatchObject({ kind: 'stream', live: 'id', state: 'stopped' });
+    const batches = hook.detail(s.id, 'batches') as { index: number; frame: string; rows: number }[];
+    expect(batches.map((b) => b.frame)).toEqual(['snapshot', 'delta', 'delta']);
+    expect(batches[0].rows).toBeGreaterThanOrEqual(3);
+    expect(hook.detail(s.id, 'batch', batches[2].index)).toEqual({ patch: [{ id: 77, x: 3 }] });
+  });
+
   it('tells a failed stream from a stopped one', async () => {
     await new Promise<void>((resolve) => api.stream.failing.subscribe({ error: () => resolve() }));
     expect(last('stream.failing')).toMatchObject({ state: 'failed', error: { code: 'UPSTREAM', data: { retryIn: 5 } } });

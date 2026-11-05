@@ -7,5 +7,5 @@
     "allowImportingTsExtensions": true,
     "skipLibCheck": true
   },
-  "files": ["s1.ts", "s2.ts", "s3.ts"]
+  "files": ["s1.ts", "s2.ts", "s3.ts", "live1.ts", "live2.ts", "live-bad.ts"]
 }

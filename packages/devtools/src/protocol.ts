@@ -31,6 +31,8 @@ export interface Summary {
   state?: 'open' | 'ended' | 'stopped' | 'failed';
   batches?: number;
   rows?: number;
+  /** Live state: the key of its rows. Its batches are snapshots and deltas. */
+  live?: string;
 }
 
 export interface ListResult {
@@ -44,8 +46,11 @@ export interface BatchInfo {
   index: number;
   /** Since the subscription started. */
   ms: number;
+  /** Rows; of a delta, rows set, patched and removed. */
   rows: number;
   bytes: number;
+  /** Live state: what the frame is. */
+  frame?: 'snapshot' | 'delta';
 }
 
 /** `$tbr` kinds of `serialize`. */

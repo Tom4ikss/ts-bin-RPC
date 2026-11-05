@@ -36,6 +36,9 @@ const sub = api.ticks.subscribe({ symbol: 'BTC' }, (tick) => draw(tick.price));
 sub.stop();
 ```
 
+For rows by key that change over time, where each client keeps a copy of all of them, see
+[Live state](./live.md): it sends the fields that changed instead of whole rows.
+
 ## Server
 
 ### `stream()`

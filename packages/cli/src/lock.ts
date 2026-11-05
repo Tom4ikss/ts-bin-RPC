@@ -84,6 +84,7 @@ function usage(schema: Schema) {
   for (const p of schema.procedures) {
     walk(p.input, input);
     walk(p.output, output);
+    if (p.live) walk({ kind: 'object', name: p.live.delta }, output);
   }
   return { input, output };
 }
@@ -100,7 +101,7 @@ export function updateLock(prev: Lock, schema: Schema): { lock: Lock; changes: C
   // Procedures
   for (const p of schema.procedures) {
     const out = p.output ? signature(p.output) : 'void';
-    const sig = { input: p.input ? signature(p.input) + (p.inputOptional ? '?' : '') : 'void', output: p.stream ? `stream ${out}` : out };
+    const sig = { input: p.input ? signature(p.input) + (p.inputOptional ? '?' : '') : 'void', output: p.live ? `live ${out} by ${p.live.key}` : p.stream ? `stream ${out}` : out };
     next.procedures[p.path] = sig;
     const old = prev.procedures[p.path];
     if (!old) add('safe', p.path, 'procedure added', p.location);
@@ -116,12 +117,14 @@ export function updateLock(prev: Lock, schema: Schema): { lock: Lock; changes: C
   // Objects
   for (const name of Object.keys(schema.objects).sort()) {
     const def = schema.objects[name];
+    // a patch is its row with fields made optional: it has the row's IDs and no entry of its own
+    if (def.synthetic === 'patch') continue;
     const old = prev.objects[name];
     const fields: Record<string, LockField> = {};
     if (!old) {
       def.fields.forEach((f, id) => (fields[f.name] = { id, type: fieldSignature(f) }));
       next.objects[name] = { fields };
-      // a map or tuple is reported where it is used: its object is named after its type and never changes
+      // a map, a tuple or a delta is reported where it is used: its object is named after its type
       if (!def.synthetic) add('safe', name, 'type added', def.location);
       continue;
     }

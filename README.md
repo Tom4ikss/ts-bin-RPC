@@ -40,6 +40,16 @@ ticks: async (input: { symbol: string }) => stream<Tick>((emit) => feed.on(input
 const sub = api.ticks.subscribe({ symbol: 'BTC' }, { batch: (b) => chart.append(b.columns.price!) });
 ```
 
+Live state keeps rows by key in sync on every client: a snapshot, then only the fields that
+changed ([guide](docs/guide/live.md)).
+
+```ts
+const units = live<Unit>().by('id');
+units.update(1, { x: 5 }); // subscribers get { id: 1, x: 5 }
+
+api.units.subscribe((state, { set, removed }) => redraw(state, set, removed));
+```
+
 With TanStack Query, `ts-bin-rpc/tanstack` gives options for every procedure, with typed keys and
 invalidation by path ([guide](docs/guide/tanstack-query.md)):
 

@@ -2,6 +2,7 @@
 // procedure table that generated code exports.
 import { decodeError, type Decoder, type Encoder, type SchemaDesc, type TypeDesc } from './runtime.ts';
 import type { subscribe } from './stream-client.ts';
+import type { subscribeLive } from './live-client.ts';
 import type { CallOptions } from './router.ts';
 
 export const CONTENT_TYPE = 'application/vnd.tbr';
@@ -52,8 +53,12 @@ interface Entry<In, Out> {
   output: Out | null;
   /** A streaming procedure: output is the codec of a batch, `T[]`. */
   stream?: boolean;
+  /** Of a live procedure (also a stream): the key field. `output` is the codec of a snapshot, `T[]`. */
+  live?: string;
+  /** Of a live procedure: the codec of a change, `{ set?: T[]; patch?: Patch<T>[]; removed?: K[] }`. */
+  delta?: Out;
   /** Of a streaming procedure in the client table: opens subscriptions. */
-  subscribe?: typeof subscribe;
+  subscribe?: typeof subscribe | typeof subscribeLive;
   /**
    * In the server table: whether the procedure takes `ctx`. Without it the handler does not call
    * `context`. Absent in code generated before 0.1.0-alpha.3: the handler always calls it.
@@ -165,7 +170,8 @@ export interface DevtoolsHook {
   stream(path: string, input: unknown, proc: ClientEntry): DevtoolsTap | undefined;
 }
 export interface DevtoolsTap {
-  batch(payload: Uint8Array): void;
+  /** A data frame; for live state, a snapshot (`kind` 5) or a delta (6), read with `proc.delta`. */
+  batch(payload: Uint8Array, kind?: number): void;
   /** `stopped`: the client stopped the subscription. */
   end(error: RpcError | undefined, stopped: boolean): void;
 }

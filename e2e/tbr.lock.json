@@ -19,10 +19,14 @@
     "stream.countdown": { "input": "object stream.countdown:input", "output": "stream object stream.countdown:row" },
     "stream.failing": { "input": "void", "output": "stream object Tick" },
     "stream.forever": { "input": "void", "output": "stream object Tick" },
+    "stream.kill": { "input": "object stream.kill:input", "output": "object stream.kill:output" },
+    "stream.move": { "input": "object stream.move:input", "output": "void" },
     "stream.publish": { "input": "object stream.publish:input", "output": "object stream.publish:output" },
     "stream.quotes": { "input": "object stream.quotes:input", "output": "stream object Tick" },
     "stream.stats": { "input": "void", "output": "object stream.stats:output" },
     "stream.ticks": { "input": "object stream.ticks:input", "output": "stream object Tick" },
+    "stream.units": { "input": "void", "output": "live object Unit by id" },
+    "stream.unitsSmall": { "input": "void", "output": "live object Unit by id" },
     "user.get": { "input": "object user.get:input", "output": "object User" },
     "user.list": { "input": "object user.list:input?", "output": "object User[]" },
     "user.rename": { "input": "object user.rename:input", "output": "void" },
@@ -44,12 +48,31 @@
         "user": { "id": 2, "type": "string" }
       }
     },
+    "LiveDelta<Unit, \"id\">": {
+      "fields": {
+        "set": { "id": 0, "type": "object Unit[] | undefined" },
+        "patch": { "id": 1, "type": "object Patch<Unit, \"id\">[] | undefined" },
+        "removed": { "id": 2, "type": "u32[] | undefined" }
+      }
+    },
     "Tick": {
       "fields": {
         "seq": { "id": 0, "type": "u32" },
         "price": { "id": 1, "type": "f32" },
         "side": { "id": 2, "type": "enum Tick.side" },
         "venue": { "id": 3, "type": "string | undefined" }
+      }
+    },
+    "Unit": {
+      "fields": {
+        "id": { "id": 0, "type": "u32" },
+        "name": { "id": 1, "type": "string" },
+        "x": { "id": 2, "type": "f64" },
+        "y": { "id": 3, "type": "f64" },
+        "hp": { "id": 4, "type": "u32" },
+        "kind": { "id": 5, "type": "const \"unit\"" },
+        "target": { "id": 6, "type": "string | null | undefined" },
+        "seenAt": { "id": 7, "type": "timestamp | undefined" }
       }
     },
     "User": {
@@ -163,6 +186,23 @@
     "stream.countdown:row": {
       "fields": {
         "left": { "id": 0, "type": "u32" }
+      }
+    },
+    "stream.kill:input": {
+      "fields": {
+        "id": { "id": 0, "type": "u32" }
+      }
+    },
+    "stream.kill:output": {
+      "fields": {
+        "removed": { "id": 0, "type": "bool" }
+      }
+    },
+    "stream.move:input": {
+      "fields": {
+        "id": { "id": 0, "type": "u32" },
+        "x": { "id": 1, "type": "f64" },
+        "y": { "id": 2, "type": "f64" }
       }
     },
     "stream.publish:input": {

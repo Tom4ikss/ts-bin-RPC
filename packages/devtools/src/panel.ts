@@ -94,7 +94,7 @@ function renderRow(s: Summary): HTMLTableRowElement {
   }
   tr.replaceChildren(
     name,
-    cell(s.kind === 'stream' ? 'stream' : s.method!, 'kind'),
+    cell(s.kind === 'stream' ? (s.live ? 'live' : 'stream') : s.method!, 'kind'),
     cell(st.text, st.bad ? 'status bad' : 'status'),
     cell(s.kind === 'stream' ? bytes(s.received) : `${bytes(s.sent)} → ${bytes(s.received)}`, 'size'),
     cell(duration(s), 'time'),
@@ -322,7 +322,7 @@ async function batchesView(s: Summary, batches: BatchInfo[]): Promise<HTMLElemen
   for (const b of batches) {
     const row = document.createElement('div');
     row.className = b.index === batchIndex ? 'batch selected' : 'batch';
-    row.textContent = `#${b.index}  +${ms(b.ms)}  ${b.rows} row${b.rows === 1 ? '' : 's'}  ${bytes(b.bytes)}`;
+    row.textContent = `#${b.index}  +${ms(b.ms)}  ${b.frame ? `${b.frame} ` : ''}${b.rows} row${b.rows === 1 ? '' : 's'}  ${bytes(b.bytes)}`;
     row.onclick = () => {
       batchIndex = b.index;
       // the latest batch again goes back to following
@@ -349,7 +349,7 @@ function renderInfo(s: Summary, into: HTMLElement) {
     dl.append(dt, dd);
   };
   add('Procedure', s.path);
-  add('Kind', s.kind === 'stream' ? 'stream' : s.method === 'GET' ? 'query (GET)' : 'call (POST)');
+  add('Kind', s.kind === 'stream' ? (s.live ? `live state by ${s.live}` : 'stream') : s.method === 'GET' ? 'query (GET)' : 'call (POST)');
   add('Started', `${new Date(s.time).toLocaleDateString()} ${clock(s.time)}`);
   if (s.kind === 'call') {
     add('Status', String(s.status));

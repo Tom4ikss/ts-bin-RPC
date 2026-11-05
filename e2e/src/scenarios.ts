@@ -2,6 +2,7 @@
 // Returns failures instead of throwing, so one run reports everything that broke.
 import { createClient } from 'ts-bin-rpc/client';
 import { CONTENT_TYPE, EncodeError, RpcError, toPlain } from 'ts-bin-rpc';
+import type { LiveChanges, u32 } from 'ts-bin-rpc';
 import { decodeError } from 'ts-bin-rpc/runtime';
 import type { appRouter } from './router.ts';
 import { procedures } from './tbr.gen.ts';
@@ -207,6 +208,27 @@ export async function scenarios(origin: string, fetchFn: typeof fetch = globalTh
     same('channel: every subscriber gets the topic', [a.length, b.length, a[39], b[0]], [40, 40, 'BTC39', 'BTC0']);
     same('channel: other topics stay quiet', c.length, 0);
     subs.forEach((s) => s.stop());
+
+    // Live state: a snapshot, then the changes, applied to a Map by id.
+    const id = (1000 + Math.floor(Math.random() * 1e6)) as u32;
+    const changes: LiveChanges<u32>[] = [];
+    const live = api.stream.units.subscribe((_, c) => changes.push(c));
+    const wait = async (ok: () => boolean) => {
+      for (let i = 0; i < 200 && !ok(); i++) await sleep(10);
+    };
+    await wait(() => changes.length > 0);
+    same('live: a snapshot first', [changes[0]?.snapshot, live.state.size >= 3], [true, true]);
+    await api.stream.move({ id, x: 1.5, y: 2 });
+    await wait(() => live.state.has(id));
+    same('live: a row added', live.state.get(id), { id, name: `u${id}`, x: 1.5, y: 2, hp: 100, kind: 'unit' });
+    const added = live.state.get(id);
+    await api.stream.move({ id, x: 7, y: 2 });
+    await wait(() => live.state.get(id)?.x === 7);
+    same('live: a patch makes a new row', [live.state.get(id), live.state.get(id) === added], [{ ...added, x: 7 }, false]);
+    await api.stream.kill({ id });
+    await wait(() => !live.state.has(id));
+    same('live: a row removed', [live.state.has(id), changes.at(-1)?.removed], [false, [id]]);
+    live.stop();
   }
 
   return report;

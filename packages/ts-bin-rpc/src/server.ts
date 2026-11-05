@@ -6,12 +6,14 @@ import type { AnyProcedure, AnyRouter } from './router.ts';
 import { Validation, type InputValidation, type Validator } from './validate.ts';
 import { STREAM_CONTENT_TYPE } from './frames.ts';
 import { SINKS, Sink, toSource } from './stream-server.ts';
+import { LiveSource } from './live-server.ts';
 import { compose, unwrap } from './middleware.ts';
 import { cacheControl, queryOptions } from './query.ts';
 import type { Encoder } from './runtime.ts';
 
 export { stream, channel, type Channel, type StreamOptions, type BatchOptions, type SubscriberOptions, type StreamControl, type StreamSetup } from './stream-server.ts';
-export type { Stream } from './router.ts';
+export { live, type Live, type LiveOptions } from './live-server.ts';
+export type { Stream, LiveStream } from './router.ts';
 export { use, middleware, around, type Call, type Middleware, type Keep, type WithContext, type ContextMismatch } from './middleware.ts';
 export { query, type QueryOptions, type Queried } from './query.ts';
 export type { Query } from './router.ts';
@@ -171,12 +173,14 @@ export function createHandler<R extends AnyRouter>(router: R, options: HandlerOp
       const result = await route.fn.call(route.self, input, ctx);
       if (proc.stream) {
         const source = toSource(result);
-        if (!source || !proc.output) {
-          onError(new TypeError(`streaming procedure returned ${result === null ? 'null' : typeof result}, not stream(), channel().subscribe() or an async iterable`), { path, request });
+        if (!source || !proc.output || !proc.live !== !(source instanceof LiveSource)) {
+          const expected = proc.live ? 'live().by().subscribe()' : 'stream(), channel().subscribe() or an async iterable';
+          const got = source instanceof LiveSource ? 'live state' : result === null ? 'null' : typeof result;
+          onError(new TypeError(`${proc.live ? 'live' : 'streaming'} procedure returned ${got}, not ${expected}`), { path, request });
           return fail(new RpcError('BAD_OUTPUT', 'the procedure returned a value that does not match its declared type'), {}, proc);
         }
         const sink = new Sink(request.signal);
-        source.start({ encoder: proc.output as Encoder<unknown[]>, sink, report: (e) => onError(e, { path, request }) });
+        source.start({ encoder: proc.output as Encoder<unknown[]>, delta: proc.delta, sink, report: (e) => onError(e, { path, request }) });
         // no-transform and X-Accel-Buffering keep proxies (nginx, CDNs) from buffering the frames.
         const response = new Response(sink.readable, {
           status: 200,

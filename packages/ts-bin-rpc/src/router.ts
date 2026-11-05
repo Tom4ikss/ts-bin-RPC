@@ -93,6 +93,56 @@ export interface StreamProcedure<A extends unknown[], T> {
   subscribe(...args: [...InputArgs<A>, handler?: StreamHandler<T>, options?: CallOptions]): Subscription<T>;
 }
 
+// --------------------------------------------------------------------------------------- live state
+
+export declare const tbrLive: unique symbol;
+
+/**
+ * What a live procedure returns: `live<T>().by(key).subscribe()` on the server. A subscriber gets the
+ * rows keyed by `K`, then the changes to them; the client keeps the state.
+ */
+export interface LiveStream<T, K extends keyof T> {
+  readonly [tbrLive]: { row: T; key: K };
+}
+
+/** Row type of a live result, `never` for others. */
+export type LiveItem<O> = O extends LiveStream<infer T, any> ? T : never;
+/** Key field of a live result. */
+export type LiveKey<O> = O extends LiveStream<any, infer K> ? K : never;
+export type LiveItemOf<R, P extends string> = LiveItem<OutputOf<R, P>>;
+export type LiveKeyOf<R, P extends string> = LiveKey<OutputOf<R, P>>;
+
+/** What changed: keys of rows set or changed, keys of rows removed. After a snapshot, every key is in `set`. */
+export interface LiveChanges<Key> {
+  /** The whole state arrived: on subscribe, and again when the client fell behind. */
+  readonly snapshot: boolean;
+  readonly set: readonly Key[];
+  readonly removed: readonly Key[];
+}
+
+export type LiveHandler<T, K extends keyof T> =
+  | ((state: ReadonlyMap<T[K], T>, changes: LiveChanges<T[K]>) => void)
+  | {
+      /** After the snapshot and after each batch of changes. A changed row is a new object. */
+      change?(state: ReadonlyMap<T[K], T>, changes: LiveChanges<T[K]>): void;
+      /** The stream failed; without this callback the error goes to the console. */
+      error?(error: RpcError): void;
+      /** The server ended the stream. */
+      end?(): void;
+    };
+
+/** A running live subscription. */
+export interface LiveSubscription<T, K extends keyof T> {
+  /** The rows by key, kept up to date; empty until the snapshot arrives. */
+  readonly state: ReadonlyMap<T[K], T>;
+  /** Stops reading and tells the server; no `end` or `error` callback follows. */
+  stop(): void;
+}
+
+export interface LiveProcedure<A extends unknown[], T, K extends keyof T> {
+  subscribe(...args: [...InputArgs<A>, handler?: LiveHandler<T, K>, options?: CallOptions]): LiveSubscription<T, K>;
+}
+
 /** Client arguments for a procedure's parameter list: the input only, `ctx` stays on the server. */
 export type InputArgs<A extends unknown[]> = A extends []
   ? []
@@ -113,9 +163,11 @@ export interface CallOptions {
 }
 
 export type ClientProcedure<F> = F extends (...args: infer A) => infer O
-  ? [StreamItem<Awaited<O>>] extends [never]
+  ? Awaited<O> extends LiveStream<infer T, infer K>
+    ? LiveProcedure<A, T, K>
+    : [StreamItem<Awaited<O>>] extends [never]
     ? (...args: [...InputArgs<A>, options?: CallOptions]) => Promise<Awaited<O>>
-    : StreamProcedure<A, StreamItem<Awaited<O>>>
+      : StreamProcedure<A, StreamItem<Awaited<O>>>
   : never;
 
 export type Client<R> = {

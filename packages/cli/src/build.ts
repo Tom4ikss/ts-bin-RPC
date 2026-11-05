@@ -74,8 +74,34 @@ class Builder {
       if (r && (r.optional || r.nullable)) this.fail(ctx, entry.stream ? 'stream rows cannot be null or undefined' : 'a procedure result cannot be null or undefined; wrap it in an object with an optional field');
       output = r?.type ?? null;
     }
-    const proc: Procedure = { path: entry.path, input, inputOptional, output, ...(entry.stream && { stream: true }), ...(entry.params.length > 1 && { ctx: true }), ...(entry.query && { get: true }), location: entry.location };
+    const live = entry.live !== undefined && output ? this.live(entry.live, output, ctx) : undefined;
+    const proc: Procedure = { path: entry.path, input, inputOptional, output, ...(entry.stream && { stream: true }), ...(live && { live }), ...(entry.params.length > 1 && { ctx: true }), ...(entry.query && { get: true }), location: entry.location };
     this.schema.procedures.push(proc);
+  }
+
+  // `LiveStream<T, K>`: T an object with a required scalar or string field K. Subscribers get
+  // snapshots of `T[]` and deltas of the synthetic `LiveDelta<T, K>`, whose patches are the synthetic
+  // `Patch<T, K>`: T with every field but the key optional, on the field IDs of T.
+  private live(key: string, row: IRType, ctx: Ctx): Procedure['live'] {
+    const def = row.kind === 'object' ? this.schema.objects[row.name] : undefined;
+    if (!def || def.synthetic) { this.fail(ctx, `a live row must be an object type with named fields, got '${display(row)}'`); return undefined; }
+    if (!key) { this.fail(ctx, 'the key of live<T>().by(key) must be one field name'); return undefined; }
+    const kf = def.fields.find((f) => f.name === key);
+    if (!kf) { this.fail(ctx, `live key '${key}' is not a field of ${def.name}`); return undefined; }
+    const kt = kf.type;
+    if (kf.optional || kf.nullable) this.fail(ctx, `live key ${def.name}.${key} must be required and not null`);
+    else if (kt.kind !== 'string' && kt.kind !== 'enum' && !(kt.kind === 'scalar' && kt.scalar !== 'bool' && kt.scalar !== 'timestamp')) this.fail(ctx, `live key ${def.name}.${key} must be a string, a string literal union, a number or a bigint`);
+    else {
+      const fields = def.fields.filter((f) => f.type.kind !== 'const').map((f) => (f.name === key ? f : { ...f, optional: true }));
+      if (fields.length - 1 > MAX_PATCH_FIELDS) { this.fail(ctx, `a live row has at most ${MAX_PATCH_FIELDS} fields besides the key, ${def.name} has ${fields.length - 1}: a patch marks the fields it carries in a ${MAX_PATCH_FIELDS}-bit mask`); return undefined; }
+      const suffix = `${def.name}, ${JSON.stringify(key)}>`;
+      const patch = `Patch<${suffix}`, delta = `LiveDelta<${suffix}`;
+      const list = (name: string, element: IRType): Field => ({ name, type: { kind: 'array', element }, optional: true, nullable: false });
+      this.schema.objects[patch] ??= { name: patch, fields, synthetic: 'patch', base: def.name };
+      this.schema.objects[delta] ??= { name: delta, fields: [list('set', row), list('patch', { kind: 'object', name: patch }), list('removed', kt)], synthetic: 'delta' };
+      return { key, delta };
+    }
+    return undefined;
   }
 
   // A position that may carry `| undefined` and `| null`: fields and procedure input/output.
@@ -332,6 +358,9 @@ class Builder {
     return name;
   }
 }
+
+/** Optional and nullable fields of an object are marked in a 30-bit mask (emit.ts MAX_MASK_BITS). */
+const MAX_PATCH_FIELDS = 30;
 
 const CHECK_NAME = /^[A-Za-z_$][\w$]*$/;
 

@@ -12,6 +12,10 @@ export const FRAME_ERROR = 2;
 export const FRAME_END = 3;
 /** No payload; keeps proxies from closing an idle connection. */
 export const FRAME_HEARTBEAT = 4;
+/** Live state. Payload: every row, a message of `T[]`; the client replaces its state. */
+export const FRAME_SNAPSHOT = 5;
+/** Live state. Payload: a message of the procedure's delta type, `{ set?: T[]; patch?: Patch<T>[]; removed?: K[] }`. */
+export const FRAME_DELTA = 6;
 
 export function encodeFrame(kind: number, payload?: Uint8Array): Uint8Array<ArrayBuffer> {
   const n = payload ? payload.length : 0;
@@ -61,7 +65,7 @@ export class FrameReader {
     const b = this.#buf, at = this.#start;
     const n = (b[at] | (b[at + 1] << 8) | (b[at + 2] << 16) | (b[at + 3] << 24)) >>> 0;
     const kind = b[at + 4];
-    if (kind < FRAME_DATA || kind > FRAME_HEARTBEAT || b[at + 5] | b[at + 6] | b[at + 7]) throw new Error(`malformed stream frame (kind ${kind})`);
+    if (kind < FRAME_DATA || kind > FRAME_DELTA || b[at + 5] | b[at + 6] | b[at + 7]) throw new Error(`malformed stream frame (kind ${kind})`);
     if (n > this.#maxPayload) throw new Error(`stream frame of ${n} bytes is over the limit of ${this.#maxPayload}`);
     const size = 8 + ((n + 7) & ~7);
     if (live < size) return undefined;

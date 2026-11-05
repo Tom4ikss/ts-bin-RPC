@@ -3,7 +3,7 @@
 // to iterators of the subscription.
 import { columnsOf, toPlain, VerifyError, type Limits } from './runtime.ts';
 import { CONTENT_TYPE, codeForStatus, devtoolsHook, readError, RpcError, type ClientEntry, type DevtoolsTap } from './rpc.ts';
-import { FrameReader, FRAME_DATA, FRAME_END, FRAME_ERROR, STREAM_CONTENT_TYPE } from './frames.ts';
+import { FrameReader, FRAME_DATA, FRAME_END, FRAME_ERROR, FRAME_HEARTBEAT, STREAM_CONTENT_TYPE } from './frames.ts';
 import type { CallOptions, DecodeMode, StreamHandler, Subscription } from './router.ts';
 
 export interface StreamEnv {
@@ -72,39 +72,7 @@ export function subscribe(env: StreamEnv, path: string, proc: ClientEntry, args:
   const run = async () => {
     started = true;
     tap = devtoolsHook()?.stream(path, input, proc);
-    let frames = 0, bytes = 0;
-    const t0 = env.debug ? performance.now() : 0;
-    try {
-      const body = proc.input && !(input === undefined && proc.inputOptional) ? proc.input.encode(input) : new Uint8Array(0);
-      const res = await env.fetch(`${env.url}/${path}`, { method: 'POST', body, headers: await env.headers(proc, opts), signal: abort.signal });
-      const type = res.headers.get('content-type')?.split(';')[0].trim();
-      if (type !== STREAM_CONTENT_TYPE || !res.ok || !res.body) {
-        const b = new Uint8Array(await res.arrayBuffer());
-        return finish(type === CONTENT_TYPE ? readError(b, res.status) : new RpcError(res.ok ? 'BAD_RESPONSE' : codeForStatus(res.status), `HTTP ${res.status}: not a ts-bin-rpc stream`, undefined, { status: res.status }));
-      }
-      const reader = res.body.getReader();
-      const fr = new FrameReader(env.limits?.maxBytes ?? 64 * 1024 * 1024);
-      for (;;) {
-        const r = await reader.read();
-        if (over) return void reader.cancel().catch(() => {});
-        if (r.done) return finish(new RpcError('DISCONNECTED', `stream '${path}' closed before the server ended it`, undefined, { status: 0 }));
-        bytes += r.value.length;
-        fr.push(r.value);
-        for (let f = fr.next(); f && !over; f = fr.next()) {
-          frames++;
-          if (f.kind === FRAME_DATA) deliver(f.payload);
-          else if (f.kind === FRAME_ERROR) return void (finish(readError(f.payload)), reader.cancel().catch(() => {}));
-          else if (f.kind === FRAME_END) return void (finish(), reader.cancel().catch(() => {}));
-        }
-      }
-    } catch (e) {
-      if (over) return;
-      if (e instanceof VerifyError || (e instanceof Error && e.message.startsWith('malformed stream frame'))) {
-        finish(new RpcError('BAD_RESPONSE', `invalid stream: ${e.message}`, undefined, { status: 200, cause: e }));
-      } else finish(new RpcError('DISCONNECTED', `stream '${path}' failed: ${e instanceof Error ? e.message : String(e)}`, undefined, { status: 0, cause: e }));
-    } finally {
-      if (env.debug) console.log(`tbr ${path} stream closed after ${(performance.now() - t0).toFixed(0)} ms: ${frames} frames, ${bytes} B`);
-    }
+    await pump(env, path, proc, input, opts, abort, () => over, (kind, payload) => kind === FRAME_DATA && deliver(payload), finish);
   };
 
   const start = () => {
@@ -147,8 +115,58 @@ export function subscribe(env: StreamEnv, path: string, proc: ClientEntry, args:
   return sub;
 }
 
+/**
+ * Opens a stream and hands its data frames to `frame` until it ends, then calls `finish` (with the
+ * error, if it failed). `over` tells it to stop reading. Shared with live subscriptions.
+ */
+export async function pump(
+  env: StreamEnv,
+  path: string,
+  proc: ClientEntry,
+  input: unknown,
+  opts: CallOptions,
+  abort: AbortController,
+  over: () => boolean,
+  frame: (kind: number, payload: Uint8Array) => void,
+  finish: (error?: RpcError) => void,
+): Promise<void> {
+  let frames = 0, bytes = 0;
+  const t0 = env.debug ? performance.now() : 0;
+  try {
+    const body = proc.input && !(input === undefined && proc.inputOptional) ? proc.input.encode(input) : new Uint8Array(0);
+    const res = await env.fetch(`${env.url}/${path}`, { method: 'POST', body, headers: await env.headers(proc, opts), signal: abort.signal });
+    const type = res.headers.get('content-type')?.split(';')[0].trim();
+    if (type !== STREAM_CONTENT_TYPE || !res.ok || !res.body) {
+      const b = new Uint8Array(await res.arrayBuffer());
+      return finish(type === CONTENT_TYPE ? readError(b, res.status) : new RpcError(res.ok ? 'BAD_RESPONSE' : codeForStatus(res.status), `HTTP ${res.status}: not a ts-bin-rpc stream`, undefined, { status: res.status }));
+    }
+    const reader = res.body.getReader();
+    const fr = new FrameReader(env.limits?.maxBytes ?? 64 * 1024 * 1024);
+    for (;;) {
+      const r = await reader.read();
+      if (over()) return void reader.cancel().catch(() => {});
+      if (r.done) return finish(new RpcError('DISCONNECTED', `stream '${path}' closed before the server ended it`, undefined, { status: 0 }));
+      bytes += r.value.length;
+      fr.push(r.value);
+      for (let f = fr.next(); f && !over(); f = fr.next()) {
+        frames++;
+        if (f.kind === FRAME_ERROR) return void (finish(readError(f.payload)), reader.cancel().catch(() => {}));
+        if (f.kind === FRAME_END) return void (finish(), reader.cancel().catch(() => {}));
+        if (f.kind !== FRAME_HEARTBEAT) frame(f.kind, f.payload);
+      }
+    }
+  } catch (e) {
+    if (over()) return;
+    if (e instanceof VerifyError || (e instanceof Error && e.message.startsWith('malformed stream frame'))) {
+      finish(new RpcError('BAD_RESPONSE', `invalid stream: ${e.message}`, undefined, { status: 200, cause: e }));
+    } else finish(new RpcError('DISCONNECTED', `stream '${path}' failed: ${e instanceof Error ? e.message : String(e)}`, undefined, { status: 0, cause: e }));
+  } finally {
+    if (env.debug) console.log(`tbr ${path} stream closed after ${(performance.now() - t0).toFixed(0)} ms: ${frames} frames, ${bytes} B`);
+  }
+}
+
 /** A handler that throws must not break the stream: rethrow outside of it, as event listeners do. */
-function safely(fn: () => void): void {
+export function safely(fn: () => void): void {
   try {
     fn();
   } catch (e) {

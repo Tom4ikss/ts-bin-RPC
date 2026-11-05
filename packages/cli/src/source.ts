@@ -55,6 +55,8 @@ export interface RawProcedure {
   /** For a streaming procedure, the row type. */
   returns: TypeRef;
   stream: boolean;
+  /** `LiveStream<T, K>` (also a stream): the key, `''` when K is not one string literal. */
+  live?: string;
   /** Marked by `query()`: called with GET. */
   query: boolean;
   overloads: number;
@@ -78,6 +80,7 @@ interface AstTypeNode {
 
 const BRAND_PREFIX = '__@tbr@';
 const STREAM_PREFIX = '__@tbrStream@';
+const LIVE_PREFIX = '__@tbrLive@';
 const QUERY_PREFIX = '__@tbrQuery@';
 const RULE_PREFIX = '__@tbrRule@';
 const ITERABLES = new Set(['AsyncIterable', 'AsyncIterableIterator', 'AsyncGenerator', 'ReadableStream']);
@@ -156,15 +159,31 @@ export class Ts71Source implements TypeSource {
         });
         let ret = sig.getReturnType();
         if (ret.isTypeReference() && ret.getSymbol()?.name === 'Promise') ret = this.checker.getTypeArguments(ret)[0];
-        const row = this.streamRow(ret);
         const query = t.getProperties().some((s) => s.name.startsWith(QUERY_PREFIX));
-        out.push({ path: p, params, returns: new TsRef(row ?? ret), stream: row !== undefined, query, overloads: sigs.length, location });
+        const live = this.liveOf(ret);
+        const row = live?.row ?? this.streamRow(ret);
+        out.push({ path: p, params, returns: new TsRef(row ?? ret), stream: row !== undefined, ...(live && { live: live.key }), query, overloads: sigs.length, location });
       } else if (t.isObjectType() && !t.isTypeReference()) {
         this.walkRouter(t, p, out);
       } else {
         out.push({ path: p, problem: `router property must be a function or a namespace object, got '${this.checker.typeToString(t)}'`, location });
       }
     }
+  }
+
+  // `LiveStream<T, K>` from ts-bin-rpc: a phantom symbol-keyed property holds `{ row: T; key: K }`.
+  private liveOf(t: Type): { row: Type; key: string } | undefined {
+    if (!t.isObjectType() && !t.isIntersectionType()) return undefined;
+    const prop = t.getProperties().find((p) => p.name.startsWith(LIVE_PREFIX));
+    if (!prop) return undefined;
+    const holder = this.checker.getTypeOfSymbol(prop);
+    const part = (name: string) => {
+      const s = holder.getProperties().find((p) => p.name === name);
+      return s && this.checker.getTypeOfSymbol(s);
+    };
+    const row = part('row'), key = part('key');
+    if (!row) return undefined;
+    return { row, key: key?.isStringLiteralType() ? (key.value as string) : '' };
   }
 
   // `Stream<T>` from ts-bin-rpc (a phantom symbol-keyed property holds T), or an async iterable or

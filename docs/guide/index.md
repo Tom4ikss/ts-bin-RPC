@@ -50,6 +50,8 @@ chart.setData([m.t, m.cpu]); // typed arrays over the response bytes, nothing co
 - **Streams.** A procedure can return a stream of rows. They arrive in batches over one HTTP
   response, with typed-array columns per batch, and need 2× less main-thread time than NDJSON
   at 20 000 rows/s. See [Streams](./streams.md).
+- **Live state.** Rows by key that every client keeps in sync: a snapshot, then only the fields
+  that changed, encoded once for all subscribers. See [Live state](./live.md).
 - **Small client.** About 10 KB gzip for a real app, of which the runtime is 4.2 KB. The client
   bundle holds only input encoders and output decoders.
 - **Any runtime.** The server is a Fetch API handler (Node, Bun, Deno, Workers). No `eval`, so

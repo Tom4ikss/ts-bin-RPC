@@ -6,10 +6,11 @@ export function printSchema(s: Schema): string {
   const out: string[] = [];
   for (const p of s.procedures) {
     const input = p.input ? `${signature(p.input)}${p.inputOptional ? '?' : ''}` : '()';
-    out.push(`procedure ${p.path}: ${input} -> ${p.stream ? 'stream ' : ''}${p.output ? signature(p.output) : 'void'}`);
+    out.push(`procedure ${p.path}: ${input} -> ${p.live ? 'live ' : p.stream ? 'stream ' : ''}${p.output ? signature(p.output) : 'void'}${p.live ? ` by ${p.live.key}` : ''}`);
   }
   for (const name of Object.keys(s.objects).sort()) {
-    out.push('', `object ${name} {`);
+    const o = s.objects[name];
+    out.push('', `object ${name}${o.base ? ` (fields of ${o.base})` : ''} {`);
     for (const f of s.objects[name].fields) {
       const renamed = f.renamedFrom ? ` (renamed from ${f.renamedFrom})` : '';
       out.push(`  ${f.name}: ${fieldSignature(f)}${renamed}`);

@@ -28,6 +28,17 @@ interface Batch {
   rows: number;
   bytes: number;
   payload: Uint8Array;
+  frame?: 'snapshot' | 'delta';
+}
+
+/** Frame kinds of live state (FORMAT §12). */
+const FRAME_SNAPSHOT = 5;
+const FRAME_DELTA = 6;
+
+interface Delta {
+  set?: unknown[];
+  patch?: unknown[];
+  removed?: unknown[];
 }
 
 interface Entry {
@@ -71,9 +82,9 @@ export function createHook(limits: Partial<Limits> = {}): Hook {
   };
   const touch = (s: Summary) => (s.rev = ++rev);
 
-  const decode = (proc: ClientEntry, bytes: Uint8Array): Json => {
+  const decode = (proc: ClientEntry, bytes: Uint8Array, delta = false): Json => {
     try {
-      return serialize(proc.output!.decode(bytes, { verify: true, rules: false }));
+      return serialize((delta ? proc.delta! : proc.output!).decode(bytes, { verify: true, rules: false }));
     } catch (e) {
       return failure(`cannot decode: ${e instanceof Error ? e.message : String(e)}`);
     }
@@ -116,15 +127,20 @@ export function createHook(limits: Partial<Limits> = {}): Hook {
         state: 'open',
         batches: 0,
         rows: 0,
+        ...(proc.live && { live: proc.live }),
       };
       touch(summary);
       const entry: Entry = { summary, input, proc, start, batches: [], first: 0, kept: 0 };
       add(entry);
       return {
-        batch(payload) {
+        batch(payload, kind) {
           let rows = 0;
+          const frame = kind === FRAME_SNAPSHOT ? 'snapshot' : kind === FRAME_DELTA ? 'delta' : undefined;
           try {
-            rows = (proc.output!.view(payload, { verify: true, rules: false }) as unknown[]).length;
+            if (frame === 'delta') {
+              const d = proc.delta!.view(payload, { verify: true, rules: false }) as Delta;
+              rows = (d.set?.length ?? 0) + (d.patch?.length ?? 0) + (d.removed?.length ?? 0);
+            } else rows = (proc.output!.view(payload, { verify: true, rules: false }) as unknown[]).length;
           } catch {
             // the client reports it as an error
           }
@@ -135,7 +151,7 @@ export function createHook(limits: Partial<Limits> = {}): Hook {
           if (!entries.has(summary.id)) return;
           const b = entry.batches!;
           // a copy: the payload is a window into the reader's buffer, which would stay alive with it
-          b.push({ ms: performance.now() - start, rows, bytes: payload.length, payload: payload.slice() });
+          b.push({ ms: performance.now() - start, rows, bytes: payload.length, payload: payload.slice(), ...(frame && { frame }) });
           entry.kept += payload.length;
           kept += payload.length;
           if (b.length > max.batches) {
@@ -172,10 +188,10 @@ export function createHook(limits: Partial<Limits> = {}): Hook {
       }
       if (part === 'batches') {
         const first = e.first ?? 0;
-        return (e.batches ?? []).map((b, i): BatchInfo => ({ index: first + i, ms: b.ms, rows: b.rows, bytes: b.bytes })) as unknown as Json;
+        return (e.batches ?? []).map((b, i): BatchInfo => ({ index: first + i, ms: b.ms, rows: b.rows, bytes: b.bytes, ...(b.frame && { frame: b.frame }) })) as unknown as Json;
       }
       const b = e.batches?.[index - (e.first ?? 0)];
-      return b ? decode(e.proc, b.payload) : failure(`batch ${index} is no longer kept`);
+      return b ? decode(e.proc, b.payload, b.frame === 'delta') : failure(`batch ${index} is no longer kept`);
     },
 
     clear() {

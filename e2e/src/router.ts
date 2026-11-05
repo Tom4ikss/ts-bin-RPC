@@ -1,6 +1,6 @@
 // Fixture app for end-to-end tests: every kind of procedure the protocol distinguishes.
 import { RpcError, type f32, type Max, type MaxLength, type MinLength, type Pattern, type u32, type u64 } from 'ts-bin-rpc';
-import { around, channel, middleware, query, stream, use, type Call } from 'ts-bin-rpc/server';
+import { around, channel, live, middleware, query, stream, use, type Call } from 'ts-bin-rpc/server';
 
 export interface Ctx {
   user: string | null;
@@ -36,6 +36,28 @@ export interface Tick {
 }
 
 const tick = (seq: number, venue?: string): Tick => ({ seq, price: 100 + seq / 4, side: seq % 2 ? 'sell' : 'buy', ...(venue && { venue }) });
+
+/** A row of the live state. */
+export interface Unit {
+  id: u32;
+  name: string;
+  x: number;
+  y: number;
+  hp: u32;
+  kind: 'unit';
+  target?: string | null;
+  seenAt?: Date;
+}
+
+/** The live state behind `live.units`; tests change it directly. */
+export const units = live<Unit>().by('id', { window: 5 });
+const unit = (id: number, name = `u${id}`): Unit => ({ id, name, x: id, y: -id, hp: 100, kind: 'unit' });
+/** Back to three units and no subscribers' changes pending. */
+export function resetUnits() {
+  units.clear();
+  for (const id of [1, 2, 3]) units.set(unit(id));
+}
+resetUnits();
 
 /** Streams of `forever` that are running and that have run their cleanup: tests watch disconnects. */
 const streams = { running: 0, cleaned: 0 };
@@ -182,6 +204,17 @@ export const appRouter = {
       for (let i = 0; i < input.n; i++) quotes.publish(input.symbol, tick(i, input.symbol));
       return { subscribers };
     },
+    /** Live state: a snapshot of every unit, then the changes. */
+    units: () => units.subscribe(),
+    /** The same state with a small queue: a slow client gets a fresh snapshot instead of an error. */
+    unitsSmall: () => units.subscribe({ maxBuffered: 4096 }),
+    /** Moves a unit, or adds it when there is none with this id. */
+    move: async (input: { id: u32; x: number; y: number }): Promise<void> => {
+      if (units.has(input.id)) units.update(input.id, { x: input.x, y: input.y });
+      else units.set({ ...unit(input.id), x: input.x, y: input.y });
+    },
+    /** Removes a unit. */
+    kill: async (input: { id: u32 }): Promise<{ removed: boolean }> => ({ removed: units.delete(input.id) }),
     /** An async generator streams too. */
     countdown: async function* (input: { from: u32 }) {
       for (let i = input.from; i > 0; i--) yield { left: i as u32 };

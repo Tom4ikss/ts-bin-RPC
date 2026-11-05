@@ -64,8 +64,14 @@ export interface ObjectDef {
   name: string;
   fields: Field[];
   location?: Location;
-  /** The wire form of a map or a tuple type, named after it: `Map<string, User>`, `[u32, string]`. */
-  synthetic?: 'map' | 'tuple';
+  /**
+   * The wire form of a map or a tuple type, named after it: `Map<string, User>`, `[u32, string]`.
+   * Of a live procedure (DESIGN §18): `Patch<Unit, "id">`, the changed fields of a row, and
+   * `LiveDelta<Unit, "id">`, one change of the state.
+   */
+  synthetic?: 'map' | 'tuple' | 'patch' | 'delta';
+  /** Of a patch: the row type, whose lockfile entry owns the field IDs. */
+  base?: string;
 }
 
 export interface EnumDef {
@@ -86,6 +92,8 @@ export interface Procedure {
   output: IRType | null; // null: Promise<void>; for a stream, the row type
   /** Returns `Stream<T>`: output is the row type, and each frame on the wire is a `T[]` message. */
   stream?: boolean;
+  /** Returns `LiveStream<T, K>` (also a stream): the key field and the delta object (DESIGN §18). */
+  live?: { key: string; delta: string };
   /** Takes a second parameter, `ctx`: the server builds the context only for these. */
   ctx?: boolean;
   /** Marked by `query()`: the client calls it with GET. */

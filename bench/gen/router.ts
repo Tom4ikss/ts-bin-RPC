@@ -1,5 +1,6 @@
 // Contract of the generated-code benchmark: the same users as bench/lib/data.mjs.
-import type { f32, u8, u32 } from 'ts-bin-rpc';
+import type { f32, u8, u16, u32 } from 'ts-bin-rpc';
+import type { LiveStream } from 'ts-bin-rpc/server';
 
 export interface User {
   id: u32;
@@ -43,6 +44,18 @@ export interface Tick {
   side: 'buy' | 'sell';
 }
 
+/** An entity of live state, as in bench/node/deltas.mjs. */
+export interface Entity {
+  id: u32;
+  x: f32;
+  y: f32;
+  vx: f32;
+  vy: f32;
+  hp: u16;
+  status: u8;
+  name: string;
+}
+
 export const appRouter = {
   users: async (): Promise<User[]> => [],
   user: async (): Promise<User> => null!,
@@ -51,4 +64,5 @@ export const appRouter = {
   series: async (): Promise<Series> => null!,
   tick: async (): Promise<Tick> => null!,
   ticks: async (): Promise<Tick[]> => [],
+  entities: (): LiveStream<Entity, 'id'> => null!,
 };

@@ -119,6 +119,37 @@ describe('streams', () => {
     expect(r.output).toContain('output changed: object Tick -> stream object Tick');
     expect(r.output).toContain('the contract has breaking changes');
   });
+
+  it('finds LiveStream<T, K>: a delta object in the lockfile, a patch on the IDs of the row', () => {
+    const lock2 = path.join(dir, 'live.lock.json');
+    const live = (step: string) => ['--project', fixture('streams', 'tsconfig.json'), '--router', `${step}.ts`, '--lock', lock2, '--out', gen];
+    expect(tbr('generate', ...live('live1')).code).toBe(0);
+    const locked = JSON.parse(fs.readFileSync(lock2, 'utf8'));
+    expect(locked.procedures).toMatchObject({ units: { output: 'live object Unit by id' }, accounts: { output: 'live object Account by login' } });
+    expect(Object.keys(locked.objects).sort()).toEqual(['Account', 'LiveDelta<Account, "login">', 'LiveDelta<Unit, "id">', 'Unit', 'team:input']);
+    const code = fs.readFileSync(gen, 'utf8');
+    expect(code).toMatch(/"units": \{[^}]*stream: true, live: "id", delta: KC?_\w+, subscribe: subscribeLive/);
+    expect(code).toContain('LiveKeyOf<TbrRouter, "accounts">');
+    expect(code).not.toMatch(/, subscribe[,}]/);
+
+    const r = tbr('check', ...live('live2'));
+    expect(r.code).toBe(1);
+    expect(r.output).toContain("Unit.title: renamed from 'name', keeps id 1");
+    expect(r.output).toContain('Account.balance: type changed: u64 -> u32');
+    expect(r.output).not.toContain('Patch<');
+  });
+
+  it('refuses live rows without a usable key', () => {
+    const r = tbr('generate', '--dry-run', '--project', fixture('streams', 'tsconfig.json'), '--router', 'live-bad.ts');
+    expect(r.code).toBe(1);
+    for (const m of [
+      'optionalKey: live key Unit.hp must be required and not null',
+      'boolKey: live key Unit.alive must be a string, a string literal union, a number or a bigint',
+      'twoKeys: the key of live<T>().by(key) must be one field name',
+      "notObject: a live row must be an object type with named fields, got 'string[]'",
+      'wide: a live row has at most 30 fields besides the key, Wide has 31',
+    ]) expect(r.output).toContain(m);
+  });
 });
 
 describe('stale generated code', () => {

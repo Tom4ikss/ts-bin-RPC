@@ -41,6 +41,8 @@ export type StreamSetup<T> = (emit: (row: T) => void, control: StreamControl) =>
 /** Context the handler gives a stream when a request subscribes to it. */
 export interface Binding {
   encoder: Encoder<unknown[]>;
+  /** Of a live procedure: the encoder of its changes. */
+  delta?: Encoder<unknown>;
   sink: Sink;
   /** Reports server bugs (a row that does not match its type, a setup that throws). */
   report: (error: unknown) => void;
@@ -329,7 +331,7 @@ function encodeRows(b: Pick<Binding, 'encoder' | 'report' | 'sink'>, rows: unkno
   }
 }
 
-function toRpcError(e: unknown, report: (e: unknown) => void): RpcError {
+export function toRpcError(e: unknown, report: (e: unknown) => void): RpcError {
   if (e instanceof RpcError) return e;
   report(e);
   return new RpcError('INTERNAL', 'internal error');
@@ -361,6 +363,7 @@ export class Sink {
   #done = false; // the final frame is queued; close after the queue drains
   #maxBuffered = DEFAULTS.maxBuffered;
   #overflow: 'error' | 'drop-oldest' = 'error';
+  #resync: (() => Uint8Array | undefined) | undefined;
   #wake: (() => void) | undefined;
   #drain: (() => void)[] = [];
   #cleanups: (() => void)[] = [];
@@ -411,6 +414,14 @@ export class Sink {
     (this.#heartbeat as { unref?: () => void } | undefined)?.unref?.();
   }
 
+  /**
+   * Live state: when the queue overflows, it is replaced by a snapshot from `fn`, so that a client
+   * that fell behind catches up instead of failing. `fn` returns undefined after failing the sink.
+   */
+  resync(fn: () => Uint8Array | undefined): void {
+    this.#resync = fn;
+  }
+
   get closed(): boolean {
     return this.#closed || this.#done;
   }
@@ -440,7 +451,16 @@ export class Sink {
     this.#queue.push(frame);
     this.#bytes += frame.length;
     if (this.#bytes > this.#maxBuffered) {
-      if (this.#overflow === 'drop-oldest') {
+      if (this.#resync) {
+        // the snapshot holds everything the queued deltas did
+        this.#queue = [];
+        this.#bytes = 0;
+        const snapshot = this.#resync();
+        if (!snapshot || this.closed) return; // failed: the error frame is queued
+        if (snapshot.length > this.#maxBuffered) return this.fail(new RpcError('SLOW_CONSUMER', `the state is larger than maxBuffered (${this.#maxBuffered} bytes)`));
+        this.#queue.push(snapshot);
+        this.#bytes = snapshot.length;
+      } else if (this.#overflow === 'drop-oldest') {
         while (this.#bytes > this.#maxBuffered && this.#queue.length > 1) this.#bytes -= this.#queue.shift()!.length;
       } else {
         this.#queue = [];
