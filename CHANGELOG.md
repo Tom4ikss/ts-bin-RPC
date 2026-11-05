@@ -10,12 +10,14 @@ From 0.2.0, a change to the wire format or another breaking change bumps the min
 0.3), and patch versions stay compatible: `^0.2.0` never picks up a new format. Versions before
 0.2.0 were prereleases under the `alpha` dist-tag.
 
-## Unreleased
+## 0.3.1
+
+Compatible with 0.3.0: the wire format and the generated code are unchanged, so there is no need to
+run `tbr generate` again.
 
 - Vite plugin: `ts-bin-rpc/vite` runs `tbr generate` before `vite build`, and in the dev server at
   start and on every save. Errors show in the terminal and in the browser's error overlay.
   `vite` is an optional peer dependency.
-
 - Hovers show numeric brands by name: `u32 & Min<1>` reads `number & Wire<"u32"> & Min<1>` instead
   of `number & { readonly [tbr]?: "u32" } & Min<1>`. Types only; no changes to generated code.
 
