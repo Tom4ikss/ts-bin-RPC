@@ -74,24 +74,24 @@ which moves some rows by 10–25%, and a few rows in Firefox change by up to 2×
 launch to the next.
 
 <!-- bench:start -->
-GitHub Actions `ubuntu-latest` (AMD EPYC 7763 64-Core Processor), Chromium 156, Firefox 157, WebKit 27.2, Node 22.23 through Playwright, 2026-11-05, commit [`9c39e84`](https://github.com/Tom4ikss/ts-bin-RPC/commit/9c39e848a1c2ed4681e86a98580035bcf2f7fea6).
+GitHub Actions `ubuntu-latest` (AMD EPYC 9V45 96-Core Processor), Chromium 156, Firefox 157, WebKit 27.2, Node 22.23 through Playwright, 2026-11-05, commit [`58a1c71`](https://github.com/Tom4ikss/ts-bin-RPC/commit/58a1c71d3ae09c29f635e87801c297bf07ddc6c7).
 Full tables, with times: [generated.md](bench/results/ci/generated.md).
 
 | Reading | Node | Chromium | Firefox | WebKit |
 |---|---|---|---|---|
-| 1000 users, every field | 7.8× | 4.3× | 3.9× | 3.9× |
-| 1000 users, 2 of 7 fields | 16× | 9.0× | 7.6× | 6.0× |
-| 1000 users, numeric fields only | 23× | 13× | 16× | 7.5× |
-| 100k points, every value | 152× | 19× | 130× | 20× |
-| 10 users, every field | 2.9× | 1.4× | 1.3× | 1.1× |
-| 500 products with long text | 5.0× | 2.0× | 2.6× | 2.7× |
-| 1 user | 1.3× | **0.95×** | **0.68×** | **0.65×** |
+| 1000 users, every field | 8.3× | 4.5× | 3.3× | 3.7× |
+| 1000 users, 2 of 7 fields | 18× | 9.5× | 6.5× | 5.7× |
+| 1000 users, numeric fields only | 25× | 15× | 13× | 8.2× |
+| 100k points, every value | 154× | 24× | 125× | 24× |
+| 10 users, every field | 2.7× | 1.3× | 1.2× | 1.1× |
+| 500 products with long text | 5.5× | 1.8× | 2.5× | 2.8× |
+| 1 user | 1.2× | **0.90×** | **0.66×** | **0.65×** |
 
 | Encoding | Node | Chromium | Firefox | WebKit |
 |---|---|---|---|---|
-| 1000 users | 2.3× | 2.9× | 1.4× | 1.7× |
-| 500 products with long text | 1.6× | 1.0× | 1.1× | 1.0× |
-| 100k points | 85× | 40× | 41× | 26× |
+| 1000 users | 2.9× | 3.0× | 1.8× | 2.0× |
+| 500 products with long text | 1.8× | 1.0× | 1.3× | 1.0× |
+| 100k points | 47× | 37× | 35× | 21× |
 <!-- bench:end -->
 
 Users have 7 fields: three numbers, a boolean and three strings, 30% of names in Cyrillic. Products
