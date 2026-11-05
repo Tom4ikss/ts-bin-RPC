@@ -2,17 +2,20 @@
 // (`{ id: 1 }` fits `u32`) and stays out of autocomplete; the codegen reads the literal
 // to pick the wire width. Ranges are checked by the encoder, not by the type system.
 export declare const tbr: unique symbol;
+// A named type, so that hovers keep it: `u32 & Min<1>` shows as `number & Wire<"u32"> & Min<1>`,
+// where an inline `{ readonly [tbr]?: 'u32' }` would be spelled out.
+type Wire<W extends string> = { readonly [tbr]?: W };
 
-export type u8 = number & { readonly [tbr]?: 'u8' };
-export type i8 = number & { readonly [tbr]?: 'i8' };
-export type u16 = number & { readonly [tbr]?: 'u16' };
-export type i16 = number & { readonly [tbr]?: 'i16' };
-export type u32 = number & { readonly [tbr]?: 'u32' };
-export type i32 = number & { readonly [tbr]?: 'i32' };
-export type f32 = number & { readonly [tbr]?: 'f32' };
-export type f64 = number & { readonly [tbr]?: 'f64' };
-export type u64 = bigint & { readonly [tbr]?: 'u64' };
-export type i64 = bigint & { readonly [tbr]?: 'i64' };
+export type u8 = number & Wire<'u8'>;
+export type i8 = number & Wire<'i8'>;
+export type u16 = number & Wire<'u16'>;
+export type i16 = number & Wire<'i16'>;
+export type u32 = number & Wire<'u32'>;
+export type i32 = number & Wire<'i32'>;
+export type f32 = number & Wire<'f32'>;
+export type f64 = number & Wire<'f64'>;
+export type u64 = bigint & Wire<'u64'>;
+export type i64 = bigint & Wire<'i64'>;
 
 // Validation rules, checked by the server when it decodes a procedure's input. Like brands, they
 // are optional symbol-keyed properties: any string fits `string & MaxLength<64>` for the type

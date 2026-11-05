@@ -259,7 +259,7 @@ export class Ts71Source implements TypeSource {
     return { rules: out, checks };
   }
 
-  // `number & { readonly [tbr]?: 'u32' }` → brand u32
+  // `number & Wire<'u32'>`, that is `number & { readonly [tbr]?: 'u32' }` → brand u32
   private brandOf(parts: readonly Type[]): Desc | undefined {
     const base = parts.find((p) => p.flags & (TypeFlags.Number | TypeFlags.BigInt));
     const tagObj = parts.find((p) => p.isObjectType());
