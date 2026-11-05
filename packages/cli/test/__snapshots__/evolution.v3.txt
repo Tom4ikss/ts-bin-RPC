@@ -1,8 +1,9 @@
-safe     signUp: procedure added  (v3.ts:30:3)
+safe     signUp: procedure added  (v3.ts:31:3)
 breaking create: procedure removed
-breaking NewUser.password: required field added to a type used in input; old clients do not send it  (v3.ts:22:3)
+breaking NewUser.password: required field added to a type used in input; old clients do not send it  (v3.ts:23:3)
 safe     Shape#dot: type added  (v3.ts:6:81)
 breaking User.age: type changed: u8 -> u16  (v3.ts:13:3)
+breaking User.prefs: type changed: Map<string, string> | undefined -> Map<string, u32> | undefined  (v3.ts:16:3)
 breaking User.fullName: 'name' removed and 'fullName' added with the same type; if this is a rename, add /** @renamedFrom name */ to keep id 1  (v3.ts:10:3)
 breaking Role: value 'guest' added; old clients cannot read it in output
 breaking Shape: variant 'dot' added; old clients cannot read it in output
@@ -16,6 +17,12 @@ breaking Shape: variant 'dot' added; old clients cannot read it in output
     "signUp": { "input": "object NewUser", "output": "object User" }
   },
   "objects": {
+    "Map<string, u32>": {
+      "fields": {
+        "keys": { "id": 0, "type": "string[]" },
+        "values": { "id": 1, "type": "u32[]" }
+      }
+    },
     "NewUser": {
       "fields": {
         "name": { "id": 0, "type": "string" },
@@ -49,8 +56,9 @@ breaking Shape: variant 'dot' added; old clients cannot read it in output
         "age": { "id": 3, "type": "u16" },
         "role": { "id": 4, "type": "enum Role" },
         "nick": { "id": 5, "type": "string | undefined", "retired": true },
-        "bio": { "id": 6, "type": "string | undefined" },
-        "fullName": { "id": 7, "type": "string" }
+        "prefs": { "id": 6, "type": "Map<string, u32> | undefined" },
+        "bio": { "id": 7, "type": "string | undefined" },
+        "fullName": { "id": 8, "type": "string" }
       }
     },
     "get:input": {
@@ -62,6 +70,13 @@ breaking Shape: variant 'dot' added; old clients cannot read it in output
       "fields": {
         "limit": { "id": 0, "type": "u32 | undefined" }
       }
+    },
+    "Map<string, string>": {
+      "fields": {
+        "keys": { "id": 0, "type": "string[]" },
+        "values": { "id": 1, "type": "string[]" }
+      },
+      "retired": true
     }
   },
   "enums": {

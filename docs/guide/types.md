@@ -70,8 +70,9 @@ Interfaces, type aliases of object types and inline object literals all work. An
 a name from where it appears, for example `user.get:input`. The name shows up in errors and in
 the lockfile.
 
-An object may have up to 30 optional or nullable fields. Index signatures and `Record<string, T>`
-are not supported yet.
+An object may have up to 30 optional or nullable fields. An object with an index signature is a
+[record](#maps-records-and-tuples).
+
 
 ## Unions
 
@@ -108,6 +109,36 @@ Arrays of objects (`User[]`) are stored column by column: all `id`s together, th
 and so on. This is why reading two fields of 1000 users is several times faster than reading all
 of them. The client still gets a real `Array` of views.
 
+## Maps, records and tuples
+
+```ts
+interface Inventory {
+  stock: Record<string, u32>; // a plain object
+  byId: Map<u32, Item>;       // a Map
+  corner: [f32, f32];         // an array of two
+  range: [Date, Date | null];
+}
+```
+
+- `Record<string, T>` and `{ [key: string]: T }` arrive as plain objects, `Map<K, V>` and
+  `ReadonlyMap<K, V>` as a `Map`. A record takes only string keys; for numeric keys use a `Map`.
+- Map keys are strings, string literal unions, numbers, bigints or booleans. `Date` and object keys
+  are rejected: a `Map` compares them by identity, so no key would match after a round trip.
+- Values, like array elements, cannot be `null` or `undefined`. An object with an index signature
+  cannot have other fields; move them to a field of their own.
+- `Record<'a' | 'b', T>` is not a map: it is an object with the fields `a` and `b`.
+- Tuples have a fixed length. Elements may be `T | null` or `T | undefined`; optional (`[a?: T]`)
+  and rest (`[...T[]]`) elements are rejected. `readonly [A, B]` works.
+
+On the wire a map is two arrays, its keys and its values. `Record<string, T>` and
+`Map<string, T>` are the same bytes, so a field can change from one to the other without breaking
+clients. The values of a map of objects are stored column by column, like any array of objects.
+
+A view builds the map or the tuple when the field is read first, and keeps it: the keys are read
+then, the values are views. The encoder checks the shape: a record must be a plain object (a `Map`
+passed for one would lose its entries), a tuple must have its length. A `__proto__` key is an own
+property of the record that arrives, not its prototype.
+
 ## Procedures
 
 - **Input:** at most one parameter before the context. It may be optional; it may not be `null`.
@@ -121,7 +152,7 @@ of them. The client still gets a real `Array` of views.
 |---|---|
 | `any`, `unknown`, `never`, `object` | never: declare the fields |
 | functions, classes with methods, `symbol` | never |
-| `Map`, `Set` | planned after alpha |
-| tuples | planned; use an object or an array |
-| `Record<string, T>`, index signatures | planned |
+| `Set` | use an array |
+| optional and rest elements of tuples | use an object or an array |
+| `Record<number, T>`, symbol and template literal keys | use a `Map` or string keys |
 | numeric literal unions (`1 \| 2`) | planned; use string literals or a brand |

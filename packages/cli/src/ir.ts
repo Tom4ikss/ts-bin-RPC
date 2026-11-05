@@ -39,7 +39,17 @@ export type IRType =
   | { kind: 'enum'; name: string; rules?: Rules } //             string literal union, values in Schema.enums
   | { kind: 'array'; element: IRType; rules?: Rules }
   | { kind: 'object'; name: string; rules?: Rules } //           Schema.objects
-  | { kind: 'union'; name: string; rules?: Rules }; //           discriminated union, Schema.unions
+  | { kind: 'union'; name: string; rules?: Rules } //            discriminated union, Schema.unions
+  // On the wire, maps and tuples are the synthetic object `object`: `{ keys: K[]; values: V[] }` and
+  // `{ 0: A; 1: B }`. `Record<string, V>` and `Map<string, V>` have the same wire format.
+  | { kind: 'map'; key: IRType; value: IRType; record: boolean; readonly?: true; object: string; rules?: Rules }
+  | { kind: 'tuple'; elements: TupleElement[]; readonly?: true; object: string; rules?: Rules };
+
+export interface TupleElement {
+  type: IRType;
+  optional: boolean; // `T | undefined`
+  nullable: boolean;
+}
 
 export interface Field {
   name: string;
@@ -54,6 +64,8 @@ export interface ObjectDef {
   name: string;
   fields: Field[];
   location?: Location;
+  /** The wire form of a map or a tuple type, named after it: `Map<string, User>`, `[u32, string]`. */
+  synthetic?: 'map' | 'tuple';
 }
 
 export interface EnumDef {
@@ -100,7 +112,14 @@ export function signature(t: IRType): string {
     case 'array': return `${signature(t.element)}[]`;
     case 'object': return `object ${t.name}`;
     case 'union': return `union ${t.name}`;
+    case 'map': return `Map<${signature(t.key)}, ${signature(t.value)}>`;
+    case 'tuple': return `[${t.elements.map(fieldSignature).join(', ')}]`;
   }
+}
+
+/** The object a map or a tuple is on the wire; any other type as is. */
+export function wire(t: IRType): IRType {
+  return t.kind === 'map' || t.kind === 'tuple' ? { kind: 'object', name: t.object } : t;
 }
 
 export function fieldSignature(f: Pick<Field, 'type' | 'optional' | 'nullable'>): string {

@@ -70,6 +70,50 @@ function show(v: unknown): string {
   return Array.isArray(v) ? 'array' : (v.constructor?.name ?? 'object');
 }
 
+// ------------------------------------------------------------------------------- maps and tuples
+// On the wire a map is `{ keys, values }` and a tuple `{ 0, 1, ... }`: objects of the generated code.
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  if (typeof v !== 'object' || v === null) return false;
+  const proto = Object.getPrototypeOf(v);
+  return proto === Object.prototype || proto === null;
+}
+
+/** A Record is a plain object: a Map or a class instance passed for one would encode as `{}`. */
+export function recIn<V>(v: Readonly<Record<string, V>>): { keys: string[]; values: V[] } {
+  if (!isRecord(v)) bad('Record', v);
+  const keys = Object.keys(v), values = new Array<V>(keys.length);
+  for (let i = 0; i < keys.length; i++) values[i] = v[keys[i]];
+  return { keys, values };
+}
+
+export function mapIn<K, V>(v: ReadonlyMap<K, V>): { keys: K[]; values: V[] } {
+  if (!(v instanceof Map)) bad('Map', v);
+  return { keys: [...v.keys()], values: [...v.values()] };
+}
+
+export function tuIn<T>(v: T, n: number): T {
+  if (!Array.isArray(v) || v.length !== n) bad(`tuple of ${n}`, v);
+  return v;
+}
+
+export function recOut<V>(m: { keys: ArrayLike<string>; values: ArrayLike<V> }): Record<string, V> {
+  const { keys, values } = m, o: Record<string, V> = {};
+  for (let i = 0; i < keys.length; i++) {
+    const k = keys[i];
+    // `o.__proto__ = v` would set the prototype
+    if (k === '__proto__') Object.defineProperty(o, k, { value: values[i], enumerable: true, writable: true, configurable: true });
+    else o[k] = values[i];
+  }
+  return o;
+}
+
+export function mapOut<K, V>(m: { keys: ArrayLike<K>; values: ArrayLike<V> }): Map<K, V> {
+  const { keys, values } = m, o = new Map<K, V>();
+  for (let i = 0; i < keys.length; i++) o.set(keys[i], values[i]);
+  return o;
+}
+
 export function align(x: number, a: number): number {
   const r = x % a;
   return r === 0 ? x : x + a - r;
@@ -1044,6 +1088,8 @@ export type TypeDesc = (
   | { kind: 'array'; element: TypeDesc }
   | { kind: 'object'; name: string }
   | { kind: 'union'; name: string }
+  | { kind: 'map'; key: TypeDesc; value: TypeDesc; record: boolean }
+  | { kind: 'tuple'; elements: readonly { type: TypeDesc; optional: boolean; nullable: boolean }[] }
 ) & {
   /** `Check<'name'>` on the type, run by the server on decoded inputs. */
   checks?: readonly string[];
@@ -1053,6 +1099,8 @@ export interface SchemaDesc {
   objects: Record<string, readonly { name: string; type: TypeDesc; optional?: boolean; nullable?: boolean }[]>;
   enums: Record<string, readonly string[]>;
   unions: Record<string, { discriminant: string; variants: Record<string, string> }>;
+  /** `locateMaps`, when the schema has maps or tuples. */
+  maps?: typeof locateMaps;
 }
 
 export interface Mismatch {
@@ -1128,7 +1176,34 @@ export function locate(schema: SchemaDesc, type: TypeDesc, value: unknown, path 
       }
       return locate(schema, { kind: 'object', name: object }, value, path);
     }
+    case 'map':
+    case 'tuple':
+      return schema.maps ? schema.maps(schema, type, value, path) : null;
   }
+}
+
+/** `locate` for maps and tuples: generated code passes it in SCHEMA only when the schema has them. */
+export function locateMaps(schema: SchemaDesc, type: Extract<TypeDesc, { kind: 'map' | 'tuple' }>, value: unknown, path: string): Mismatch | null {
+  const miss = (expected: string): Mismatch => ({ path, expected, got: value });
+  if (type.kind === 'map') {
+    if (type.record ? !isRecord(value) : !(value instanceof Map)) return miss(type.record ? 'Record' : 'Map');
+    const entries: Iterable<[unknown, unknown]> = type.record ? Object.entries(value as object) : (value as Map<unknown, unknown>);
+    for (const [k, v] of entries) {
+      const at = `${path}[${show(k)}]`;
+      const m = locate(schema, type.key, k, `${at} key`) ?? locate(schema, type.value, v, at);
+      if (m) return m;
+    }
+    return null;
+  }
+  const n = type.elements.length;
+  if (!Array.isArray(value) || value.length !== n) return miss(`tuple of ${n}`);
+  for (let i = 0; i < n; i++) {
+    const e = type.elements[i];
+    if (value[i] == null && (e.optional || e.nullable)) continue;
+    const m = locate(schema, e.type, value[i], `${path}[${i}]`);
+    if (m) return m;
+  }
+  return null;
 }
 
 /** Rebuilds an encoder error with the path of the offending value. */

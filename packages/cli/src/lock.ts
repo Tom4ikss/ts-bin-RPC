@@ -74,6 +74,7 @@ function usage(schema: Schema) {
   const walk = (t: IRType | null, seen: Set<string>) => {
     if (!t) return;
     if (t.kind === 'array') return walk(t.element, seen);
+    if (t.kind === 'map' || t.kind === 'tuple') return walk({ kind: 'object', name: t.object }, seen);
     if (t.kind !== 'object' && t.kind !== 'enum' && t.kind !== 'union') return;
     if (seen.has(t.name)) return;
     seen.add(t.name);
@@ -120,7 +121,8 @@ export function updateLock(prev: Lock, schema: Schema): { lock: Lock; changes: C
     if (!old) {
       def.fields.forEach((f, id) => (fields[f.name] = { id, type: fieldSignature(f) }));
       next.objects[name] = { fields };
-      add('safe', name, 'type added', def.location);
+      // a map or tuple is reported where it is used: its object is named after its type and never changes
+      if (!def.synthetic) add('safe', name, 'type added', def.location);
       continue;
     }
     const dup = duplicateIds(old);

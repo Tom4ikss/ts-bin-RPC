@@ -68,6 +68,24 @@ export interface Everything {
   consts: 'x'[];
   optList?: u8[];
   tree: Node;
+  dict: Record<string, u32>;
+  leafDict: Record<string, Leaf>;
+  byId: Map<u32, Leaf>;
+  byColor: ReadonlyMap<Color, string[]>;
+  byBig: Map<i64, boolean>;
+  deep: Map<string, Record<string, Event>>;
+  optDict?: Record<string, string> | null;
+  pair: [u32, string];
+  triple: readonly [Leaf, Color | null, Date | undefined];
+  pairs: [string, number][];
+  dicts: Record<string, i8>[];
+  grid: Map<u16, [u8, u8]>;
+}
+
+export interface Folder {
+  name: string;
+  files: Record<string, Leaf>;
+  sub: Map<string, Folder>;
 }
 
 export const appRouter = {
@@ -78,4 +96,8 @@ export const appRouter = {
   text: async (input: string): Promise<'ok'> => 'ok',
   bytes: async (input: Uint8Array): Promise<Float32Array> => new Float32Array(),
   color: async (input: Color): Promise<Color[][]> => [],
+  dict: async (input: Record<string, Leaf[]>): Promise<Map<string, Leaf>> => new Map(),
+  folders: async (input: Folder[]): Promise<Folder> => input[0],
+  entries: async (input: [string, u32][]): Promise<[Leaf, u64]> => [{ label: '' }, 0n],
+  sameWire: async (input: Map<string, u32>): Promise<Record<string, u32>> => ({}),
 };

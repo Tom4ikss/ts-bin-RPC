@@ -10,6 +10,7 @@ interface User {
   age: u8;
   role: Role;
   nick?: string;
+  prefs?: Record<string, string>;
 }
 
 interface NewUser {

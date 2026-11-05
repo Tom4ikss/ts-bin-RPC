@@ -13,6 +13,8 @@ interface User {
   age: u8;
   role: Role;
   bio?: string;
+  /** same wire format as the Record of v1 */
+  prefs?: Map<string, string>;
 }
 
 interface NewUser {

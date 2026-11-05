@@ -13,6 +13,7 @@ interface User {
   age: u16;
   role: Role;
   bio?: string;
+  prefs?: Map<string, u32>;
 }
 
 interface NewUser {

@@ -22,7 +22,7 @@ describe.each(fixtures)('%s: round trip', (fixture) => {
       if (p.input) out.set(`${p.path} input (${signature(p.input)})`, { type: p.input, codec: g.mod.procedures[p.path].input! });
       if (p.output) out.set(`${p.path} output (${signature(p.output)})`, { type: p.output, codec: g.mod.procedures[p.path].output! });
     }
-    for (const name of Object.keys(g.schema.objects)) out.set(`type ${name}`, { type: { kind: 'object', name }, codec: g.mod.codecs[name] });
+    for (const name of Object.keys(g.schema.objects).filter((n) => !g.schema.objects[n].synthetic)) out.set(`type ${name}`, { type: { kind: 'object', name }, codec: g.mod.codecs[name] });
     return out;
   };
 

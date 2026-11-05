@@ -2,7 +2,7 @@
 // Everything else consumes the neutral `Desc` shapes below, so a TS 6 backend can be swapped in.
 import fs from 'node:fs';
 import path from 'node:path';
-import { API, TypeFlags, SymbolFlags } from 'typescript/sync';
+import { API, ElementFlags, TypeFlags, SymbolFlags } from 'typescript/sync';
 import { SyntaxKind } from 'typescript/ast';
 import type { Checker, Snapshot, Symbol as TsSymbol, Type } from 'typescript/sync';
 import type { Location } from './ir.ts';
@@ -34,11 +34,20 @@ type DescKind =
   | { k: 'brand'; base: 'number' | 'bigint'; tag: string }
   | { k: 'union'; members: TypeRef[]; alias?: string }
   | { k: 'array'; element: TypeRef }
-  | { k: 'tuple' }
-  | { k: 'builtin'; name: string } // Date, typed arrays, Map, Set, Promise, ...
+  /** `variable`: an optional or rest element, `[a?: T]`, `[...T[]]`. */
+  | { k: 'tuple'; elements: TypeRef[]; readonly: boolean; variable: boolean }
+  | { k: 'builtin'; name: string; args: TypeRef[] } // Date, typed arrays, Map<K, V>, Set, Promise, ...
   | { k: 'function' }
-  | { k: 'object'; name?: string; props: PropDesc[]; indexSignature: boolean; location?: Location }
+  | { k: 'object'; name?: string; props: PropDesc[]; index?: IndexDesc; location?: Location }
   | { k: 'other'; text: string };
+
+/** Index signature of an object; `other` for symbol and template literal keys. */
+export interface IndexDesc {
+  key: 'string' | 'number' | 'other';
+  value: TypeRef;
+  /** More than one index signature. */
+  several: boolean;
+}
 
 export interface RawProcedure {
   path: string;
@@ -210,7 +219,11 @@ export class Ts71Source implements TypeSource {
       const members = (ref as TsRef).members ?? t.getTypes();
       return { k: 'union', members: members.map((m) => new TsRef(m)), alias: t.getAliasSymbol()?.name };
     }
-    if (t.isTupleType()) return { k: 'tuple' };
+    if (t.isTupleType()) {
+      const target = t.getTarget();
+      const elements = this.checker.getTypeArguments(t).slice(0, target.elementFlags.length).map((e) => new TsRef(e));
+      return { k: 'tuple', elements, readonly: target.readonly, variable: target.elementFlags.some((f) => (f & ElementFlags.Required) === 0) };
+    }
     if (t.isTypeReference()) {
       const name = t.getSymbol()?.name;
       if (name === 'Array' || name === 'ReadonlyArray') {
@@ -218,7 +231,7 @@ export class Ts71Source implements TypeSource {
       }
     }
     const symName = t.getSymbol()?.name;
-    if (symName && BUILTINS.has(symName)) return { k: 'builtin', name: symName };
+    if (symName && BUILTINS.has(symName)) return { k: 'builtin', name: symName, args: t.isTypeReference() ? this.checker.getTypeArguments(t).map((a) => new TsRef(a)) : [] };
     if (t.getCallSignatures().length || t.getConstructSignatures().length) return { k: 'function' };
     if (t.isObjectType() || t.isIntersectionType()) return this.describeObject(t);
     return { k: 'other', text: this.checker.typeToString(t) };
@@ -280,8 +293,11 @@ export class Ts71Source implements TypeSource {
         location: this.locate(p),
       };
     });
-    const indexSignature = this.checker.getIndexInfosOfType(t).length > 0;
-    return { k: 'object', name, props, indexSignature, location: sym ? this.locate(sym) : undefined };
+    const infos = this.checker.getIndexInfosOfType(t);
+    const info = infos[0];
+    const key = (k: Type) => (k.flags & TypeFlags.String ? 'string' : k.flags & TypeFlags.Number ? 'number' : 'other') as IndexDesc['key'];
+    const index = info && { key: key(info.keyType), value: new TsRef(info.valueType), several: infos.length > 1 };
+    return { k: 'object', name, props, ...(index && { index }), location: sym ? this.locate(sym) : undefined };
   }
 
   // `role?: Role` has type `"admin" | "user" | undefined`: a fresh union that lost the alias. Regroup its

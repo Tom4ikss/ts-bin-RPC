@@ -1,6 +1,6 @@
 // Builds the Schema IR from a router, collecting every unsupported construct instead of stopping at the first.
 import type { Desc, PropDesc, TypeRef, TypeSource } from './source.ts';
-import { TYPED_ARRAYS, type Field, type IRType, type Location, type ObjectDef, type Procedure, type Rules, type ScalarKind, type Schema } from './ir.ts';
+import { TYPED_ARRAYS, type Field, type IRType, type Location, type ObjectDef, type Procedure, type Rules, type ScalarKind, type Schema, type TupleElement } from './ir.ts';
 import type { RawChecks, RawRules } from './source.ts';
 
 export interface SchemaError {
@@ -22,7 +22,6 @@ const UNSUPPORTED: Partial<Record<Desc['k'], string>> = {
   undefined: "'undefined' alone is not serializable",
   null: "'null' alone is not serializable",
   function: 'functions and methods are not serializable',
-  tuple: 'tuples are not supported yet; use an object or an array',
 };
 
 interface Ctx {
@@ -35,6 +34,8 @@ class Builder {
   schema: Schema = { procedures: [], objects: {}, enums: {}, unions: {} };
   errors: SchemaError[] = [];
   private memo = new Map<number, IRType>();
+  /** Maps and tuples being built: a type that contains itself through them has no name to refer back by. */
+  private building = new Set<number>();
   private owners = new Map<string, { id: number; location?: Location }>();
 
   private src: TypeSource;
@@ -120,18 +121,20 @@ class Builder {
         return { kind: 'scalar', scalar };
       }
       case 'union': {
-        if (d.members.some((m) => isNullish(this.src.describe(m)))) { this.fail(ctx, `'${this.src.text(ref)}': null/undefined are only allowed on fields and procedure inputs, not inside arrays`); return undefined; }
+        if (d.members.some((m) => isNullish(this.src.describe(m)))) { this.fail(ctx, `'${this.src.text(ref)}': null/undefined are only allowed on fields, tuple elements and procedure inputs, not inside arrays or maps`); return undefined; }
         return this.multi(ref, d.members, d.alias, ctx);
       }
       case 'array': {
         const element = this.type(d.element, { ...ctx, path: `${ctx.path}[]`, anon: `${ctx.anon}[]` });
         return element && { kind: 'array', element };
       }
+      case 'tuple': return this.tuple(ref, d, ctx);
       case 'builtin': {
         if (d.name === 'Date') return { kind: 'scalar', scalar: 'timestamp' };
+        if (d.name === 'Map' || d.name === 'ReadonlyMap') return this.map(ref, d.args[0], d.args[1], false, d.name === 'ReadonlyMap', ctx);
         if (d.name === 'Uint8Array') return { kind: 'bytes' };
         if ((TYPED_ARRAYS as readonly string[]).includes(d.name)) return { kind: 'typedArray', array: d.name as (typeof TYPED_ARRAYS)[number] };
-        const hint = d.name.includes('Map') || d.name.includes('Set') ? ' (planned after alpha)' : '';
+        const hint = d.name.includes('Set') ? '; use an array' : d.name.includes('Map') ? '; use a Map or a Record' : '';
         this.fail(ctx, `'${d.name}' is not supported${hint}`);
         return undefined;
       }
@@ -239,8 +242,11 @@ class Builder {
   private object(ref: TypeRef, d: Extract<Desc, { k: 'object' }>, ctx: Ctx): IRType | undefined {
     const known = this.memo.get(ref.id);
     if (known) return known;
-    if (d.indexSignature) {
-      this.fail(ctx, `index signatures and Record<string, T> are not supported yet ('${this.src.text(ref)}')`);
+    if (d.index) {
+      const text = this.src.text(ref);
+      if (d.props.length) this.fail(ctx, `an object with an index signature cannot have other properties ('${text}'); move them to a field of their own`);
+      else if (d.index.several || d.index.key !== 'string') this.fail(ctx, `only string keys are supported in index signatures and Records ('${text}'); use Map<K, V> for numeric keys`);
+      else return this.map(ref, undefined, d.index.value, true, false, ctx);
       return undefined;
     }
     const name = this.claim(d.name ?? ctx.anon, ref.id, ctx, d.location);
@@ -253,6 +259,57 @@ class Builder {
       if (f) def.fields.push(f);
     }
     return t;
+  }
+
+  // `Map<K, V>`, `Record<string, V>`: the synthetic object `{ keys: K[]; values: V[] }` on the wire.
+  private map(ref: TypeRef, keyRef: TypeRef | undefined, valueRef: TypeRef, record: boolean, readonly: boolean, ctx: Ctx): IRType | undefined {
+    if (!this.enter(ref, ctx)) return undefined;
+    try {
+      const key: IRType | undefined = keyRef ? this.type(keyRef, { ...ctx, path: `${ctx.path}[key]`, anon: `${ctx.anon}.key` }) : { kind: 'string' };
+      const value = this.type(valueRef, { ...ctx, path: `${ctx.path}[value]`, anon: `${ctx.anon}.value` });
+      if (!key || !value) return undefined;
+      if ((key.kind !== 'string' && key.kind !== 'enum' && key.kind !== 'scalar') || (key.kind === 'scalar' && key.scalar === 'timestamp')) {
+        this.fail(ctx, `Map keys must be strings, string literal unions, numbers, bigints or booleans ('${this.src.text(ref)}'): other keys are compared by identity`);
+        return undefined;
+      }
+      const object = `Map<${display(key)}, ${display(value)}>`;
+      const field = (name: string, element: IRType): Field => ({ name, type: { kind: 'array', element }, optional: false, nullable: false });
+      this.synthetic(object, 'map', [field('keys', key), field('values', value)]);
+      return { kind: 'map', key, value, record, ...(readonly && { readonly: true as const }), object };
+    } finally {
+      this.building.delete(ref.id);
+    }
+  }
+
+  // `[A, B | null]`: the synthetic object `{ 0: A; 1: B | null }` on the wire.
+  private tuple(ref: TypeRef, d: Extract<Desc, { k: 'tuple' }>, ctx: Ctx): IRType | undefined {
+    if (d.variable) { this.fail(ctx, `optional and rest elements are not supported ('${this.src.text(ref)}'); use an object or an array`); return undefined; }
+    if (!d.elements.length) { this.fail(ctx, 'an empty tuple is not serializable'); return undefined; }
+    if (!this.enter(ref, ctx)) return undefined;
+    try {
+      const elements: TupleElement[] = [];
+      d.elements.forEach((e, i) => {
+        const r = this.slot(e, { ...ctx, path: `${ctx.path}[${i}]`, anon: `${ctx.anon}.${i}` });
+        if (r) elements.push(r);
+      });
+      if (elements.length !== d.elements.length) return undefined;
+      const object = `[${elements.map((e) => `${display(e.type)}${e.nullable ? ' | null' : ''}${e.optional ? ' | undefined' : ''}`).join(', ')}]`;
+      this.synthetic(object, 'tuple', elements.map((e, i) => ({ name: String(i), ...e })));
+      return { kind: 'tuple', elements, ...(d.readonly && { readonly: true as const }), object };
+    } finally {
+      this.building.delete(ref.id);
+    }
+  }
+
+  private enter(ref: TypeRef, ctx: Ctx): boolean {
+    if (!this.building.has(ref.id)) return this.building.add(ref.id), true;
+    this.fail(ctx, `'${this.src.text(ref)}' contains itself through a map or a tuple; put an object in between`);
+    return false;
+  }
+
+  // Named after the type, so the same map or tuple anywhere in the contract is one object.
+  private synthetic(name: string, kind: 'map' | 'tuple', fields: Field[]) {
+    this.schema.objects[name] ??= { name, fields, synthetic: kind };
   }
 
   private field(p: PropDesc, owner: string): Field | undefined {
@@ -277,6 +334,25 @@ class Builder {
 }
 
 const CHECK_NAME = /^[A-Za-z_$][\w$]*$/;
+
+/** Name of a type inside the name of a map or a tuple. Rules are part of it: they verify the elements. */
+function display(t: IRType): string {
+  let s: string;
+  switch (t.kind) {
+    case 'scalar': s = t.scalar; break;
+    case 'string': s = 'string'; break;
+    case 'bytes': s = 'Uint8Array'; break;
+    case 'typedArray': s = t.array; break;
+    case 'const': s = JSON.stringify(t.value); break;
+    case 'array': s = `${display(t.element)}[]`; break;
+    case 'map': case 'tuple': s = t.object; break;
+    default: s = t.name;
+  }
+  if (t.kind === 'const' || !t.rules) return s;
+  const { checks = [], pattern, ...limits } = t.rules;
+  const parts = [s, ...Object.entries(limits).map(([k, v]) => `${ruleName(k)}<${v}>`), ...(pattern === undefined ? [] : [`Pattern<${JSON.stringify(pattern)}>`]), ...checks.map((c) => `Check<'${c}'>`)];
+  return `(${parts.join(' & ')})`;
+}
 
 function ruleName(k: string): string {
   return k[0].toUpperCase() + k.slice(1);

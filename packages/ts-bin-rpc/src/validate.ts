@@ -85,6 +85,8 @@ export class Validation {
         r = true;
       }
       if (t.kind === 'array') r = needs(t.element, `${field}[]`) || r;
+      if (t.kind === 'map') r = [needs(t.key, `${field}[key]`), needs(t.value, `${field}[value]`)].includes(true) || r;
+      if (t.kind === 'tuple') r = t.elements.map((e, i) => needs(e.type, `${field}[${i}]`)).includes(true) || r;
       if (t.kind === 'object' || t.kind === 'union') r = named(t.name) || r;
       return r;
     };
@@ -95,6 +97,17 @@ export class Validation {
       const walk = (t: TypeDesc, v: unknown, field: string, path: string) => {
         if (t.kind === 'array' && Array.isArray(v) && needs(t.element, `${field}[]`)) {
           for (let i = 0; i < v.length; i++) walk(t.element, v[i], `${field}[]`, `${path}[${i}]`);
+        }
+        if (t.kind === 'map' && (needs(t.key, `${field}[key]`) || needs(t.value, `${field}[value]`))) {
+          const entries: Iterable<[unknown, unknown]> = v instanceof Map ? v : Object.entries(v as object);
+          for (const [k, x] of entries) {
+            const at = `${path}[${typeof k === 'string' ? JSON.stringify(k) : String(k)}]`;
+            walk(t.key, k, `${field}[key]`, at);
+            walk(t.value, x, `${field}[value]`, at);
+          }
+        }
+        if (t.kind === 'tuple' && Array.isArray(v)) {
+          t.elements.forEach((e, i) => v[i] != null && walk(e.type, v[i], `${field}[${i}]`, `${path}[${i}]`));
         }
         let object = t.kind === 'object' ? t.name : undefined;
         if (t.kind === 'union') {

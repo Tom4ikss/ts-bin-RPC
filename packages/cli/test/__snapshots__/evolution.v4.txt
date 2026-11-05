@@ -9,6 +9,12 @@ error    User.nick: 'nick' was removed earlier with type string | undefined (id 
     "signUp": { "input": "object NewUser", "output": "object User" }
   },
   "objects": {
+    "Map<string, u32>": {
+      "fields": {
+        "keys": { "id": 0, "type": "string[]" },
+        "values": { "id": 1, "type": "u32[]" }
+      }
+    },
     "NewUser": {
       "fields": {
         "name": { "id": 0, "type": "string" },
@@ -42,8 +48,9 @@ error    User.nick: 'nick' was removed earlier with type string | undefined (id 
         "age": { "id": 3, "type": "u16" },
         "role": { "id": 4, "type": "enum Role" },
         "nick": { "id": 5, "type": "string | undefined", "retired": true },
-        "bio": { "id": 6, "type": "string | undefined" },
-        "fullName": { "id": 7, "type": "string" }
+        "prefs": { "id": 6, "type": "Map<string, u32> | undefined" },
+        "bio": { "id": 7, "type": "string | undefined" },
+        "fullName": { "id": 8, "type": "string" }
       }
     },
     "get:input": {
@@ -55,6 +62,13 @@ error    User.nick: 'nick' was removed earlier with type string | undefined (id 
       "fields": {
         "limit": { "id": 0, "type": "u32 | undefined" }
       }
+    },
+    "Map<string, string>": {
+      "fields": {
+        "keys": { "id": 0, "type": "string[]" },
+        "values": { "id": 1, "type": "string[]" }
+      },
+      "retired": true
     }
   },
   "enums": {

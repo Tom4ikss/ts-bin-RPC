@@ -70,6 +70,18 @@ describe('checks and refine', () => {
     expect(await failure(api.slug('No'))).toMatchObject({ message: 'input is not a valid slug', data: { field: 'input', path: '' } });
   });
 
+  it('run on map keys and values and on tuple elements', async () => {
+    const api = client();
+    const dir = (o: object = {}) => ({ owners: new Map([['ann@example.com', ['a-b']]]), labels: { x: 'ok' }, pair: ['bo@example.com', 2], ...o }) as never;
+    expect(await api.directory(dir())).toBe(1);
+    expect(await failure(api.directory(dir({ owners: new Map([['nope', []]]) })))).toMatchObject({ data: { field: 'Directory.owners[key]', name: 'email', path: 'owners["nope"]' } });
+    expect(await failure(api.directory(dir({ owners: new Map([['ann@example.com', ['a', 'B']]]) })))).toMatchObject({ data: { field: 'Directory.owners[value][]', name: 'slug', path: 'owners["ann@example.com"][1]' } });
+    expect(await failure(api.directory(dir({ labels: { 'a key': 'No' } })))).toMatchObject({ data: { field: 'Directory.labels[value]', name: 'slug', path: 'labels["a key"]' } });
+    expect(await failure(api.directory(dir({ pair: ['bo@example.com', 3] })))).toMatchObject({ data: { field: 'Directory.pair[1]', name: 'even', path: 'pair[1]' } });
+    // rules are verified on the wire, before the checks
+    expect(await failure(api.directory(dir({ labels: { x: 'a'.repeat(9) } })))).toMatchObject({ data: { field: 'Map<string, (string & MaxLength<8> & Check<\'slug\'>)>.values[]', rule: 'maxLength' } });
+  });
+
   it('take a message, run in order, and may be async', async () => {
     const api = client();
     expect(await failure(api.invite(invite({ note: 'you idiot' })))).toMatchObject({ message: 'note: must be polite', data: { name: 'polite', message: 'must be polite' } });
@@ -118,9 +130,9 @@ describe('checks and refine', () => {
   });
 
   it('fail createHandler when a check has no implementation, or refine names no input type', () => {
-    expect(() => handler({})).toThrow("check 'email' on Guest.email has no implementation; pass it in createHandler({ checks })");
+    expect(() => handler({})).toThrow("check 'email' on Directory.owners[key] has no implementation; pass it in createHandler({ checks })");
     const { slug: _, ...noSlug } = checks;
-    expect(() => handler({ checks: noSlug })).toThrow("check 'slug' on Guest.tags[] has no implementation");
+    expect(() => handler({ checks: noSlug })).toThrow("check 'slug' on Directory.owners[value][] has no implementation");
     expect(() => handler({ checks, refine: { ...refine, Guestt: () => true } })).toThrow("refine names 'Guestt', which no procedure input contains");
   });
 

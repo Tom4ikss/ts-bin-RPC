@@ -32,7 +32,7 @@ const typed: Record<string, fc.Arbitrary<unknown>> = {
 const strings = fc.oneof(
   fc.string({ maxLength: 8 }),
   fc.string({ unit: 'binary', maxLength: 8 }),
-  fc.constantFrom('', 'Привет', 'a😀b', 'same', 'same'),
+  fc.constantFrom('', 'Привет', 'a😀b', 'same', 'same', '__proto__', 'constructor', '1'),
 );
 
 // Explicit depth budget: at the last level arrays are empty, nullable fields null and optional ones absent,
@@ -50,6 +50,16 @@ export function arbitraries(schema: Schema, maxDepth = 3) {
       case 'array': return d <= 0 ? fc.constant([]) : fc.array(arb(t.element, d - 1), { maxLength: 4 });
       case 'object': return object(t.name, d);
       case 'union': return fc.oneof(...schema.unions[t.name].variants.map((v) => object(v.object, d)));
+      case 'map': {
+        if (d <= 0) return fc.constant(t.record ? {} : new Map());
+        const entries = fc.uniqueArray(fc.tuple(arb(t.key, d - 1), arb(t.value, d - 1)), { maxLength: 4, selector: (e) => e[0] });
+        // `__proto__` among the keys: an own property of a Record, not its prototype
+        return entries.map((es) => (t.record ? Object.defineProperties({}, Object.fromEntries(es.map(([k, v]) => [k, { value: v, enumerable: true, writable: true, configurable: true }]))) : new Map(es)));
+      }
+      case 'tuple': {
+        const elements = t.elements.map((e) => (e.optional && d > 0 ? fc.option(field({ name: '', ...e }, d - 1), { nil: undefined }) : field({ name: '', ...e }, d - 1)));
+        return fc.tuple(...elements);
+      }
     }
   };
   const field = (f: Field, d: number) => {

@@ -12,6 +12,7 @@ interface User {
   role: Role;
   bio?: string;
   nick: u32;
+  prefs?: Map<string, u32>;
 }
 
 interface NewUser {

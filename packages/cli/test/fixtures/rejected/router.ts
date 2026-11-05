@@ -9,9 +9,9 @@ interface Bad {
   a: unknown;
   b: any;
   c: () => void;
-  d: [number, string];
-  e: Record<string, number>;
-  f: Map<string, number>;
+  d: [number, string?];
+  e: Record<number, string>;
+  f: Map<Date, number>;
   g: Set<string>;
   h: { x: u32 } | { y: string };
   i: string | number;
@@ -21,7 +21,14 @@ interface Bad {
   m: (string | null)[];
   n: Promise<string>;
   method(): void;
+  o: { [k: string]: string; id: string };
+  p: Record<string, string | null>;
+  q: [string, ...u32[]];
+  r: [];
+  s: Nested;
 }
+
+type Nested = [string, Nested[]];
 
 function overloaded(input: { a: string }): Promise<void>;
 function overloaded(input: { b: string }): Promise<void>;

@@ -78,7 +78,7 @@ describe('tbr generate / check', () => {
   it('unsupported types fail generation', () => {
     const r = tbr('generate', '--dry-run', '--project', fixture('rejected', 'tsconfig.json'), '--router', 'router.ts');
     expect(r.code).toBe(1);
-    expect(r.output).toMatch(/^34 type\(s\) cannot be sent over the wire/);
+    expect(r.output).toMatch(/^39 type\(s\) cannot be sent over the wire/);
   });
 });
 
@@ -216,8 +216,8 @@ describe('tbr generate --watch', () => {
       expect(fs.readFileSync(path.join(dir, 'tbr.gen.ts'), 'utf8')).toContain('nickname');
 
       // A type that cannot be sent: reported, and watching goes on.
-      fs.writeFileSync(routerFile, withField('nickname: Map<string, string>;'));
-      expect(await regenerated("'Map' is not supported")).toMatch(/waiting for changes\n$/);
+      fs.writeFileSync(routerFile, withField('nickname: Set<string>;'));
+      expect(await regenerated("'Set' is not supported")).toMatch(/waiting for changes\n$/);
 
       // A lockfile changed elsewhere (a checkout) becomes the base.
       const lock = JSON.parse(fs.readFileSync(lockFile, 'utf8'));

@@ -26,7 +26,14 @@ export interface Invite {
   seats: u32 & Check<'even'>;
 }
 
+export interface Directory {
+  owners: Map<Email, Slug[]>;
+  labels: Record<string, Slug & MaxLength<8>>;
+  pair: [Email, u32 & Check<'even'>];
+}
+
 export const appRouter = {
+  directory: async (input: Directory): Promise<u32> => input.owners.size as u32,
   invite: async (input: Invite): Promise<{ ok: boolean }> => ({ ok: input.guests.length > 0 }),
   slug: async (input: Slug): Promise<string> => input,
   ping: async (input: { n: u32 }): Promise<{ range: DateRange }> => ({ range: { start: '2026-01-01', end: '2026-01-0' + input.n } }),

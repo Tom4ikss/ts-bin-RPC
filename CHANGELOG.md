@@ -10,6 +10,16 @@ From 0.2.0, a change to the wire format or another breaking change bumps the min
 0.3), and patch versions stay compatible: `^0.2.0` never picks up a new format. Versions before
 0.2.0 were prereleases under the `alpha` dist-tag.
 
+## Unreleased
+
+Compatible with 0.2.5. Run `tbr generate` only to use the new types.
+
+- `Record<string, T>`, index signatures, `Map<K, V>`, `ReadonlyMap<K, V>` and tuples, rejected
+  until now. A record arrives as a plain object, a map as a `Map`, a tuple as an array. Map keys
+  are strings, string literal unions, numbers, bigints and booleans. On the wire a map is its keys
+  and its values, so `Record<string, T>` and `Map<string, T>` are interchangeable; a tuple is an
+  object with the fields `0`, `1`, … Rules and checks apply to keys, values and elements.
+
 ## 0.2.5
 
 Compatible with 0.2.4. No changes to generated code: `tbr generate` is not needed.
