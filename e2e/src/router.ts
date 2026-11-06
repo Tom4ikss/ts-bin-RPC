@@ -95,6 +95,11 @@ export const appRouter = {
     },
     list: async (input?: { role?: Role; limit?: u32 }): Promise<User[]> =>
       users.filter((u) => !input?.role || u.role === input.role).slice(0, input?.limit ?? users.length),
+    /** Users by id, `limit` at a time after the `cursor` id: the cursor of the next page in `next`. */
+    page: async (input: { cursor?: u32; limit?: u32 }): Promise<{ users: User[]; next?: u32 }> => {
+      const after = users.filter((u) => u.id > (input.cursor ?? 0)), page = after.slice(0, input.limit ?? 2);
+      return { users: page, next: after.length > page.length ? page[page.length - 1].id : undefined };
+    },
     rename: async (input: { id: u32; name: string }, ctx: Ctx): Promise<void> => {
       if (!ctx.user) throw new RpcError('UNAUTHORIZED', 'sign in first');
       if (!users.some((u) => u.id === input.id)) throw new RpcError('NOT_FOUND', `no user ${input.id}`);

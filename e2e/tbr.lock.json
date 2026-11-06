@@ -29,6 +29,7 @@
     "stream.unitsSmall": { "input": "void", "output": "live object Unit by id" },
     "user.get": { "input": "object user.get:input", "output": "object User" },
     "user.list": { "input": "object user.list:input?", "output": "object User[]" },
+    "user.page": { "input": "object user.page:input", "output": "object user.page:output" },
     "user.rename": { "input": "object user.rename:input", "output": "void" },
     "version": { "input": "void", "output": "object version:output" },
     "whoami": { "input": "void", "output": "object whoami:output" }
@@ -242,6 +243,18 @@
       "fields": {
         "role": { "id": 0, "type": "enum Role | undefined" },
         "limit": { "id": 1, "type": "u32 | undefined" }
+      }
+    },
+    "user.page:input": {
+      "fields": {
+        "cursor": { "id": 0, "type": "u32 | undefined" },
+        "limit": { "id": 1, "type": "u32 | undefined" }
+      }
+    },
+    "user.page:output": {
+      "fields": {
+        "users": { "id": 0, "type": "object User[]" },
+        "next": { "id": 1, "type": "u32 | undefined" }
       }
     },
     "user.rename:input": {

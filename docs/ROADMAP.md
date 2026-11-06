@@ -364,7 +364,9 @@ JSDoc-тега, вход — бинарный base64url (читаемые пар
    WebTransport в `node:quic` или починят Deno.
 4. ~~**Пул** как оптимизации~~ — **сделано, 2026-11-06 (0.5.0):** `Scale<N>`, `Delta`, упакованные
    разреженные колонки; словари строк не взяты ([DESIGN §23](DESIGN.md#23-упакованные-и-дельта-колонки-scale)).
-5. **TanStack Query**: `infiniteQueryOptions`, стримы через `streamedQuery`.
+5. ~~**TanStack Query**~~ — **сделано, 2026-11-06 (0.5.1):** `infiniteQueryOptions` по `cursor` во
+   входе, стримы и live как запросы через `streamedQuery` приложения
+   ([руководство](guide/tanstack-query.md#streams-as-queries), [DESIGN §17](DESIGN.md#17-tanstack-query)).
 6. **Расширение DevTools для Firefox.**
 7. **Эксперимент с адаптерами tRPC и oRPC; бенчи против Arrow JS / Flechette и Colyseus, Arrow IPC.**
 

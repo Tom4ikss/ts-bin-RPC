@@ -184,5 +184,7 @@ export const devtoolsHook = (): DevtoolsHook | undefined => (globalThis as { __T
 export const CALL: unique symbol = Symbol.for('ts-bin-rpc.call');
 export interface Callable {
   readonly input: boolean;
+  /** A streaming procedure: `'rows'`, or `'live'` for live state. Its rows come through `subscribe` on the client. */
+  readonly stream?: 'rows' | 'live';
   call(input: unknown, options?: CallOptions): Promise<unknown>;
 }

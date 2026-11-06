@@ -146,8 +146,8 @@ export function createClient<R>(options: ClientOptions<R>): Client<R> {
     return new Proxy(() => {}, {
       get(_, key) {
         if (key === CALL) {
-          const input = !!procedures[path]?.input;
-          return { input, call: (i, o) => call(path, input ? [i, o] : [o]) } satisfies Callable;
+          const p = procedures[path], input = !!p?.input;
+          return { input, stream: p?.live ? 'live' : p?.stream ? 'rows' : undefined, call: (i, o) => call(path, input ? [i, o] : [o]) } satisfies Callable;
         }
         // `then` stays undefined so that `await api.user` does not try to call a procedure.
         if (typeof key !== 'string' || key === 'then') return undefined;
