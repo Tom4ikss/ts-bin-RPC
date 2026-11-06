@@ -1,5 +1,6 @@
-// Streams over a real transport: ts-bin-rpc frames against NDJSON over fetch and SSE, from a Node
-// HTTP server to Chromium on the same machine. Writes bench/results/stream-transport.md.
+// Streams over a real transport: ts-bin-rpc frames over HTTP and over a WebSocket against NDJSON over
+// fetch, SSE and JSON over a WebSocket, from a Node server to Chromium on the same machine. Writes
+// bench/results/stream-transport.md.
 //   node --experimental-strip-types --no-warnings bench/transport.mjs [--quick] [--out=dir]
 import fs from 'node:fs';
 import http from 'node:http';
@@ -8,7 +9,8 @@ import path from 'node:path';
 import * as esbuild from 'esbuild';
 import { chromium } from 'playwright';
 import { createHandler } from 'ts-bin-rpc/server';
-import { toNodeListener } from 'ts-bin-rpc/node';
+import { acceptWebSocket, toNodeListener } from 'ts-bin-rpc/node';
+import { serveWebSockets } from '../e2e/src/ws-server.ts';
 import { Ts71Source } from '../packages/cli/src/source.ts';
 import { buildSchema } from '../packages/cli/src/build.ts';
 import { emptyLock, updateLock } from '../packages/cli/src/lock.ts';
@@ -35,7 +37,8 @@ const bundle = await esbuild.build({ entryPoints: [path.join(dir, 'transport', '
 const page = '<!doctype html><meta charset="utf-8"><title>transport bench</title><script type="module" src="/client.js"></script>';
 
 // The server: ts-bin-rpc under /rpc, NDJSON and SSE over the same ticks.
-const rpc = toNodeListener(createHandler(appRouter, { procedures: serverProcedures, prefix: '/rpc' }));
+const handler = createHandler(appRouter, { procedures: serverProcedures, prefix: '/rpc' });
+const rpc = toNodeListener(handler);
 let sent = 0; // bytes of the last response
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://x');
@@ -63,6 +66,24 @@ const server = http.createServer((req, res) => {
   );
   res.on('close', stop);
 });
+// WebSockets: ts-bin-rpc at /rpc, JSON at /json (a text message of the ticks of each timer tick).
+const upgraded = new Set();
+const wsBytes = () => [...upgraded].reduce((n, s) => n + s.bytesWritten, 0);
+server.on('upgrade', (req, socket) => upgraded.add(socket));
+const acceptRpc = acceptWebSocket(handler);
+serveWebSockets(server, { '/rpc': acceptRpc, '/json': json });
+function json(ws) {
+  let stop = () => {};
+  ws.on('message', (data) => {
+    const feed = { ...JSON.parse(Buffer.from(data).toString()), window: 0 };
+    let buf = [];
+    stop = produce(feed, (t) => buf.push(t), () => {
+      if (buf.length) ws.sendText(JSON.stringify(buf));
+      buf = [];
+    }, () => ws.sendText('"end"'));
+  });
+  ws.on('close', () => stop());
+}
 await new Promise((ok) => server.listen(0, '127.0.0.1', ok));
 const origin = `http://127.0.0.1:${server.address().port}`;
 
@@ -79,6 +100,9 @@ const variants = [
   { name: 'ts-bin-rpc, window 0', kind: 'tbr', window: 0 },
   { name: 'NDJSON over fetch', kind: 'ndjson', window: 0 },
   { name: 'SSE, EventSource', kind: 'sse', window: 0 },
+  { name: 'ts-bin-rpc over WebSocket, window 16 ms', kind: 'tbr-ws', window: 16, ws: true },
+  { name: 'ts-bin-rpc over WebSocket, window 0', kind: 'tbr-ws', window: 0, ws: true },
+  { name: 'JSON over WebSocket', kind: 'json-ws', window: 0, ws: true },
 ];
 const scenarios = [
   { name: '1 000 ticks/s for 5 s', n: quick ? 1000 : 5000, rate: 1000 },
@@ -89,6 +113,7 @@ const scenarios = [
 async function once(v, s) {
   const m0 = await metrics();
   const c0 = process.cpuUsage();
+  const b0 = wsBytes();
   const r = await tab.evaluate(
     ([kind, feed]) =>
       globalThis.run(kind, feed).then((r) => ({ rows: r.rows, ms: r.ms, p50: r.delays[r.delays.length >> 1], p99: r.delays[Math.floor(r.delays.length * 0.99)] })),
@@ -98,7 +123,7 @@ async function once(v, s) {
   const m1 = await metrics();
   await new Promise((ok) => setTimeout(ok, 20)); // the response's close event
   if (r.rows !== s.n) throw new Error(`${v.name}: ${r.rows} of ${s.n} rows`);
-  return { ...r, client: (m1.TaskDuration - m0.TaskDuration) * 1000, server: (c.user + c.system) / 1000, bytes: sent };
+  return { ...r, client: (m1.TaskDuration - m0.TaskDuration) * 1000, server: (c.user + c.system) / 1000, bytes: v.ws ? wsBytes() - b0 : sent };
 }
 
 const median = (xs) => [...xs].sort((a, b) => a - b)[xs.length >> 1];
@@ -121,16 +146,16 @@ const version = browser.version();
 await browser.close();
 server.close();
 const table = ['| Load | Transport | Wall | Delay p50 | Delay p99 | Page main thread | Server CPU | Bytes |', '|---|---|---|---|---|---|---|---|', ...rows.map((r) => `| ${r.join(' | ')} |`)].join('\n');
-const out = `# Streams over HTTP: ts-bin-rpc, NDJSON, SSE
+const out = `# Streams: ts-bin-rpc over HTTP and WebSocket, NDJSON, SSE, JSON over WebSocket
 
 ${new Date().toISOString().slice(0, 10)}, ${os.cpus()[0].model}, ${os.platform()} ${os.release()}, Node ${process.version}, Chromium ${version}. Median of ${REPS} runs.
 
-A Node HTTP server on 127.0.0.1 sends ticks \`{ t: f64, price: f32, size: u32, side: 'buy' | 'sell' }\`; a Chromium page reads every field of every tick. All three transports get the same producer: on a 1 ms timer it makes every tick that is due (at full speed, bursts of 1000 per macrotask), and NDJSON and SSE write once per timer tick, not once per tick. ts-bin-rpc batches by its window: 16 ms by default, or at the end of each task with \`window: 0\`.
+A Node HTTP server on 127.0.0.1 sends ticks \`{ t: f64, price: f32, size: u32, side: 'buy' | 'sell' }\`; a Chromium page reads every field of every tick. Every transport gets the same producer: on a 1 ms timer it makes every tick that is due (at full speed, bursts of 1000 per macrotask), and NDJSON, SSE and JSON over a WebSocket write once per timer tick, not once per tick (JSON: one text message with an array of the ticks). ts-bin-rpc batches by its window: 16 ms by default, or at the end of each task with \`window: 0\`. The WebSocket server is the small one of the tests (\`e2e/src/ws-server.ts\`), without compression; the ts-bin-rpc socket stays open between runs.
 
 - Delay: the page's clock minus the send time in the tick; both clocks are of the same machine.
 - Page main thread: \`TaskDuration\` of the page's renderer from the Chrome DevTools Protocol, including the decoding and the reading of the ticks.
 - Server CPU: user and system time of the server process, which also runs the Playwright driver.
-- Bytes: what the server wrote to the socket, headers included, without compression.
+- Bytes: what the server wrote to the socket, headers included (for WebSockets, frame headers), without compression.
 
 ${table}
 `;

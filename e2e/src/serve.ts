@@ -35,10 +35,10 @@ if (typeof Deno !== 'undefined') {
     if (!upgrade(r)) return handler(r);
     const { socket, response } = deno.upgradeWebSocket(r);
     socket.binaryType = 'arraybuffer';
-    let conn: SocketConnection | undefined;
-    socket.onopen = () => (conn = handler.socket(socket, r));
-    socket.onmessage = (e) => (typeof e.data === 'string' ? socket.close(1003) : conn?.message(e.data as ArrayBuffer));
-    socket.onclose = () => conn?.close();
+    // before returning: Deno closes the request with its response
+    const conn = handler.socket(socket, r);
+    socket.onmessage = (e) => (typeof e.data === 'string' ? socket.close(1003) : conn.message(e.data as ArrayBuffer));
+    socket.onclose = () => conn.close();
     return response;
   });
 } else if (typeof Bun !== 'undefined') {

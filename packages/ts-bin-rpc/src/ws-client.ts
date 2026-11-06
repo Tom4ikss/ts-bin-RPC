@@ -97,7 +97,14 @@ export function webSocket(url: string, options: WebSocketOptions = {}): SocketTr
     routes.delete(id);
     if (!routes.size && ws) {
       clearTimeout(idleTimer);
-      idleTimer = setTimeout(() => !routes.size && ws?.close(), idle);
+      idleTimer = setTimeout(() => {
+        if (routes.size || !ws) return;
+        // a request made while it closes goes to a new socket
+        const s = ws;
+        ws = undefined;
+        ready = false;
+        s.close();
+      }, idle);
     }
   };
 

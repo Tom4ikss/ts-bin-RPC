@@ -111,8 +111,7 @@ Deno.serve((request) => {
   if (request.headers.get('upgrade') !== 'websocket') return handler(request);
   const { socket, response } = Deno.upgradeWebSocket(request);
   socket.binaryType = 'arraybuffer';
-  let conn;
-  socket.onopen = () => (conn = handler.socket(socket, request));
+  const conn = handler.socket(socket, request); // before returning the response
   socket.onmessage = (e) => conn.message(e.data);
   socket.onclose = () => conn.close();
   return response;
@@ -149,5 +148,13 @@ A message from the client starts a call or a subscription under an ID it picks, 
 message from the server carries the ID and either the whole response of a call, with its HTTP status,
 or stream frames of a subscription, the same frames an HTTP stream has. Payloads stay 8-byte
 aligned, so views over them need no copy. The format is in [FORMAT §13](https://github.com/Tom4ikss/ts-bin-RPC/blob/main/docs/FORMAT.md#13-websocket).
+
+## Performance
+
+In the [stream benchmark](https://github.com/Tom4ikss/ts-bin-RPC/blob/main/bench/results/stream-transport.md)
+a socket is as fast as an HTTP stream at 1 000 and 20 000 ticks a second (p50 delay 0.1 ms with
+`window: 0`) and sends a third of the bytes of JSON over a WebSocket. For 200 000 ticks at once an
+HTTP stream is faster (46 against 57 ms): each socket message is an event of its own in the page,
+while `fetch` merges chunks.
 
 `webSocket` adds about 0.9 KB gzip to the client, only when you import it.
