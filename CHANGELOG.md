@@ -10,6 +10,13 @@ From 0.2.0, a change to the wire format or another breaking change bumps the min
 0.3), and patch versions stay compatible: `^0.2.0` never picks up a new format. Versions before
 0.2.0 were prereleases under the `alpha` dist-tag.
 
+## 0.4.2
+
+Compatible with 0.4.1: the wire format and the generated code are unchanged.
+
+- Live subscriptions take `order: 'asc' | 'desc' | (a, b) => number`: the state `Map` iterates by
+  key, as an order book needs ([guide](https://tom4ikss.github.io/ts-bin-RPC/guide/live/#order)).
+
 ## 0.4.1
 
 Compatible with 0.4.0: the HTTP wire format and the generated code are unchanged.
