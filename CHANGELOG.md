@@ -10,6 +10,18 @@ From 0.2.0, a change to the wire format or another breaking change bumps the min
 0.3), and patch versions stay compatible: `^0.2.0` never picks up a new format. Versions before
 0.2.0 were prereleases under the `alpha` dist-tag.
 
+## 0.4.3
+
+Compatible with 0.4.2: the wire format is unchanged. `tbr generate` adds an export, `inputRules`, to
+the generated code; bundles that do not use it do not change.
+
+- Client validator: `inputSchema(inputRules.createUser, { checks: formats })` from
+  `ts-bin-rpc/validate` is a Standard Schema of the input, for TanStack Form, react-hook-form and
+  others ([guide](https://tom4ikss.github.io/ts-bin-RPC/guide/validation/#on-the-client)). It checks the
+  shape, the rules, and the checks and refinements you pass, reports every issue with the texts of
+  the server, and leaves checks without an implementation to the server. All of it adds about 2 KB
+  gzip to a client that imports it, and nothing to one that does not.
+
 ## 0.4.2
 
 Compatible with 0.4.1: the wire format and the generated code are unchanged.
