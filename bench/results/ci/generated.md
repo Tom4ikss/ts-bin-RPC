@@ -1,6 +1,6 @@
 # Suite `generated`
 
-2026-11-06, AMD EPYC 7763 64-Core Processor, linux 7.0.0-1019-azure, commit d7daf4e.
+2026-11-06, AMD EPYC 9V45 96-Core Processor, linux 7.0.0-1019-azure, commit 89208a7.
 Median of 10 runs per runtime, each in a fresh process or browser; ratio is speed relative to the first variant of the group, the median over the runs; `~` marks rows whose ratio ranged over 25% between runs.
 
 - node: node v22.23.4
@@ -10,42 +10,42 @@ Median of 10 runs per runtime, each in a fresh process or browser; ratio is spee
 
 | Group | Variant | node | chromium | firefox | webkit |
 |---|---|---|---|---|---|
-| 10 users, all fields | JSON | 8.14 µs | 4.12 µs | 6.02 µs | 4.47 µs |
-| 10 users, all fields | hand-written (codec3) | 1.96 µs (4.16x) | 2.02 µs (2.04x) | 3.32 µs (1.80x) | 3.29 µs (1.36x) |
-| 10 users, all fields | generated | 2.35 µs (3.46x) | 2.45 µs (1.68x) | 3.88 µs (1.55x) | 3.41 µs (1.31x) |
-| 10 users, all fields | generated + verify | 2.95 µs (2.76x) | 2.92 µs (1.41x) | 4.71 µs (1.28x) | 3.98 µs (1.12x) |
-| 10 users, all fields | generated, decode (plain) | 2.29 µs (3.55x) | 2.38 µs (1.73x) | 3.83 µs (1.57x) | 3.31 µs (1.35x) |
-| 1000 users, all fields | JSON | 916 µs | 612 µs | 541 µs | 509 µs |
-| 1000 users, all fields | hand-written (codec3) | 87 µs (10.54x) | 104 µs (5.89x) | 116 µs (4.66x) | 130 µs (3.91x) |
-| 1000 users, all fields | generated | 105 µs (8.71x) | 132 µs (4.65x) | 126 µs (4.32x) | 121 µs (4.25x) |
-| 1000 users, all fields | generated + verify | 117 µs (7.79x) | 142 µs (4.32x) | 138 µs (3.93x) | 132 µs (3.88x) |
-| 1000 users, all fields | generated, decode (plain) | 87 µs (10.47x) | 101 µs (6.06x) | 123 µs (4.43x) | 116 µs (4.41x) |
-| 1000 users, 2 fields | JSON | 906 µs | 609 µs | 538 µs | 507 µs |
-| 1000 users, 2 fields | hand-written (codec3) | 43 µs (20.99x) | 50 µs (12.14x) | 56 µs (9.61x) | 81 µs (6.28x) |
-| 1000 users, 2 fields | generated | 45 µs (20.33x) | 59 µs (10.38x) | 59 µs (9.17x) | 72 µs (7.06x) |
-| 1000 users, 2 fields | generated + verify | 56 µs (16.14x) | 68 µs (8.95x) | 71 µs (7.59x) | 83 µs (6.04x) |
-| 1000 users, 2 fields | generated, decode (plain) | 81 µs (11.17x) | 98 µs (6.22x) | 119 µs (4.52x) | 109 µs (4.64x) |
-| 1000 users, numbers only | JSON | 915 µs | 608 µs | 536 µs | 508 µs |
-| 1000 users, numbers only | hand-written (codec3) | 16 µs (55.49x) | 16 µs (37.73x) | 14 µs (37.30x) | 12 µs (43.06x) |
-| 1000 users, numbers only | generated | 22 µs (41.87x) | 21 µs (28.75x) | 16 µs (32.71x) | 12 µs (40.82x) |
-| 1000 users, numbers only | generated + verify | 40 µs (23.06x) | 46 µs (13.16x) | 34 µs (15.55x) | 67 µs (7.55x) |
-| 1000 users, numbers only | generated, decode (plain) | 82 µs (11.11x) | 98 µs (6.22x) | 120 µs (4.47x) | 116 µs (4.40x) |
-| 1 user, all fields | JSON | 1.20 µs | 0.86 µs | 1.13 µs | 0.82 µs |
-| 1 user, all fields | generated | 0.70 µs (1.71x) | 0.74 µs (1.16x) | 1.23 µs (0.92x) | 1.05 µs (0.80x) |
-| 1 user, all fields | generated + verify | 0.89 µs (1.35x) | 0.92 µs (0.93x) | 1.65 µs (0.68x) | 1.27 µs (0.66x) |
-| page of 1000 users, all fields | JSON | 929 µs | 622 µs | 527 µs | 509 µs |
-| page of 1000 users, all fields | generated | 124 µs (7.53x) | 119 µs (5.15x) | 126 µs (4.19x) | 127 µs (4.02x) |
-| page of 1000 users, all fields | generated, decode (plain) | 95 µs (9.74x) | 109 µs (5.68x) | 123 µs (4.30x) | 117 µs (4.36x) |
-| 500 products (long text), all fields | JSON | 497 µs | 203 µs | 405 µs | 287 µs |
-| 500 products (long text), all fields | generated | 77 µs (6.41x) | 84 µs (2.42x) | 132 µs (3.07x) | 88 µs (3.24x) |
-| 500 products (long text), all fields | generated + verify | 98 µs (5.07x) | 103 µs (1.96x) | 156 µs (2.59x) | 104 µs (2.77x) |
-| 100k points, every value | JSON, number arrays | 24.3 ms | 15.4 ms | 28.8 ms | 15.8 ms |
-| 100k points, every value | generated | 159 µs (152.54x) | 790 µs (19.32x) | 222 µs (129.80x) ~ | 785 µs (20.47x) ~ |
-| 100k points, every value | generated + verify | 159 µs (152.42x) | 788 µs (19.57x) | 238 µs (119.94x) ~ | 775 µs (20.51x) ~ |
-| encode 1000 users | JSON | 777 µs | 912 µs | 507 µs | 422 µs |
-| encode 1000 users | hand-written (codec3) | 413 µs (1.86x) | 328 µs (2.78x) | 347 µs (1.46x) | 188 µs (2.22x) ~ |
-| encode 1000 users | generated | 312 µs (2.48x) | 320 µs (2.86x) | 345 µs (1.47x) | 237 µs (1.76x) |
-| encode 500 products | JSON | 464 µs | 540 µs | 331 µs | 502 µs |
-| encode 500 products | generated | 258 µs (1.80x) ~ | 531 µs (1.02x) | 301 µs (1.09x) | 476 µs (1.06x) |
-| encode 100k points | JSON, number arrays | 42.8 ms | 35.4 ms | 40.6 ms | 28.2 ms |
-| encode 100k points | generated | 605 µs (71.65x) ~ | 895 µs (39.51x) | 1.0 ms (40.39x) | 1.1 ms (25.94x) |
+| 10 users, all fields | JSON | 4.57 µs | 2.38 µs | 3.49 µs | 2.67 µs |
+| 10 users, all fields | hand-written (codec3) | 1.15 µs (4.03x) | 1.18 µs (2.02x) | 2.12 µs (1.64x) | 1.99 µs (1.34x) |
+| 10 users, all fields | generated | 1.35 µs (3.39x) | 1.50 µs (1.59x) | 2.40 µs (1.44x) | 2.05 µs (1.31x) |
+| 10 users, all fields | generated + verify | 1.69 µs (2.71x) | 1.81 µs (1.32x) | 2.83 µs (1.22x) | 2.47 µs (1.09x) |
+| 10 users, all fields | generated, decode (plain) | 1.34 µs (3.41x) | 1.46 µs (1.64x) | 2.34 µs (1.49x) | 2.01 µs (1.33x) |
+| 1000 users, all fields | JSON | 543 µs | 393 µs | 278 µs | 288 µs |
+| 1000 users, all fields | hand-written (codec3) | 52 µs (10.54x) | 67 µs (5.90x) | 68 µs (4.12x) | 74 µs (3.91x) |
+| 1000 users, all fields | generated | 60 µs (9.12x) | 82 µs (4.78x) | 78 µs (3.59x) | 69 µs (4.20x) |
+| 1000 users, all fields | generated + verify | 66 µs (8.25x) | 87 µs (4.47x) | 85 µs (3.30x) | 77 µs (3.77x) |
+| 1000 users, all fields | generated, decode (plain) | 49 µs (11.11x) | 62 µs (6.43x) | 78 µs (3.60x) | 65 µs (4.50x) |
+| 1000 users, 2 fields | JSON | 539 µs | 389 µs | 276 µs | 286 µs |
+| 1000 users, 2 fields | hand-written (codec3) | 25 µs (21.78x) | 31 µs (12.57x) | 32 µs (8.59x) | 46 µs (6.32x) |
+| 1000 users, 2 fields | generated | 24 µs (22.05x) | 36 µs (10.92x) | 36 µs (7.67x) | 43 µs (6.67x) |
+| 1000 users, 2 fields | generated + verify | 31 µs (17.56x) | 42 µs (9.42x) | 43 µs (6.41x) | 51 µs (5.72x) |
+| 1000 users, 2 fields | generated, decode (plain) | 45 µs (11.97x) | 59 µs (6.65x) | 76 µs (3.65x) | 61 µs (4.75x) ~ |
+| 1000 users, numbers only | JSON | 545 µs | 388 µs | 276 µs | 284 µs |
+| 1000 users, numbers only | hand-written (codec3) | 10 µs (53.76x) | 10 µs (38.62x) | 8.60 µs (32.19x) | 8.73 µs (32.35x) |
+| 1000 users, numbers only | generated | 12 µs (44.28x) | 13 µs (30.63x) | 10 µs (27.16x) | 8.78 µs (32.37x) |
+| 1000 users, numbers only | generated + verify | 22 µs (24.81x) | 27 µs (14.48x) | 22 µs (12.95x) | 36 µs (7.83x) |
+| 1000 users, numbers only | generated, decode (plain) | 47 µs (11.78x) | 58 µs (6.66x) | 76 µs (3.64x) | 62 µs (4.54x) |
+| 1 user, all fields | JSON | 0.62 µs | 0.51 µs | 0.69 µs | 0.49 µs |
+| 1 user, all fields | generated | 0.37 µs (1.66x) | 0.42 µs (1.21x) | 0.72 µs (0.99x) | 0.61 µs (0.80x) |
+| 1 user, all fields | generated + verify | 0.52 µs (1.19x) | 0.54 µs (0.94x) | 1.06 µs (0.65x) | 0.80 µs (0.62x) |
+| page of 1000 users, all fields | JSON | 549 µs | 400 µs | 278 µs | 286 µs |
+| page of 1000 users, all fields | generated | 72 µs (7.59x) | 74 µs (5.33x) | 78 µs (3.53x) | 72 µs (4.00x) |
+| page of 1000 users, all fields | generated, decode (plain) | 53 µs (10.41x) | 64 µs (6.20x) | 78 µs (3.58x) | 65 µs (4.44x) |
+| 500 products (long text), all fields | JSON | 292 µs | 108 µs | 216 µs | 182 µs |
+| 500 products (long text), all fields | generated | 44 µs (6.65x) | 52 µs (2.09x) | 77 µs (2.82x) | 53 µs (3.50x) |
+| 500 products (long text), all fields | generated + verify | 54 µs (5.45x) | 62 µs (1.75x) | 89 µs (2.41x) | 63 µs (2.94x) |
+| 100k points, every value | JSON, number arrays | 14.2 ms | 10.2 ms | 15.8 ms | 9.1 ms |
+| 100k points, every value | generated | 93 µs (154.03x) | 423 µs (24.14x) | 126 µs (125.68x) | 364 µs (24.89x) |
+| 100k points, every value | generated + verify | 93 µs (153.77x) | 426 µs (23.69x) | 128 µs (125.29x) | 365 µs (24.87x) |
+| encode 1000 users | JSON | 461 µs | 547 µs | 274 µs | 236 µs |
+| encode 1000 users | hand-written (codec3) | 237 µs (1.97x) | 200 µs (2.72x) | 164 µs (1.68x) | 102 µs (2.28x) |
+| encode 1000 users | generated | 161 µs (2.87x) | 184 µs (2.96x) | 155 µs (1.77x) | 124 µs (1.91x) |
+| encode 500 products | JSON | 282 µs | 372 µs | 203 µs | 267 µs |
+| encode 500 products | generated | 159 µs (1.78x) | 358 µs (1.03x) | 162 µs (1.27x) | 259 µs (1.04x) |
+| encode 100k points | JSON, number arrays | 26.1 ms | 24.0 ms | 25.1 ms | 17.1 ms |
+| encode 100k points | generated | 428 µs (61.28x) ~ | 651 µs (37.15x) | 717 µs (34.74x) | 821 µs (20.84x) |
