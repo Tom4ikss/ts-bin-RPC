@@ -1,7 +1,7 @@
 // Starts the fixture server under Node, Bun or Deno on $PORT (0: any free port) and prints
 // `listening <port>`. WebSockets at /rpc on each, with the runtime's own API. Under Node it also
 // serves the browser test page and its modules.
-import { handler } from './app.ts';
+import { handler, serverErrors } from './app.ts';
 import type { SocketConnection } from 'ts-bin-rpc/server';
 
 interface BunSocket {
@@ -26,6 +26,7 @@ declare const Deno:
     }
   | undefined;
 
+serverErrors.print = true;
 const port = Number((typeof Deno !== 'undefined' ? Deno.env.get('PORT') : process.env.PORT) ?? 0);
 const upgrade = (r: Request) => r.headers.get('upgrade')?.toLowerCase() === 'websocket' && new URL(r.url).pathname === '/rpc';
 
@@ -35,6 +36,7 @@ if (typeof Deno !== 'undefined') {
     if (!upgrade(r)) return handler(r);
     const { socket, response } = deno.upgradeWebSocket(r);
     socket.binaryType = 'arraybuffer';
+    socket.onerror = (e) => console.error('socket error', (e as ErrorEvent).message ?? e);
     // before returning: Deno closes the request with its response
     const conn = handler.socket(socket, r);
     socket.onmessage = (e) => (typeof e.data === 'string' ? socket.close(1003) : conn.message(e.data as ArrayBuffer));

@@ -31,7 +31,7 @@ function expectClean(report: Report, min = 30) {
 }
 
 /** Starts the fixture server; resolves with its origin once it prints `listening <port>`. */
-function start(cmd: string, args: string[]): Promise<{ origin: string; child: ChildProcess }> {
+function start(cmd: string, args: string[]): Promise<{ origin: string; child: ChildProcess; output: () => string }> {
   return new Promise((resolve, reject) => {
     const child = spawn(cmd, args, { cwd: root, env: { ...process.env, PORT: '0' }, stdio: ['ignore', 'pipe', 'pipe'] });
     let out = '';
@@ -50,7 +50,7 @@ function start(cmd: string, args: string[]): Promise<{ origin: string; child: Ch
       if (m) {
         clearTimeout(timer);
         child.removeAllListeners('exit');
-        resolve({ origin: `http://127.0.0.1:${m[1]}`, child });
+        resolve({ origin: `http://127.0.0.1:${m[1]}`, child, output: () => out });
       }
     });
   });
@@ -78,7 +78,7 @@ describe.each(runtimes)('server on $name', ({ cmd, args }) => {
   it('passes the client scenarios over a WebSocket', async () => {
     const progress = { last: '' };
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const hung = new Promise<never>((_, reject) => (timer = setTimeout(() => reject(new Error(`hung after '${progress.last}'`)), 8000)));
+    const hung = new Promise<never>((_, reject) => (timer = setTimeout(() => reject(new Error(`hung after '${progress.last}'; the server printed:\n${server.output()}`)), 8000)));
     expectClean(await Promise.race([socketScenarios(server.origin, progress), hung]).finally(() => clearTimeout(timer)), 20);
   }, 10_000);
 });
