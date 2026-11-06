@@ -235,7 +235,8 @@ export async function scenarios(origin: string, fetchFn: typeof fetch = globalTh
 }
 
 /** The client over a WebSocket (DESIGN §19): calls, subscriptions and live state on one socket. */
-export async function socketScenarios(origin: string): Promise<Report> {
+/** `progress.last` names the last check done, to tell where a hung run stopped. */
+export async function socketScenarios(origin: string, progress: { last: string } = { last: '' }): Promise<Report> {
   const url = `${origin}/rpc`;
   const ws = `${origin.replace(/^http/, 'ws')}/rpc`;
   const api = createClient<typeof appRouter>({ url, procedures, socket: webSocket(ws, { calls: true }) });
@@ -243,6 +244,7 @@ export async function socketScenarios(origin: string): Promise<Report> {
   const streamsOnly = createClient<typeof appRouter>({ url, procedures, socket: webSocket(ws) });
   const report: Report = { passed: 0, failures: [] };
   const check = (name: string, ok: unknown, got?: unknown) => {
+    progress.last = name;
     if (ok) report.passed++;
     else report.failures.push(got === undefined ? `socket: ${name}` : `socket: ${name}: got ${show(got)}`);
   };

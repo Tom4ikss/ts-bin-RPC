@@ -76,8 +76,11 @@ describe.each(runtimes)('server on $name', ({ cmd, args }) => {
   });
 
   it('passes the client scenarios over a WebSocket', async () => {
-    expectClean(await socketScenarios(server.origin), 20);
-  });
+    const progress = { last: '' };
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const hung = new Promise<never>((_, reject) => (timer = setTimeout(() => reject(new Error(`hung after '${progress.last}'`)), 8000)));
+    expectClean(await Promise.race([socketScenarios(server.origin, progress), hung]).finally(() => clearTimeout(timer)), 20);
+  }, 10_000);
 });
 
 describe('client in Chromium', () => {
