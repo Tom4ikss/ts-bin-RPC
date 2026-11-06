@@ -10,6 +10,22 @@ From 0.2.0, a change to the wire format or another breaking change bumps the min
 0.3), and patch versions stay compatible: `^0.2.0` never picks up a new format. Versions before
 0.2.0 were prereleases under the `alpha` dist-tag.
 
+## 0.5.0
+
+Not compatible with 0.4: messages with packed or delta columns carry format version 1, which
+clients and servers before 0.5.0 reject with a `VerifyError`. Update servers and clients together
+and run `tbr generate`. Messages without such columns keep version 0 and are unchanged.
+
+- `Scale<N>` on an integer brand: `price: i32 & Scale<100>` keeps two decimals in 4 bytes, and the
+  code reads and writes plain numbers ([guide](https://tom4ikss.github.io/ts-bin-RPC/guide/types/#scale-and-delta)).
+- `Delta` on a field of an array of objects sends its column as the first value and differences of
+  1, 2 or 4 bytes, when that is smaller: for integer brands, scaled ones and `Date`. 16 ticks with
+  `t: Date & Delta` and `price: i32 & Scale<100> & Delta`: 328 → 180 B raw, 144 → 77 B after deflate.
+- Optional and nullable columns with values in at most half of the rows are packed: patches of live
+  state for 100 entities, 5% moving, 345 → 244 B per frame raw.
+- Such columns are decoded into arrays of their own when the view is created; other columns are
+  read as before. The client runtime grows by about 120 B gzip.
+
 ## 0.4.4
 
 Compatible with 0.4.3: the wire format of calls and the generated code are unchanged. Batches are a
