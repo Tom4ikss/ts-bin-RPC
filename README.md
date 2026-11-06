@@ -81,24 +81,24 @@ which moves some rows by 10–25%, and a few rows in Firefox change by up to 2×
 launch to the next.
 
 <!-- bench:start -->
-GitHub Actions `ubuntu-latest` (Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz), Chromium 156, Firefox 157, WebKit 27.2, Node 22.23 through Playwright, 2026-11-06, commit [`343e17e`](https://github.com/Tom4ikss/ts-bin-RPC/commit/343e17e28878a45cd5ce344b8058b072a6b61d20).
+GitHub Actions `ubuntu-latest` (AMD EPYC 9V74 80-Core Processor), Chromium 156, Firefox 157, WebKit 27.2, Node 22.23 through Playwright, 2026-11-06, commit [`4068aed`](https://github.com/Tom4ikss/ts-bin-RPC/commit/4068aedcfabcd82aeba41dbc93b56d6d69389335).
 Full tables, with times: [generated.md](bench/results/ci/generated.md).
 
 | Reading | Node | Chromium | Firefox | WebKit |
 |---|---|---|---|---|
-| 1000 users, every field | 8.3× | 3.6× | 3.7× | 3.7× |
-| 1000 users, 2 of 7 fields | 17× | 7.8× | 6.9× | 5.9× |
-| 1000 users, numeric fields only | 24× | 11× | 14× | 8.1× |
-| 100k points, every value | 120× | 20× | 124× | 21× |
-| 10 users, every field | 2.9× | 1.4× | 1.3× | 1.3× |
-| 500 products with long text | 4.3× | 1.9× | 2.6× | 2.3× |
-| 1 user | 1.1× | **0.93×** | **0.69×** | **0.69×** |
+| 1000 users, every field | 8.4× | 4.6× | 3.5× | 3.9× |
+| 1000 users, 2 of 7 fields | 16× | 8.9× | 6.5× | 5.5× |
+| 1000 users, numeric fields only | 23× | 13× | 13× | 7.2× |
+| 100k points, every value | 138× | 21× | 117× | 19× |
+| 10 users, every field | 2.8× | 1.4× | 1.1× | 1.1× |
+| 500 products with long text | 5.2× | 1.7× | 2.4× | 2.6× |
+| 1 user | 1.3× | 1.0× | **0.65×** | **0.64×** |
 
 | Encoding | Node | Chromium | Firefox | WebKit |
 |---|---|---|---|---|
-| 1000 users | 2.3× | 2.7× | 1.5× | 1.9× |
-| 500 products with long text | 1.5× | 1.0× | 1.1× | 1.1× |
-| 100k points | 60× | 37× | 46× | 27× |
+| 1000 users | 2.9× | 2.9× | 1.7× | 2.1× |
+| 500 products with long text | 1.8× | 1.0× | 1.2× | 1.0× |
+| 100k points | 71× | 38× | 39× | 22× |
 <!-- bench:end -->
 
 Users have 7 fields: three numbers, a boolean and three strings, 30% of names in Cyrillic. Products
