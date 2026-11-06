@@ -147,12 +147,14 @@ const user = queryClient.getQueryData(rq.user.get.queryKey({ id: 3 })); // User 
 queryClient.setQueryData(rq.user.get.queryKey({ id: 3 }), (old) => old && { ...old, name: 'Chloé' });
 ```
 
-### Inputs with `u64`, `i64`
+### Inputs with `u64`, `i64`, maps and typed arrays
 
-TanStack Query hashes keys with `JSON.stringify`, which throws on a `bigint`. The options from `rq`
-bring their own `queryKeyHashFn`, `hashKey`, which hashes everything else the same way. Methods
-that take only a key, such as `getQueryData`, use the client's default, so set it there if your
-inputs have 64-bit integers:
+TanStack Query hashes keys with `JSON.stringify`, which throws on a `bigint` and turns every `Map`
+into `{}`, so two inputs with different maps would share a cache entry. The options from `rq`
+bring their own `queryKeyHashFn`, `hashKey`, which hashes bigints, maps, sets and typed arrays by
+their contents (maps and sets in any order of insertion) and everything else as TanStack does.
+Methods that take only a key, such as `getQueryData`, use the client's default, so set it there if
+your inputs have such values:
 
 ```ts
 import { hashKey } from 'ts-bin-rpc/tanstack';

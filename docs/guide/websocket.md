@@ -58,7 +58,10 @@ below). `headers` in the client options and in `CallOptions` still apply to HTTP
   and the handler sees `snapshot: true`. They keep trying until you call `stop()`.
 - **Streams** end with `DISCONNECTED`, as over HTTP: rows sent while the connection was down are
   gone, and only the app knows whether to subscribe again and from where.
-- **Calls** in flight reject with a `TypeError`, as `fetch` does when a connection fails.
+- **Calls** in flight reject with `RpcError` `DISCONNECTED`, as over HTTP when a connection fails.
+
+The backoff starts over only after a socket stayed open for 5 s, so a server that accepts sockets
+and closes them at once is not hammered with reconnects.
 
 `signal` aborts a call or a subscription over a socket the same way it does over HTTP.
 
@@ -75,7 +78,15 @@ const conn = handler.socket(ws, request);
 // on each message: conn.message(data); on close: conn.close();
 ```
 
+The client asks for the WebSocket subprotocol `tbr.2` (`SOCKET_PROTOCOL` from `ts-bin-rpc/server`),
+and the server has to accept it in its upgrade response: browsers drop a socket whose server picked
+no subprotocol of the ones offered. The number changes with incompatible changes of the socket
+protocol, so a client and a server of such different versions refuse each other at once instead of
+misreading messages. `handler.socket` closes a socket whose upgrade request did not offer it.
+
 ### Node, with `ws`
+
+`ws` accepts the first subprotocol the client offers, so nothing more is needed here.
 
 ```ts
 import { WebSocketServer } from 'ws';
@@ -89,10 +100,13 @@ server.listen(3000);
 ### Bun
 
 ```ts
+import { SOCKET_PROTOCOL } from 'ts-bin-rpc/server';
+
 Bun.serve({
   fetch(request, server) {
     if (request.headers.get('upgrade') === 'websocket') {
-      return server.upgrade(request, { data: { request } }) ? undefined : new Response('upgrade failed', { status: 400 });
+      const headers = { 'sec-websocket-protocol': SOCKET_PROTOCOL };
+      return server.upgrade(request, { data: { request }, headers }) ? undefined : new Response('upgrade failed', { status: 400 });
     }
     return handler(request);
   },
@@ -107,11 +121,13 @@ Bun.serve({
 ### Deno
 
 ```ts
+import { SOCKET_PROTOCOL } from 'ts-bin-rpc/server';
+
 Deno.serve((request) => {
   if (request.headers.get('upgrade') !== 'websocket') return handler(request);
   // upgradeWebSocket closes the request, and context() reads its headers: keep a copy
   const upgrade = new Request(request.url, { headers: request.headers });
-  const { socket, response } = Deno.upgradeWebSocket(request);
+  const { socket, response } = Deno.upgradeWebSocket(request, { protocol: SOCKET_PROTOCOL });
   socket.binaryType = 'arraybuffer';
   const conn = handler.socket(socket, upgrade);
   socket.onmessage = (e) => conn.message(e.data);
@@ -134,8 +150,25 @@ createHandler(appRouter, {
 });
 ```
 
-Check the `Origin` header of the upgrade request before you accept a socket that authenticates by
-cookie: browsers send cookies with a WebSocket from any site.
+Browsers send cookies with a WebSocket from any site, and a socket has no CORS preflight. So
+`handler.socket` takes sockets only from pages of the server's own origin (the `Origin` header
+against the `Host` of the upgrade request) and from clients that send no `Origin`, which are not
+browsers. Others are closed with code 1008. A page on another origin needs to be allowed:
+
+```ts
+createHandler(appRouter, {
+  procedures,
+  context,
+  socket: { allowedOrigins: ['https://app.example.com'] }, // or (origin) => boolean
+});
+```
+
+### Limits
+
+One socket has at most `socket.maxSubscriptions` subscriptions (256) and `socket.maxCalls` calls
+(64) open at once; past that a new one gets `429 TOO_MANY_REQUESTS` and the socket stays. A
+message that breaks the protocol (unreadable, ID 0, an ID already in use) closes the socket with
+code 1002, a text message with 1003. Inputs have the handler's `limits`, as over HTTP.
 
 ### Slow clients
 

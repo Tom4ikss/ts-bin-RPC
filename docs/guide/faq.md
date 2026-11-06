@@ -68,7 +68,18 @@ return plain objects with `decode: 'eager'`. See [Views](./views.md#plain-object
 ## Do I still need HTTP compression?
 
 Yes, enable it as for JSON. Many servers and CDNs compress only known content types, so add
-`application/vnd.tbr`, for example to `gzip_types` in nginx.
+`application/vnd.tbr`, `application/vnd.tbr.stream` and `application/vnd.tbr.batch`, for example to
+`gzip_types` in nginx. A proxy that buffers responses holds stream frames back: the server sends
+`x-accel-buffering: no` for nginx, other proxies need their own setting.
+
+## My WebSocket closes right away
+
+- **Code 1002, `not a tbr.2 client`**: the server's upgrade response does not accept the
+  subprotocol `tbr.2`, or the client and the server are of versions with different socket
+  protocols. Bun and Deno need `SOCKET_PROTOCOL` in the upgrade, see
+  [WebSocket](./websocket.md#server).
+- **Code 1008, `origin not allowed`**: the page is on another origin than the server. Add it to
+  `socket.allowedOrigins`.
 
 ## Which runtimes and browsers?
 
@@ -79,9 +90,10 @@ Yes, enable it as for JSON. Many servers and CDNs compress only known content ty
 
 ## Which TypeScript version?
 
-The CLI reads types through the TypeScript 7.1 compiler API, so `typescript@7.1` is its dev
-dependency. The generated file is ordinary TypeScript without compiler-specific features, but it is
-only tested with 7.1 so far.
+The CLI reads types through the TypeScript 7.1 compiler API, so `typescript@>=7.1.0-beta <7.2.0`
+is its peer dependency, and it stops with a one-line message under any other version. The
+generated file is ordinary TypeScript without compiler-specific features, but it is only tested
+with 7.1 so far.
 
 ## Can I see the requests in DevTools?
 
@@ -92,6 +104,8 @@ every call with its input and output as plain objects, or save a body and run
 
 ## Is the format stable?
 
-Not yet. Until 1.0 the format version in the header may change, and a client and server from
-different versions refuse each other's messages with a clear error. After 1.0 the format and the
-lockfile are versioned, and changes stay compatible.
+Not yet. 0.6 brought format 2, and it is meant to be the last breaking change before the first
+beta. From the beta on, a change to the wire format, the generated code or the public API is a new
+major version. Messages carry the format version, generated code the version of the runtime it was
+generated for, and sockets a subprotocol: a client and a server of incompatible versions refuse each
+other with an error that says so, instead of misreading each other.

@@ -74,6 +74,6 @@ chart.setData([m.t, m.cpu]); // typed arrays over the response bytes, nothing co
   are. See the [FAQ](./faq.md).
 
 > [!WARNING]
-> ts-bin-rpc is an alpha: `npm install ts-bin-rpc`. The wire format may still change before 1.0; such changes bump the minor version, so `^0.2.0` stays compatible.
+> ts-bin-rpc is an alpha: `npm install ts-bin-rpc`. The wire format may still change before 1.0; such changes bump the minor version, so `^0.6.0` stays compatible.
 
 Next: [Getting started](./getting-started.md).

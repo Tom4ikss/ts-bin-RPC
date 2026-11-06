@@ -106,22 +106,29 @@ Before the first view is returned, the whole message is checked:
 
 After that, reads do no bounds checks.
 
-The server always verifies inputs. The client verifies responses by default in development and
-skips verification in production builds, where `process.env.NODE_ENV` is `'production'`. Bundlers
-such as Vite, webpack and esbuild with `define` replace that expression at build time; without a
-bundler the client verifies. Set `verify` in `createClient` to choose explicitly:
+The server always verifies inputs. The client verifies every response in development. In
+production builds, where `process.env.NODE_ENV` is `'production'`, it skips verification only for
+a response that shows the server has the client's version of the procedure: an HTTP response whose
+`x-tbr-schema` header equals the client's hash. A tab left open across a deploy, a cache or a proxy
+that serves another version, and every response over a WebSocket or in a batch (they carry no hash)
+are verified. Bundlers such as Vite, webpack and esbuild with `define` replace that expression at
+build time; without a bundler the client is in development mode. Set `verify` in `createClient` to
+choose explicitly:
 
 ```ts
 createClient<AppRouter>({ url: '/rpc', procedures, verify: true }); // a server you do not control
 ```
 
+A cross-origin client sees `x-tbr-schema` only if the server exposes it
+(`Access-Control-Expose-Headers: x-tbr-schema`); otherwise it verifies every response.
+
 A message that fails verification is a `400 BAD_INPUT` on the server and a `BAD_RESPONSE` error on
-the client; it never crashes the process.
+the client.
 
 > [!CAUTION]
 > Without verification the client trusts the bytes. A broken or hostile response can throw a
-> `RangeError` on read, return wrong values or allocate large arrays. Keep verification on for a
-> server you do not control.
+> `RangeError` on read, return wrong values or allocate large arrays. `verify: false` is for your own
+> server only.
 
 ## On the server
 

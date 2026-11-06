@@ -112,8 +112,9 @@ closes every stream of it.
 | `overflow` | `'error'` | when the queue is full: `'error'` ends the stream with `SLOW_CONSUMER`, `'drop-oldest'` drops the oldest batches |
 | `heartbeat` | 15000 | ms of silence before an empty frame, so that proxies keep the connection open; `0` turns it off |
 
-`stream()` takes all of them. `channel(options)` takes `window` and `maxRows` for its topics, and
-`subscribe(topic, options)` takes the rest for each subscriber.
+`stream()` takes all of them (`StreamOptions`). `channel(options)` takes `window` and `maxRows` for
+its topics (`RowBatchOptions`), and `subscribe(topic, options)` takes the rest for each subscriber
+(`SubscriberOptions`).
 
 Why batches: encoding a message per row costs about as much as JSON, while a batch of 32 rows is
 6–16× cheaper to encode and read. A 16 ms window is one frame of a 60 Hz display. When latency
@@ -162,6 +163,10 @@ for await (const tick of api.ticks.subscribe({ symbol: 'BTC' })) {
 }
 ```
 
+An iterator reads at its own pace. With 4096 rows waiting, the client stops reading the response
+until the loop is down to half, so a slow loop holds the server back, and the server's
+`maxBuffered` and `overflow` decide what happens then, instead of the page's memory.
+
 Call options work as for calls: `signal` stops the subscription like `stop()`, and `decode: 'eager'`
 gives plain objects instead of views. Calling a stream procedure without `.subscribe` throws a
 `TypeError`.
@@ -173,7 +178,9 @@ There is no automatic reconnect yet. Rows sent while a client was disconnected a
 The request is the same `POST {prefix}/{procedure}`. The response has
 `content-type: application/vnd.tbr.stream` and is a sequence of frames: an 8-byte header (payload
 length, frame kind), then the payload padded to 8 bytes. A data frame carries one message of type
-`T[]`; error frames carry the usual error envelope. With `debug: true` the client logs each stream
+`T[]`; error frames carry the usual error envelope. Frame kinds from 128 up are ones a client may
+skip, so a newer server can add them without breaking older clients; an unknown kind below that is
+`BAD_RESPONSE`. With `debug: true` the client logs each stream
 when it closes, with its frames and bytes.
 
 Streams use the Fetch API on both sides, so they work under Node (with `toNodeListener`), Bun,

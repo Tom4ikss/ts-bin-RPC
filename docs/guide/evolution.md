@@ -37,6 +37,9 @@ Whether a change breaks old peers depends on the direction the type travels. A t
 **input** is written by clients and read by the server. A type in an **output** is written by the
 server and read by clients. A type used in both directions follows both sets of rules.
 
+The table, and `tbr check`, take the usual order of a deploy: the server goes first, and old clients
+(tabs opened before the deploy) call the new server.
+
 | Change | Input type | Output type |
 |---|---|---|
 | Add an optional field | safe | safe |
@@ -51,9 +54,24 @@ server and read by clients. A type used in both directions follows both sets of 
 | Reorder fields, enum values or variants | safe | safe |
 | Add an enum value or union variant | safe | **breaking**: old clients can't read it |
 | Remove an enum value or union variant | **breaking** | safe |
+| Add values past the 256th to an enum | **breaking**: its index widens from 1 byte to 2 | **breaking** |
 | Add a procedure | safe | safe |
 | Remove a procedure | **breaking**: old clients still call it | |
+| Remove `query()` from a procedure | **breaking**: old clients call it with GET | |
 | Change a procedure's input or output type | **breaking** | **breaking** |
+
+A field whose type changed with `--allow-breaking` gets a new ID, and the old one is retired: a peer
+of the old version sees the field missing, not the new type's bytes read as the old type.
+
+### New clients, old servers
+
+When clients can be newer than the server they reach, for example a client deployed before the
+server, servers of two versions behind one load balancer, or a rollback of the server, the
+directions swap: a new client writes inputs that an old server reads, and reads outputs that an old
+server wrote. Read the table with the columns swapped. Adding an optional field to an input stays
+safe either way; adding a required field to an output, safe above, is breaking here: the new client
+expects it, and the old server does not send it. If both orders can happen, only changes safe in
+both columns are.
 
 `tbr check` labels every change `safe`, `breaking` or `error`. `tbr generate` refuses to write
 breaking changes unless you pass `--allow-breaking`. Pass it when you know no old peers are
@@ -85,12 +103,14 @@ remove the tag once no peer has the old name in its generated code.
 ## In CI
 
 ```sh
-pnpm exec tbr check --router src/router.ts
+pnpm exec tbr check --router src/router.ts --base origin/main
 ```
 
-`tbr check` rebuilds the lockfile in memory and fails if it differs from the committed one. That
-catches two mistakes: forgetting to commit `tbr.lock.json`, and committing a breaking change by
-accident.
+`tbr check` rebuilds the lockfile in memory and fails if it differs from the committed one: that
+catches a forgotten `tbr generate` or a lockfile left out of the commit. With `--base` it also
+compares the types with the lockfile of the base branch, which catches a breaking change committed
+together with its lockfile after `--allow-breaking`. Breaking changes exit with code 3, so CI can
+tell them from a stale lockfile; see [`tbr check`](./cli.md#tbr-check).
 
 ## Watch mode
 
@@ -103,7 +123,7 @@ watcher takes the new file as its base.
 
 ## Stale generated code
 
-Three checks catch generated code that no longer matches the router:
+Four checks catch generated code that no longer matches the router or the runtime:
 
 1. **Types.** The generated file exports a `Contract` type. It requires the generated input and
    output types of every procedure to be mutually assignable with the router's types, and the set
@@ -118,4 +138,10 @@ Three checks catch generated code that no longer matches the router:
    procedures.
 3. **Runtime.** Each request carries a hash of the procedure's contract in the `x-tbr-schema`
    header. A server that sees another hash warns once per procedure, or answers
-   `409 SCHEMA_MISMATCH` with `schemaMismatch: 'error'`. Clients with `debug: true` warn too.
+   `409 SCHEMA_MISMATCH` with `schemaMismatch: 'error'`. Clients with `debug: true` warn too. The
+   hash covers what the wire depends on (field IDs, types, enum values, variants, `query()`), so a
+   safe change such as an added field changes it only for the procedures whose types it touches.
+4. **The runtime version.** Generated code checks at import that the installed `ts-bin-rpc` speaks
+   the interface it was generated for. After an upgrade that changes it, importing an old
+   `tbr.gen.ts` throws `the generated codecs (tbr.gen.ts) are for another version of ts-bin-rpc
+   than the one installed: run tbr generate`.

@@ -190,13 +190,19 @@ property of the record that arrives, not its prototype.
 - **Output:** any supported type, or `void`. It cannot be `null` or `undefined` at the top level:
   wrap it, as in `{ user: User | null }`.
 - **Overloaded functions are rejected.**
+- **Names:** no procedure or namespace may be called `then` (promises look it up, so `await
+  api.user` would call it) or after a method of [`ts-bin-rpc/tanstack`](./tanstack-query.md):
+  `pathKey`, `queryKey`, `queryOptions`, `infiniteQueryKey`, `infiniteQueryOptions`,
+  `mutationOptions`.
 
 ## Not supported
 
 | Type | Status |
 |---|---|
 | `any`, `unknown`, `never`, `object` | never: declare the fields |
-| functions, classes with methods, `symbol` | never |
+| functions, `symbol` | never |
+| classes | never: their private fields would go out with the rest; declare an interface |
+| TypeScript `enum` | use a string literal union |
 | `Set` | use an array |
 | optional and rest elements of tuples | use an object or an array |
 | `Record<number, T>`, symbol and template literal keys | use a `Map` or string keys |

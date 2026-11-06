@@ -44,7 +44,7 @@ Nothing changes on the server: `createHandler` takes batches at the prefix itsel
 On the server, `createHandler({ batch })`:
 
 - **`maxCalls`**: calls in one batch, at most; a larger batch gets `413 PAYLOAD_TOO_LARGE`.
-  Default: 64.
+  Default: 64. The whole body counts against the handler's `limits.maxBytes` (1 MB).
 - **`batch: false`** refuses batches with `404`: every call of the batch gets that error.
 
 ## How calls behave
@@ -59,7 +59,11 @@ Each call of a batch behaves as it would alone: its own result or `RpcError`, wi
   it anyway, and its answer is dropped.
 - **The `headers` function** of the client runs once per request, so once per batch.
 - **DevTools** and `debug` show each call on its own.
-- A connection that breaks rejects the calls of the batch with a `TypeError`, as `fetch` does.
+- A connection that breaks rejects the calls of the batch with `RpcError` `DISCONNECTED`, as a call
+  alone; a malformed batch response, with `BAD_RESPONSE`. A call that fails on the server gets its
+  error, `500 INTERNAL` for an exception, and the other calls their answers.
+- Calls of one batch must have distinct IDs (the client numbers them); the server refuses a batch
+  that repeats one, or that holds anything but calls.
 
 ## Performance
 

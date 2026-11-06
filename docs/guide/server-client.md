@@ -26,8 +26,11 @@ Workers. For `node:http`, wrap it:
 import http from 'node:http';
 import { toNodeListener } from 'ts-bin-rpc/node';
 
-http.createServer(toNodeListener(handler, { maxBytes: 8 << 20 })).listen(3000);
+http.createServer(toNodeListener(handler)).listen(3000);
 ```
+
+`toNodeListener` streams the body into the `Request` and keeps every `Set-Cookie` of the response.
+Its `maxBytes` (64 MB) is a second fence; the handler's own `limits.maxBytes` decides.
 
 The handler compares the router with the generated table at startup. A procedure that exists on one
 side only throws an error that tells you to run `tbr generate`.
@@ -36,10 +39,13 @@ side only throws an error that tells you to run `tbr generate`.
 |---|---|---|
 | `procedures` | — | `serverProcedures` from the generated file (`procedures` works too) |
 | `prefix` | `/` | path prefix of every procedure |
-| `context` | — | `(request) => ctx`, once per request to a procedure that takes `ctx`; may be async and may throw `RpcError` |
+| `context` | — | `(request) => ctx`, once per request to a procedure that takes `ctx`; may be async and may throw `RpcError`. Required by the types when a procedure takes `ctx` |
 | `schemaMismatch` | `'warn'` | the client was generated from another contract version: `'warn'` logs once per procedure, `'error'` answers 409, `'ignore'` |
-| `limits` | 64 MB, depth 64, 16M elements | `{ maxBytes, maxDepth, maxNodes }` for verifying inputs |
+| `limits` | 1 MB, depth 64, 16M elements | `{ maxBytes, maxDepth, maxNodes }` for request bodies and inputs. A body over `maxBytes` gets 413 as it arrives. A message also gets at most a few elements per byte, so a small body cannot claim millions of objects |
 | `onError` | `console.error` | `(error, { path, request })` for errors other than `RpcError` |
+| `checks`, `refine` | — | [validation](./validation.md) |
+| `batch` | `{ maxCalls: 64 }` | [batches](./batching.md); `false` refuses them |
+| `socket` | — | `{ allowedOrigins, maxSubscriptions, maxCalls }` of [WebSocket](./websocket.md) connections |
 
 ### Context
 
@@ -83,7 +89,7 @@ export const api = createClient<AppRouter>({
 | `headers` | — | sent with every call; a function is called before each one |
 | `fetch` | `globalThis.fetch` | for tests, retries or instrumentation |
 | `decode` | `'lazy'` | `'eager'` returns plain objects instead of [views](./views.md#plain-objects); a map like `{ 'user.get': 'eager' }` sets it per procedure |
-| `verify` | `true`, `false` in production | verify responses before reading them; production means `process.env.NODE_ENV === 'production'` |
+| `verify` | see [views](./views.md#verification) | verify responses before reading them: always in development, in production only when the response does not show the server has the same contract |
 | `limits` | as on the server | limits for verifying responses |
 | `debug` | `false` | log every call to the console |
 | `batch` | — | `batch()`: calls of one task in one request ([batching](./batching.md)) |
@@ -135,27 +141,40 @@ try {
 }
 ```
 
-`data` travels as JSON, so it must be JSON-serializable. Any other exception reaches `onError`;
-the client gets `500 INTERNAL` without details.
+`data` travels as JSON; bigints in it arrive as decimal strings, and data that is not JSON (a
+cycle) is dropped. Any other exception reaches `onError`; the client gets `500 INTERNAL` without
+details.
 
 | Code | Status | Raised by |
 |---|---|---|
-| `BAD_INPUT` | 400 | the server: input failed verification, or is missing |
+| `BAD_INPUT` | 400 | the server: input failed verification or a rule, or is missing; `data` is an [`InputIssue`](./validation.md#errors) |
 | `UNAUTHORIZED` | 401 | your code |
 | `FORBIDDEN` | 403 | your code |
 | `NOT_FOUND` | 404 | your code, or the server: no such procedure |
 | `METHOD_NOT_ALLOWED` | 405 | the server: not a POST, or not a GET or POST for a query |
 | `CONFLICT` | 409 | your code |
 | `SCHEMA_MISMATCH` | 409 | the server, with `schemaMismatch: 'error'` |
-| `PAYLOAD_TOO_LARGE` | 413 | the server: over `limits.maxBytes` |
+| `PAYLOAD_TOO_LARGE` | 413 | the server: over `limits.maxBytes`, or a batch over `maxCalls` |
 | `UNSUPPORTED_MEDIA_TYPE` | 415 | the server: wrong content type |
-| `TOO_MANY_REQUESTS` | 429 | your code |
+| `TOO_MANY_REQUESTS` | 429 | your code, or the server: over a socket's `maxSubscriptions` or `maxCalls` |
+| `SLOW_CONSUMER` | 429 | the server: a stream's client read slower than it produced |
 | `INTERNAL` | 500 | the server: a procedure threw something else |
 | `BAD_OUTPUT` | 500 | the server: a procedure returned a value that does not match its type |
 | `BAD_RESPONSE` | 502 | the client: the response is not a valid ts-bin-rpc message |
+| `UNAVAILABLE` | 503 | a proxy, or the server going away |
+| `TIMEOUT` | 504 | a proxy |
+| `DISCONNECTED` | 0 | the client: the request failed or the connection broke |
 
-Codes not in the table are yours, and default to status 400. Pass `{ status }` as the fourth
-argument to choose another: `new RpcError('PAYMENT_REQUIRED', '…', undefined, { status: 402 })`.
+These codes are ts-bin-rpc's: do not reuse them for other meanings. Codes not in the table are
+yours, and default to status 400. Pass `{ status }` as the fourth argument to choose another:
+`new RpcError('PAYMENT_REQUIRED', '…', undefined, { status: 402 })`; a status outside 400–599 goes
+out as 500. A response that is not ts-bin-rpc's, such as a proxy's 503 page, gets the code of its
+status from the table.
+
+Everything a call rejects with is an `RpcError`, transport failures included: a failed `fetch`, a
+closed socket or a broken batch response is `DISCONNECTED` or `BAD_RESPONSE`. The one exception is
+an abort: the call rejects with the signal's reason, as `fetch` does. Errors thrown by your own
+`headers` function come through as they are.
 
 `BAD_OUTPUT` means a bug on the server, so the client gets no details. `onError` gets the
 `EncodeError` with the path to the bad value, and the default handler prints it:
@@ -172,7 +191,9 @@ ts-bin-rpc: procedure 'user.list' returned an invalid value at [17].manager.age:
   else with 415. Browsers cannot send this content type from a form or a "simple" cross-origin
   request, which protects against CSRF.
 - **A stream procedure answers with `content-type: application/vnd.tbr.stream`**, a sequence of
-  frames over one response; see [Streams](./streams.md#wire).
+  frames over one response; see [Streams](./streams.md#wire). A [batch](./batching.md) uses
+  `application/vnd.tbr.batch`. The three are exported as `CONTENT_TYPE`, `STREAM_CONTENT_TYPE` and
+  `BATCH_CONTENT_TYPE` from `ts-bin-rpc`, for proxy and compression settings.
 - **Errors are a fixed envelope** with a flag in the header, so the client reads them without
   knowing the procedure.
 - **The `x-tbr-schema` header** carries a hash of the procedure's contract in both directions. The

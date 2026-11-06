@@ -26,11 +26,32 @@ not rewritten, so tools watching them don't reload for nothing.
 |---|---|---|
 | `--project <tsconfig>` | `tsconfig.json` | the TypeScript project that contains the router |
 | `--router <file#export>` | `src/router.ts#appRouter` | the router module and the name of its export |
-| `--lock <file>` | `tbr.lock.json` next to the tsconfig | the lockfile |
+| `--lock <file>` | `tbr.lock.json` | the lockfile |
 | `--out <file>` | `tbr.gen.ts` next to the router | the generated codecs |
+
+`--router`, `--lock` and `--out` are relative to the tsconfig's directory, not to the current
+directory, as in the Vite plugin.
 | `--watch`, `-w` | | regenerate on every change to the project's files |
 | `--allow-breaking` | | accept breaking changes |
 | `--dry-run` | | print the schema and the lockfile instead of writing |
+
+### The generated file
+
+`tbr.gen.ts` exports, for your code:
+
+| Export | |
+|---|---|
+| `clientProcedures` | the table for `createClient`: encoders of inputs, readers of outputs |
+| `serverProcedures` | the table for `createHandler`: readers of inputs, encoders of outputs |
+| `procedures` | both in one table, for tests and tools that are client and server at once |
+| `inputRules` | the inputs with their rules, for [`inputSchema`](./validation.md#on-the-client) |
+| `codecs` | a codec for every named type, by its name in the lockfile, for tests and `tbr decode --type` |
+| `Contract` | the type that fails `tsc` when the file is [out of date](./evolution.md#stale-generated-code) |
+
+The `T_*` and `E_*` types it also exports are the generated types of each place, which the tables
+refer to; their names follow the lockfile and are not meant to be imported. The file imports
+`ts-bin-rpc/runtime`, the interface between generated code and the package, which is internal:
+it changes with the versions of `ts-bin-rpc`, and the file checks at import that it matches.
 
 ### Watch
 
@@ -94,9 +115,34 @@ which hands `/rpc/*` to the handler.
 pnpm exec tbr check --router src/server/router.ts
 ```
 
-Exits with 1 if the lockfile is missing or does not match the types, and prints the changes with
-their severity. If the generated file exists, it must also be what `tbr generate` would write now:
-a [validation rule](./validation.md) changes nothing else. It never writes. Run it in CI.
+Fails if the lockfile is missing or does not match the types, and prints the changes with their
+severity. If the generated file exists, it must also be what `tbr generate` would write now: a
+[validation rule](./validation.md) changes nothing else. It never writes. Run it in CI.
+
+The lockfile of a commit is up to date with that commit's own changes, breaking ones included once
+someone ran `tbr generate --allow-breaking`. To see what a pull request breaks, compare with the
+lockfile it started from:
+
+```sh
+pnpm exec tbr check --base origin/main    # a git ref, or a lockfile on disk
+```
+
+`--base` reads the lockfile at the same path in that commit; without one there, everything is new.
+A change that is breaking against the base fails the check with exit code 3, apart from a stale
+lockfile (1), so CI can ask for a major version or a review instead of a rerun of `generate`.
+
+`--json` prints the result for tools instead of the text:
+
+```json
+{
+  "status": "breaking",
+  "message": "the contract has breaking changes",
+  "changes": [{ "severity": "breaking", "path": "user.get", "message": "…", "location": { "file": "src/router.ts", "line": 12, "column": 3 } }]
+}
+```
+
+`status` is `ok`, `stale` (run `tbr generate`), `breaking` or `error` (types that cannot be sent,
+or changes that cannot be applied).
 
 ## `tbr decode`
 
@@ -121,3 +167,16 @@ arrays as arrays.
 | 0 | success |
 | 1 | types that cannot be sent, blocked changes, an out-of-date lockfile, an invalid message |
 | 2 | wrong usage |
+| 3 | `check`: the contract has breaking changes, against the lockfile or `--base` |
+
+## The lockfile
+
+`tbr.lock.json` has `"format": 1`. A lockfile of an older format is read and rewritten by the next
+`tbr generate`; a newer one, from a newer `tbr`, is refused with a message saying so. Keys the
+current `tbr` does not know are kept as they are. A lockfile with merge conflict markers is refused:
+keep both sides' entries, giving no ID to two fields, or take one side and run `tbr generate`.
+
+## TypeScript
+
+`tbr` reads types with TypeScript 7.1 (`typescript@>=7.1.0-beta <7.2.0`, a peer dependency). With
+another version installed it stops and says which one it needs.

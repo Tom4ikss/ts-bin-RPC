@@ -63,8 +63,10 @@ src/router.ts:12:3  CreateUser.name: Min applies to numbers and bigints
 
 ## Errors
 
-An input that breaks a rule gets `400 BAD_INPUT`. The procedure is not called. `data` names the
-field, the rule and its limit, so the client can show the error next to the field:
+An input that breaks a rule gets `400 BAD_INPUT`. The procedure is not called. `data` is an
+`InputIssue` (exported from `ts-bin-rpc`), the same shape as an issue of
+[`inputSchema`](#on-the-client) on the client. It names the field, the rule and its limit, so the
+client can show the error next to the field:
 
 ```ts
 try {
@@ -72,17 +74,20 @@ try {
 } catch (e) {
   if (e instanceof RpcError && e.code === 'BAD_INPUT' && e.data) {
     e.message; // 'CreateUser.name is shorter than 1'
-    e.data;    // { field: 'CreateUser.name', rule: 'minLength', limit: 1 }
+    e.data;    // { message: 'is shorter than 1', field: 'CreateUser.name', rule: 'minLength', limit: 1 }
   }
 }
 ```
 
 | Field | |
 |---|---|
+| `message` | what is wrong, as said after the path: `is shorter than 1` |
 | `field` | type and field, `CreateUser.name`; an element of an array field ends with `[]`, `CreateUser.tags[]` |
-| `rule` | `'min'`, `'max'`, `'minLength'`, `'maxLength'` or `'pattern'` |
+| `rule` | `'min'`, `'max'`, `'minLength'`, `'maxLength'`, `'pattern'`; `'check'` and `'refine'` below; `'type'` for a missing input; `'format'` for a message the server could not read, which a ts-bin-rpc client does not send |
 | `limit` | the rule's argument; a decimal string for `u64` and `i64`, the source for `Pattern` |
 | `index` | the element of an array, or the row of an array of objects, when the value is in one |
+| `path` | the value in the input, `['guests', 1, 'email']`: for checks and refinements, which run on the decoded input |
+| `name` | the check, or the refined type |
 
 The anonymous input type of `createUser` is named `createUser:input` in `field`.
 
@@ -94,10 +99,10 @@ A failed check or refinement answers `400 BAD_INPUT` too, with the path of the v
 
 ```ts
 e.message; // 'guests[1].email is not a valid email'
-e.data;    // { field: 'Guest.email', rule: 'check', name: 'email', path: 'guests[1].email', message: 'is not a valid email' }
+e.data;    // { message: 'is not a valid email', path: ['guests', 1, 'email'], field: 'Guest.email', rule: 'check', name: 'email' }
 
 e.message; // 'events[0].range: starts after it ends'
-e.data;    // { field: 'DateRange', rule: 'refine', name: 'DateRange', path: 'events[0].range', message: 'starts after it ends' }
+e.data;    // { message: 'starts after it ends', path: ['events', 0, 'range'], field: 'DateRange', rule: 'refine', name: 'DateRange' }
 ```
 
 The rules run first, while the server verifies the message; checks and refinements after it has
@@ -216,7 +221,8 @@ It checks what the server checks, and reports every issue instead of the first:
 - **The shape**: a value the encoder would reject, such as `300` in a `u8` or a missing field,
   is an issue with `rule: 'type'` and `expected u8, got 300`.
 - **The rules**, with the texts of the server: `is shorter than 1`, `does not match /^[a-z]+$/`.
-  `field`, `rule` and `limit` are the same as in the server's `BAD_INPUT` data.
+  `field`, `rule` and `limit` are the same as in the server's `BAD_INPUT` data; here `path` is
+  always there.
 - **Checks and refinements** you pass, as to `createHandler`: `checks` and `refine`, functions or
   Standard Schemas. A check you do not pass is left to the server, for checks that need its data,
   like a free user name. A value's checks run when its parts are clean, and its refinements after its
