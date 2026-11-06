@@ -1,6 +1,6 @@
 {
   "name": "@tbr/devtools",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "DevTools extension for ts-bin-rpc: calls and streams with decoded inputs and responses",
   "type": "module",

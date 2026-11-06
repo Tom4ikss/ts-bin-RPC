@@ -521,6 +521,14 @@ BigInt на значение был самой дорогой проверкой
   записи (ревизия на запись). Аргументы хука позиционные: в клиенте это +47 B gz, без расширения —
   один lookup на вызов. Чего страница не дождалась (упавший `fetch`, отказ энкодера), в панель не
   попадает: это исключение в коде и строка в Network.
+- Firefox (2026-11-06): тот же код, другой манифест — `browser_specific_settings.gecko` с ID,
+  `strict_min_version: 128` (первый Firefox с `world: 'MAIN'`) и `data_collection_permissions:
+  none`, которые требует AMO. Сборка кладёт `dist/chromium` и `dist/firefox`. Все API панели
+  (`inspectedWindow.eval`, `panels.themeName`, `network.onNavigated`) в Firefox те же, правок кода
+  не понадобилось. e2e ставит расширение в Firefox Playwright через WebDriver BiDi
+  (`webExtension.install`, временный аддон без подписи; у самого Playwright расширений в Firefox
+  нет) и проверяет хук, как в Chromium. Панель проверена руками в Firefox 157 через Marionette:
+  список, дерево ответа, батчи live. В CI это не взято: скрипт держится за внутренние API тулбокса.
 
 ## 13. Риски
 

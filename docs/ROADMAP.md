@@ -367,7 +367,10 @@ JSDoc-тега, вход — бинарный base64url (читаемые пар
 5. ~~**TanStack Query**~~ — **сделано, 2026-11-06 (0.5.1):** `infiniteQueryOptions` по `cursor` во
    входе, стримы и live как запросы через `streamedQuery` приложения
    ([руководство](guide/tanstack-query.md#streams-as-queries), [DESIGN §17](DESIGN.md#17-tanstack-query)).
-6. **Расширение DevTools для Firefox.**
+6. ~~**Расширение DevTools для Firefox.**~~ — **сделано, 2026-11-06:** та же сборка с манифестом
+   под Firefox 128+, zip на сайте доков, установка временным аддоном; e2e в Firefox через WebDriver
+   BiDi ([руководство](guide/devtools.md#install), [DESIGN §12](DESIGN.md#12-отладка)). На Firefox
+   Add-ons и в Chrome Web Store — когда автор опубликует.
 7. **Эксперимент с адаптерами tRPC и oRPC; бенчи против Arrow JS / Flechette и Colyseus, Arrow IPC.**
 
 ## После alpha (ориентир, не план)

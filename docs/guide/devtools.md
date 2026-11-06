@@ -6,25 +6,39 @@ description: A DevTools panel that lists calls and streams with their inputs and
 # DevTools
 
 Bodies are binary, so the Network tab shows bytes. The ts-bin-rpc extension adds a panel to
-Chrome DevTools that lists the page's calls and streams and shows each one decoded: the input as
-the client passed it, the response with its types (dates, bigints, typed arrays, maps), errors with
-their code and data.
+Chrome and Firefox DevTools that lists the page's calls and streams and shows each one decoded: the
+input as the client passed it, the response with its types (dates, bigints, typed arrays, maps),
+errors with their code and data.
 
 ## Install
 
-The extension is not in the Chrome Web Store yet. To install it from the build:
+The extension is not in the Chrome Web Store or on Firefox Add-ons yet. To install it from the
+build:
+
+**Chrome, Edge and other Chromium browsers**
 
 1. Download [ts-bin-rpc-devtools.zip](https://tom4ikss.github.io/ts-bin-RPC/ts-bin-rpc-devtools.zip)
    and unzip it.
 2. Open `chrome://extensions`, turn on **Developer mode**, click **Load unpacked** and pick the
    unzipped folder.
-3. Reload the page you are debugging and open DevTools: the panel is called **ts-bin-rpc**.
 
-It works in Chrome, Edge and other Chromium browsers. Clients report to it from ts-bin-rpc 0.3.2;
-there is nothing to set up in your code.
+**Firefox 128 or later**
+
+1. Download [ts-bin-rpc-devtools-firefox.zip](https://tom4ikss.github.io/ts-bin-RPC/ts-bin-rpc-devtools-firefox.zip).
+2. Open `about:debugging#/runtime/this-firefox`, click **Load Temporary Add-on…** and pick the zip
+   itself, without unzipping it.
+
+Firefox keeps a temporary add-on until it restarts: load it again after that. Firefox Developer
+Edition and Nightly can keep it for good with `xpinstall.signatures.required` set to `false` in
+`about:config`, installed from `about:addons`.
+If the panel keeps asking to reload the page, Firefox has not let the extension into the site: in
+`about:addons`, open the extension's **Permissions** and allow access to all websites.
+
+Then reload the page you are debugging and open DevTools: the panel is called **ts-bin-rpc**.
+Clients report to it from ts-bin-rpc 0.3.2; there is nothing to set up in your code.
 
 To build it from the repository instead: `pnpm --filter @tbr/devtools build`, then load
-`packages/devtools/dist`.
+`packages/devtools/dist/chromium` or `packages/devtools/dist/firefox`.
 
 ## The panel
 

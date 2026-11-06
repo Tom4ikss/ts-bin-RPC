@@ -1,11 +1,11 @@
 // The DevTools extension's side of the page: the client reports to the hook, and the hook gives the
-// panel decoded calls and streams. In process with the hook installed by hand, then in Chromium with
-// the built extension, whose content script installs it.
+// panel decoded calls and streams. In process with the hook installed by hand, then in Chromium and
+// Firefox with the built extension, whose content script installs it.
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { chromium } from 'playwright';
+import { chromium, firefox } from 'playwright';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createClient } from 'ts-bin-rpc/client';
 import { createHook, type Hook } from '@tbr/devtools/src/hook.ts';
@@ -122,6 +122,89 @@ describe('hook in process', () => {
   });
 });
 
+// Firefox through WebDriver BiDi, which installs an unsigned extension for the session, as "Load
+// Temporary Add-on" does. Playwright's Firefox speaks it, but Playwright itself has no extensions there.
+describe('extension in Firefox', () => {
+  let server: Awaited<ReturnType<typeof start>>;
+  beforeAll(async () => {
+    execFileSync(process.execPath, ['build.mjs'], { cwd: extension, stdio: 'inherit' });
+    server = await start();
+  }, 60_000);
+  afterAll(() => {
+    server?.child.removeAllListeners('exit');
+    server?.child.kill();
+  });
+
+  it('hooks into the page before its scripts and sees what the client does', async () => {
+    const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'tbr-devtools-ff-'));
+    const browser = spawn(firefox.executablePath(), ['--headless', '--no-remote', '--profile', profile, '--remote-debugging-port', '0', 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe'] });
+    try {
+      const url = await new Promise<string>((resolve, reject) => {
+        let err = '';
+        browser.on('exit', (code) => reject(new Error(`firefox exited with ${code}: ${err}`)));
+        browser.stderr!.on('data', (d) => {
+          err += d;
+          const m = /WebDriver BiDi listening on (ws:\/\/\S+)/.exec(err);
+          if (m) resolve(m[1]);
+        });
+      });
+      const bidi = await connect(`${url}/session`);
+      try {
+        await bidi.send('session.new', { capabilities: {} });
+        await bidi.send('webExtension.install', { extensionData: { type: 'path', path: path.join(extension, 'dist', 'firefox') } });
+        const { contexts } = (await bidi.send('browsingContext.getTree', {})) as { contexts: { context: string }[] };
+        const context = contexts[0].context;
+        await bidi.send('browsingContext.navigate', { context, url: server.origin, wait: 'complete' });
+        const run = async (expression: string) => {
+          const r = (await bidi.send('script.evaluate', { expression, target: { context }, awaitPromise: true })) as { type: string; result?: { value: string }; exceptionDetails?: { text: string } };
+          if (r.type !== 'success') throw new Error(r.exceptionDetails?.text);
+          return JSON.parse(r.result!.value) as unknown;
+        };
+        expect(await run('window.result.then((r) => JSON.stringify(r.failures))')).toEqual([]);
+        const seen = (await run(`(() => {
+          const hook = globalThis.__TBR_DEVTOOLS__;
+          const entries = hook.list(0).entries;
+          const get = entries.find((s) => s.path === 'user.get' && !s.error);
+          return JSON.stringify({ paths: new Set(entries.map((s) => s.path)).size, streams: entries.filter((s) => s.kind === 'stream').length, output: hook.detail(get.id, 'output') });
+        })()`)) as { paths: number; streams: number; output: unknown };
+        expect(seen.paths).toBeGreaterThan(10);
+        expect(seen.streams).toBeGreaterThan(0);
+        expect(seen.output).toMatchObject({ id: expect.any(Number), name: expect.any(String), createdAt: { $tbr: 'date' } });
+      } finally {
+        bidi.close();
+      }
+    } finally {
+      browser.removeAllListeners('exit');
+      browser.kill();
+      fs.rmSync(profile, { recursive: true, force: true });
+    }
+  }, 60_000);
+});
+
+/** A WebDriver BiDi connection: commands by id, events ignored. */
+async function connect(url: string) {
+  const ws = new WebSocket(url);
+  await new Promise((resolve, reject) => ((ws.onopen = resolve), (ws.onerror = reject)));
+  let next = 0;
+  const pending = new Map<number, { resolve(v: unknown): void; reject(e: Error): void }>();
+  ws.onmessage = (e) => {
+    const m = JSON.parse(String(e.data)) as { id?: number; type: string; result?: unknown; error?: string; message?: string };
+    const p = m.id === undefined ? undefined : pending.get(m.id);
+    if (!p) return;
+    pending.delete(m.id!);
+    if (m.type === 'error') p.reject(new Error(`${m.error}: ${m.message}`));
+    else p.resolve(m.result);
+  };
+  return {
+    send(method: string, params: object): Promise<unknown> {
+      const id = ++next;
+      ws.send(JSON.stringify({ id, method, params }));
+      return new Promise((resolve, reject) => pending.set(id, { resolve, reject }));
+    },
+    close: () => ws.close(),
+  };
+}
+
 /** Starts the fixture server; resolves with its origin once it prints `listening <port>`. */
 function start(): Promise<{ origin: string; child: ChildProcess }> {
   return new Promise((resolve, reject) => {
@@ -149,7 +232,7 @@ describe('extension in Chromium', () => {
 
   it('hooks into the page before its scripts and sees what the client does', async () => {
     const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'tbr-devtools-'));
-    const dist = path.join(extension, 'dist');
+    const dist = path.join(extension, 'dist', 'chromium');
     const context = await chromium.launchPersistentContext(profile, {
       channel: 'chromium',
       args: [`--disable-extensions-except=${dist}`, `--load-extension=${dist}`],
