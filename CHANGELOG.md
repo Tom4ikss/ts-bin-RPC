@@ -10,6 +10,19 @@ From 0.2.0, a change to the wire format or another breaking change bumps the min
 0.3), and patch versions stay compatible: `^0.2.0` never picks up a new format. Versions before
 0.2.0 were prereleases under the `alpha` dist-tag.
 
+## 0.4.1
+
+Compatible with 0.4.0: the HTTP wire format and the generated code are unchanged.
+
+- WebSocket transport: `createClient({ socket: webSocket(url) })` sends subscriptions, and calls
+  with `calls: true`, over one socket ([guide](https://tom4ikss.github.io/ts-bin-RPC/guide/websocket/)).
+  Live subscriptions start again by themselves after a dropped connection, with a fresh snapshot;
+  streams end with `DISCONNECTED`. Queries keep GET over HTTP.
+- `createHandler` returns a handler with `socket(ws, request)` for any WebSocket with `send` and
+  `close`, and `acceptWebSocket(handler)` in `ts-bin-rpc/node` serves sockets of the `ws` package.
+  Examples for Bun and Deno are in the guide.
+- `webSocket` adds about 0.9 KB gzip to the client, only when imported.
+
 ## 0.4.0
 
 Compatible with 0.3.2 for routers without live state: their wire format and generated code are
