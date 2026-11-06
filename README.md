@@ -81,24 +81,24 @@ which moves some rows by 10–25%, and a few rows in Firefox change by up to 2×
 launch to the next.
 
 <!-- bench:start -->
-GitHub Actions `ubuntu-latest` (AMD EPYC 9V45 96-Core Processor), Chromium 156, Firefox 157, WebKit 27.2, Node 22.23 through Playwright, 2026-11-05, commit [`58a1c71`](https://github.com/Tom4ikss/ts-bin-RPC/commit/58a1c71d3ae09c29f635e87801c297bf07ddc6c7).
+GitHub Actions `ubuntu-latest` (Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz), Chromium 156, Firefox 157, WebKit 27.2, Node 22.23 through Playwright, 2026-11-06, commit [`343e17e`](https://github.com/Tom4ikss/ts-bin-RPC/commit/343e17e28878a45cd5ce344b8058b072a6b61d20).
 Full tables, with times: [generated.md](bench/results/ci/generated.md).
 
 | Reading | Node | Chromium | Firefox | WebKit |
 |---|---|---|---|---|
-| 1000 users, every field | 8.3× | 4.5× | 3.3× | 3.7× |
-| 1000 users, 2 of 7 fields | 18× | 9.5× | 6.5× | 5.7× |
-| 1000 users, numeric fields only | 25× | 15× | 13× | 8.2× |
-| 100k points, every value | 154× | 24× | 125× | 24× |
-| 10 users, every field | 2.7× | 1.3× | 1.2× | 1.1× |
-| 500 products with long text | 5.5× | 1.8× | 2.5× | 2.8× |
-| 1 user | 1.2× | **0.90×** | **0.66×** | **0.65×** |
+| 1000 users, every field | 8.3× | 3.6× | 3.7× | 3.7× |
+| 1000 users, 2 of 7 fields | 17× | 7.8× | 6.9× | 5.9× |
+| 1000 users, numeric fields only | 24× | 11× | 14× | 8.1× |
+| 100k points, every value | 120× | 20× | 124× | 21× |
+| 10 users, every field | 2.9× | 1.4× | 1.3× | 1.3× |
+| 500 products with long text | 4.3× | 1.9× | 2.6× | 2.3× |
+| 1 user | 1.1× | **0.93×** | **0.69×** | **0.69×** |
 
 | Encoding | Node | Chromium | Firefox | WebKit |
 |---|---|---|---|---|
-| 1000 users | 2.9× | 3.0× | 1.8× | 2.0× |
-| 500 products with long text | 1.8× | 1.0× | 1.3× | 1.0× |
-| 100k points | 47× | 37× | 35× | 21× |
+| 1000 users | 2.3× | 2.7× | 1.5× | 1.9× |
+| 500 products with long text | 1.5× | 1.0× | 1.1× | 1.1× |
+| 100k points | 60× | 37× | 46× | 27× |
 <!-- bench:end -->
 
 Users have 7 fields: three numbers, a boolean and three strings, 30% of names in Cyrillic. Products

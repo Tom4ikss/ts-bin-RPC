@@ -1,13 +1,13 @@
 # Middleware overhead
 
-2026-11-05, AMD EPYC 9V45 96-Core Processor, linux 7.0.0-1019-azure, Node v22.23.4. Median of 9 rounds of 200,000 sequential awaited calls.
+2026-11-06, Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz, linux 7.0.0-1019-azure, Node v22.23.4. Median of 9 rounds of 200,000 sequential awaited calls.
 
 The procedure takes no input and returns nothing, so the handler column is routing, `Request` and `Response` without a codec. Context steps return a new object, as `{ ...ctx, user }` does; the around step reads the clock twice.
 
 | Chain | Calling the procedure | Through createHandler |
 |---|---|---|
-| no middleware | 35 ns | 5.64 µs |
-| 1 context step | 48 ns (+13 ns) | 5.70 µs (+60 ns) |
-| 1 async context step | 106 ns (+71 ns) | 5.76 µs (+122 ns) |
-| 1 around | 168 ns (+133 ns) | 5.81 µs (+168 ns) |
-| around + 2 context steps | 197 ns (+162 ns) | 5.84 µs (+197 ns) |
+| no middleware | 61 ns | 10.50 µs |
+| 1 context step | 99 ns (+38 ns) | 10.52 µs (+17 ns) |
+| 1 async context step | 202 ns (+141 ns) | 10.75 µs (+253 ns) |
+| 1 around | 379 ns (+318 ns) | 11.05 µs (+550 ns) |
+| around + 2 context steps | 408 ns (+347 ns) | 11.07 µs (+574 ns) |
