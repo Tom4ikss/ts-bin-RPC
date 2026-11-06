@@ -98,6 +98,31 @@ describe('live state', () => {
     expect(units.get(4)).not.toHaveProperty('target', null);
   });
 
+  it('keeps the state in the order of its keys with `order`', async () => {
+    const row = (id: number) => ({ id, name: `u${id}`, x: 0, y: 0, hp: 1, kind: 'unit' as const });
+    units.clear();
+    for (const id of [3, 1, 2]) units.set(row(id));
+    const api = clientOf();
+    const desc = track(watch((h) => api.stream.units.subscribe(h, { order: 'desc' })));
+    const asc = track(watch((h) => api.stream.units.subscribe(h, { order: (a, b) => a - b })));
+    const plain = track(open(api));
+    await Promise.all([desc.next(), asc.next(), plain.next()]);
+    expect([...desc.sub.state.keys()]).toEqual([3, 2, 1]);
+    expect([...asc.sub.state.keys()]).toEqual([1, 2, 3]);
+    expect([...plain.sub.state.keys()]).toEqual([3, 1, 2]);
+
+    const two = desc.sub.state.get(2);
+    units.set(row(5));
+    units.set(row(0));
+    units.update(1, { hp: 9 });
+    units.delete(3);
+    await Promise.all([desc.next(), asc.next()]);
+    expect([...desc.sub.state.keys()]).toEqual([5, 2, 1, 0]);
+    expect([...asc.sub.state.keys()]).toEqual([0, 1, 2, 5]);
+    expect(desc.sub.state.get(1)?.hp).toBe(9);
+    expect(desc.sub.state.get(2)).toBe(two); // moving rows keeps their identity
+  });
+
   it('gives a new subscriber the current state, and encodes each change once for every subscriber', async () => {
     units.update(1, { name: 'moved' });
     const a = track(open());

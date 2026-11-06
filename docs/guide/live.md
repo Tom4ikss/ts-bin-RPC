@@ -124,7 +124,29 @@ unchanged one is the same object as before, so `React.memo` and selectors skip w
 change. Rows are plain objects, not [views](views.md): a delta changes a few fields of a row, and a
 view would keep the whole message alive.
 
-`options` takes `signal` and `headers`, like any call.
+`options` takes `signal` and `headers`, like any call, and `order`.
+
+### Order
+
+Without `order`, `state` iterates in the order rows arrived: a snapshot in the server's order, new
+rows at the end. With `order`, it iterates by key: `'asc'`, `'desc'` (by `<`, strings by code unit),
+or a comparator of keys. An order book is the case it is for:
+
+```ts
+const bids = api.book.bids.subscribe({ symbol: 'BTC' }, draw, { order: 'desc' });
+const asks = api.book.asks.subscribe({ symbol: 'BTC' }, draw, { order: 'asc' });
+
+function draw(levels: ReadonlyMap<number, Level>) {
+  let n = 0;
+  for (const level of levels.values()) {
+    if (n++ === 20) break; // the best 20 levels
+    row(level);
+  }
+}
+```
+
+A changed row keeps its place, since its key does not change, so only frames that add keys reorder
+the `Map`: the new keys are merged into the sorted ones, in time linear in the size of the state.
 
 Over a [WebSocket](websocket.md), a live subscription outlives a dropped connection: it starts
 again on a new socket, and its first frame there is a snapshot.

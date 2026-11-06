@@ -139,8 +139,16 @@ export interface LiveSubscription<T, K extends keyof T> {
   stop(): void;
 }
 
+export interface LiveOptions<Key> extends CallOptions {
+  /**
+   * Keeps `state` in this order of keys: `'asc'`, `'desc'` (by `<`; strings by code unit), or a
+   * comparator. Without it, rows keep the order they arrived in.
+   */
+  order?: 'asc' | 'desc' | ((a: Key, b: Key) => number);
+}
+
 export interface LiveProcedure<A extends unknown[], T, K extends keyof T> {
-  subscribe(...args: [...InputArgs<A>, handler?: LiveHandler<T, K>, options?: CallOptions]): LiveSubscription<T, K>;
+  subscribe(...args: [...InputArgs<A>, handler?: LiveHandler<T, K>, options?: LiveOptions<T[K]>]): LiveSubscription<T, K>;
 }
 
 /** Client arguments for a procedure's parameter list: the input only, `ctx` stays on the server. */

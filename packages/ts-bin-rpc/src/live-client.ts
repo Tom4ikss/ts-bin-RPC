@@ -4,7 +4,7 @@
 import { devtoolsHook, type ClientEntry, type DevtoolsTap, type RpcError } from './rpc.ts';
 import { FRAME_DELTA, FRAME_SNAPSHOT } from './frames.ts';
 import { pump, safely, type StreamEnv } from './stream-client.ts';
-import type { CallOptions, LiveChanges, LiveHandler, LiveSubscription } from './router.ts';
+import type { LiveChanges, LiveHandler, LiveOptions, LiveSubscription } from './router.ts';
 
 type Row = Record<string, unknown>;
 interface Delta {
@@ -18,10 +18,13 @@ interface Delta {
  * clients do not ship it.
  */
 export function subscribeLive(env: StreamEnv, path: string, proc: ClientEntry, args: unknown[]): LiveSubscription<Row, string> {
-  const [input, handler, opts = {}] = (proc.input ? args : [undefined, ...args]) as [unknown, LiveHandler<Row, string> | undefined, CallOptions | undefined];
+  const [input, handler, opts = {}] = (proc.input ? args : [undefined, ...args]) as [unknown, LiveHandler<Row, string> | undefined, LiveOptions<unknown> | undefined];
   const h = typeof handler === 'function' ? { change: handler } : (handler ?? {});
   const key = proc.live!;
   const state = new Map<unknown, Row>();
+  const order = opts.order;
+  const sign = order === 'desc' ? -1 : 1;
+  const cmp = typeof order === 'function' ? order : (a: unknown, b: unknown) => ((a as number) < (b as number) ? -sign : (a as number) > (b as number) ? sign : 0);
   const abort = new AbortController();
   let over = false;
   let stopped = false;
@@ -39,6 +42,17 @@ export function subscribeLive(env: StreamEnv, path: string, proc: ClientEntry, a
     tap?.end(error, stopped);
   };
 
+  // A new key goes to the end of the Map; changed rows keep their place. So only frames that add
+  // keys can break the order, and then the keys are two sorted runs, which sort() merges in O(n).
+  const sort = () => {
+    const keys = [...state.keys()];
+    const sorted = keys.slice().sort(cmp);
+    if (sorted.every((k, i) => k === keys[i])) return;
+    const rows = sorted.map((k) => state.get(k)!);
+    state.clear();
+    sorted.forEach((k, i) => state.set(k, rows[i]));
+  };
+
   const changed = (changes: LiveChanges<unknown>) => h.change && safely(() => h.change!(state as ReadonlyMap<string, Row>, changes as LiveChanges<string>));
 
   const frame = (kind: number, payload: Uint8Array) => {
@@ -51,12 +65,15 @@ export function subscribeLive(env: StreamEnv, path: string, proc: ClientEntry, a
         state.set(r[key], r);
         before.delete(r[key]);
       }
+      if (order) sort();
       changed({ snapshot: true, set: [...state.keys()], removed: [...before] });
     } else if (kind === FRAME_DELTA) {
       tap?.batch(payload, kind);
       const d = proc.delta!.decode(payload, read) as Delta;
       const set: unknown[] = [], removed: unknown[] = [];
+      let added = false;
       for (const r of d.set ?? []) {
+        added ||= !state.has(r[key]);
         state.set(r[key], r);
         set.push(r[key]);
       }
@@ -70,6 +87,7 @@ export function subscribeLive(env: StreamEnv, path: string, proc: ClientEntry, a
         set.push(p[key]);
       }
       for (const k of d.removed ?? []) if (state.delete(k)) removed.push(k);
+      if (order && added) sort();
       if (set.length || removed.length) changed({ snapshot: false, set, removed });
     }
   };
