@@ -358,9 +358,10 @@ JSDoc-тега, вход — бинарный base64url (читаемые пар
    байта ([руководство](guide/validation.md#on-the-client), [DESIGN §20](DESIGN.md#20-валидатор-входа-на-клиенте)).
 3. ~~**Батчинг**~~ (S–M) — **сделано, 2026-11-06:** `batch()` на клиенте, ответы потоком по мере
    готовности, `context` раз на батч; 50 вызовов по HTTP/1.1 — 9.3 → 1.2 мс
-   ([руководство](guide/batching.md), [DESIGN §21](DESIGN.md#21-батчинг)). WebTransport — сначала
-   короткий спайк: что есть в рантаймах и браузерах и что он даёт против WebSocket; если брать, то
-   позже и как unstable.
+   ([руководство](guide/batching.md), [DESIGN §21](DESIGN.md#21-батчинг)). WebTransport — спайк
+   сделан ([DESIGN §22](DESIGN.md#22-webtransport--спайк)): браузеры готовы, серверы нет (в Node только
+   нативный биндинг, в Deno unstable с багом потоков, в Bun нет). Берём как unstable, когда появится
+   WebTransport в `node:quic` или починят Deno.
 4. **Пул** как оптимизации: квантование, словари строк, дельты колонок, разреженные колонки патча.
 5. **TanStack Query**: `infiniteQueryOptions`, стримы через `streamedQuery`.
 6. **Расширение DevTools для Firefox.**
@@ -370,7 +371,7 @@ JSDoc-тега, вход — бинарный base64url (читаемые пар
 
 Порядок определяет обратная связь. Кандидаты:
 1. ~~Адаптер TanStack Query~~ — сделано: `ts-bin-rpc/tanstack`, `queryOptions`/`mutationOptions`/`queryKey`/`pathKey` из клиента, в кэше обычные объекты (`decode: 'eager'`), view по `tbr: { decode: 'lazy' }` ([руководство](guide/tanstack-query.md)). Дальше по запросу: `infiniteQueryOptions`, стримы через `streamedQuery`.
-2. Стриминг — фаза 5 выше; после неё WebTransport. ~~Живое состояние~~ — сделано ([руководство](guide/live.md)). ~~WebSocket~~ — сделано: вызовы и подписки по одному сокету, live переподключается сам ([руководство](guide/websocket.md), [DESIGN §19](DESIGN.md#19-websocket)).
+2. Стриминг — фаза 5 выше; WebTransport — ждёт серверов ([DESIGN §22](DESIGN.md#22-webtransport--спайк)). ~~Живое состояние~~ — сделано ([руководство](guide/live.md)). ~~WebSocket~~ — сделано: вызовы и подписки по одному сокету, live переподключается сам ([руководство](guide/websocket.md), [DESIGN §19](DESIGN.md#19-websocket)).
 3. ~~Мидлвары поверх `ctx`~~ — сделано: `use()`, `middleware()`, `around()` ([DESIGN §15](DESIGN.md#15-мидлвары)).
    Бизнес-валидация (бывший `extendValidation`) — сделана: правила в типах, `Check`, форматы и `refine`.
 4. ~~Vite-плагин~~ — сделано: `ts-bin-rpc/vite`, генерация перед `vite build` и watch в dev-сервере, ошибки в оверлее ([руководство](guide/cli.md#vite-plugin)). Отдача роутера из dev-сервера остаётся в примере: она зависит от сервера приложения.
@@ -378,4 +379,4 @@ JSDoc-тега, вход — бинарный base64url (читаемые пар
 6. ~~Валидатор входа на клиенте~~ — сделано: `inputSchema()` из `ts-bin-rpc/validate` ([руководство](guide/validation.md#on-the-client)).
 7. Эксперимент с адаптерами к tRPC и oRPC.
 8. Бенчи против Arrow JS / Flechette и Colyseus, импорт и экспорт Arrow IPC.
-9. ~~Батчинг~~ — сделано: `batch()` ([руководство](guide/batching.md)). WebTransport. ~~GET-кэширование~~ — сделано в 0.2.0: `query()` ([DESIGN §16](DESIGN.md#16-запросы-и-http-кэш)).
+9. ~~Батчинг~~ — сделано: `batch()` ([руководство](guide/batching.md)). ~~GET-кэширование~~ — сделано в 0.2.0: `query()` ([DESIGN §16](DESIGN.md#16-запросы-и-http-кэш)).
