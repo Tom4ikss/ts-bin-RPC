@@ -29,7 +29,8 @@ export class VerifyError extends Error {
   readonly code = 'BAD_INPUT';
 }
 
-const RULE_TEXT: Record<string, (limit: number | string) => string> = {
+/** Text of a broken rule after the field; the client validator says the same (`ts-bin-rpc/validate`). */
+export const RULE_TEXT: Record<string, (limit: number | string) => string> = {
   min: (l) => `is less than ${l}`,
   max: (l) => `is greater than ${l}`,
   minLength: (l) => `is shorter than ${l}`,
@@ -63,7 +64,7 @@ export function bad(expected: string, got: unknown): never {
   throw new EncodeError(`expected ${expected}, got ${show(got)}`);
 }
 
-function show(v: unknown): string {
+export function show(v: unknown): string {
   if (typeof v === 'string') return JSON.stringify(v.length > 40 ? v.slice(0, 40) + '…' : v);
   if (typeof v === 'bigint') return `${v}n`;
   if (v === null || typeof v !== 'object') return String(v);
@@ -73,7 +74,7 @@ function show(v: unknown): string {
 // ------------------------------------------------------------------------------- maps and tuples
 // On the wire a map is `{ keys, values }` and a tuple `{ 0, 1, ... }`: objects of the generated code.
 
-function isRecord(v: unknown): v is Record<string, unknown> {
+export function isRecord(v: unknown): v is Record<string, unknown> {
   if (typeof v !== 'object' || v === null) return false;
   const proto = Object.getPrototypeOf(v);
   return proto === Object.prototype || proto === null;
@@ -1094,7 +1095,28 @@ export type TypeDesc = (
 ) & {
   /** `Check<'name'>` on the type, run by the server on decoded inputs. */
   checks?: readonly string[];
+  /** Rules of the type, only in `inputRules`: the verifiers check them on the server. */
+  rules?: TypeRules;
 };
+
+export interface TypeRules {
+  min?: number | string;
+  max?: number | string;
+  minLength?: number;
+  maxLength?: number;
+  pattern?: string;
+}
+
+/**
+ * The rules, checks and shape of one procedure's input as data: `inputRules` in the generated code,
+ * for `inputSchema()` of `ts-bin-rpc/validate`. `T` is the input type, for inference only.
+ */
+export interface InputRules<T> {
+  schema: SchemaDesc;
+  type: TypeDesc;
+  optional: boolean;
+  readonly __input?: T;
+}
 
 export interface SchemaDesc {
   objects: Record<string, readonly { name: string; type: TypeDesc; optional?: boolean; nullable?: boolean }[]>;

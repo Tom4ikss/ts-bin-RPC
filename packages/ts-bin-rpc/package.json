@@ -40,6 +40,10 @@
       "types": "./src/formats.ts",
       "default": "./src/formats.ts"
     },
+    "./validate": {
+      "types": "./src/input-schema.ts",
+      "default": "./src/input-schema.ts"
+    },
     "./tanstack": {
       "types": "./src/tanstack.ts",
       "default": "./src/tanstack.ts"
@@ -91,6 +95,10 @@
       "./formats": {
         "types": "./dist/formats.d.ts",
         "default": "./dist/formats.js"
+      },
+      "./validate": {
+        "types": "./dist/input-schema.d.ts",
+        "default": "./dist/input-schema.js"
       },
       "./tanstack": {
         "types": "./dist/tanstack.d.ts",

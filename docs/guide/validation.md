@@ -87,8 +87,8 @@ try {
 The anonymous input type of `createUser` is named `createUser:input` in `field`.
 
 The check stops at the first broken rule. The input is in a binary message, not in an object, and
-the server does not decode it to collect every error. Check a form on the client first if you want
-all the errors at once.
+the server does not decode it to collect every error. To show every error of a form at once, check
+it [on the client](#on-the-client) first.
 
 A failed check or refinement answers `400 BAD_INPUT` too, with the path of the value:
 
@@ -189,11 +189,62 @@ Checks and refinements see the plain decoded value and cannot change it. They ha
 that needs the database, such as a free user name, belongs in the procedure or a
 [middleware](./middleware.md).
 
+## On the client
+
+`tbr generate` also writes the inputs with their rules and checks as data, `inputRules`.
+`inputSchema()` from `ts-bin-rpc/validate` turns one into a [Standard Schema](https://standardschema.dev),
+which TanStack Form, react-hook-form and others take where they take a Zod schema:
+
+```ts
+import { inputSchema } from 'ts-bin-rpc/validate';
+import { formats } from 'ts-bin-rpc/formats';
+import { inputRules } from './tbr.gen';
+
+const createUser = inputSchema(inputRules.createUser, { checks: formats });
+
+const result = createUser['~standard'].validate(values);
+result.issues; // [{ message: 'is shorter than 1', path: ['name'], field: 'CreateUser.name', rule: 'minLength', limit: 1 }, …]
+
+// TanStack Form
+useForm({ defaultValues, validators: { onChange: createUser } });
+// react-hook-form, with @hookform/resolvers
+useForm({ resolver: standardSchemaResolver(createUser) });
+```
+
+It checks what the server checks, and reports every issue instead of the first:
+
+- **The shape**: a value the encoder would reject, such as `300` in a `u8` or a missing field,
+  is an issue with `rule: 'type'` and `expected u8, got 300`.
+- **The rules**, with the texts of the server: `is shorter than 1`, `does not match /^[a-z]+$/`.
+  `field`, `rule` and `limit` are the same as in the server's `BAD_INPUT` data.
+- **Checks and refinements** you pass, as to `createHandler`: `checks` and `refine`, functions or
+  Standard Schemas. A check you do not pass is left to the server, for checks that need its data,
+  like a free user name. A value's checks run when its parts are clean, and its refinements after its
+  checks pass, as on the server.
+
+`message` gives your text for an issue, in the user's language for example; return `undefined` to
+keep the default:
+
+```ts
+inputSchema(inputRules.createUser, {
+  checks: formats,
+  message: (issue) => (issue.rule === 'minLength' ? `at least ${issue.limit} characters` : undefined),
+});
+```
+
+`validate` is synchronous unless a check or a refinement returns a promise. Its output is the input as
+it is: rules do not transform values.
+
+A client that does not import `ts-bin-rpc/validate` does not carry it or `inputRules`: bundlers drop
+both. For the e2e router, all of it with the formats adds 2.1 KB gzip
+([size.md](https://github.com/Tom4ikss/ts-bin-RPC/blob/main/bench/results/size.md)).
+
+The client validator is a convenience for forms, not a guard: the server checks every input anyway.
+
 ## Where rules are checked
 
-Only the server checks rules, checks and refinements, and only on procedure inputs, stream inputs
-included. The client does
-not check the outputs it receives. A rule on an output type documents the value; nothing enforces
+The server checks rules, checks and refinements on procedure inputs, stream inputs included; a client
+checks them only [when you ask](#on-the-client). The client does not check the outputs it receives. A rule on an output type documents the value; nothing enforces
 it. Code that verifies a message itself can switch the rules off:
 
 ```ts

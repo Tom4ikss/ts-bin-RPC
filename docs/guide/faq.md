@@ -42,7 +42,8 @@ checks evolution.
 Not for shape. The server verifies every input against the generated schema, so a handler never
 sees a missing field, a string where a `u32` should be, or an out-of-range enum. Rules about
 values go in the types too: `string & MaxLength<64>`, `Email`, `u8 & Min<18>`, and `refine` for
-rules across fields. A Zod or Valibot schema you already have plugs in as a check. See
+rules across fields. A Zod or Valibot schema you already have plugs in as a check. Forms get the
+same rules as a Standard Schema from `ts-bin-rpc/validate`, in place of a Zod schema. See
 [Validation](./validation.md).
 
 ## Does it work with TanStack Query?
