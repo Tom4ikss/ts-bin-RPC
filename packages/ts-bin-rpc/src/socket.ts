@@ -6,6 +6,18 @@
 // Server → client: an 8-byte header (u32 id, u8 type, u8 0, u16 status), then the body: the
 // response of a call, or stream frames (FORMAT §12) of a subscription.
 
+/**
+ * The WebSocket subprotocol of this transport. A server refuses sockets without it: they come from
+ * clients that speak another version of it.
+ */
+export const SOCKET_PROTOCOL = 'tbr.2';
+
+/**
+ * Operations and message types from 128 up are ones the other side may ignore. Below 128, a server
+ * answers an unknown operation with an error, and a client ends the request of an unknown message.
+ */
+export const SKIPPABLE = 128;
+
 /** Calls the procedure or subscribes to it. */
 export const OP_START = 1;
 /** Stops the subscription with this ID. */
@@ -49,13 +61,12 @@ export interface SocketRequest {
   input: Uint8Array;
 }
 
-/** A client message, or undefined when it is malformed. */
+/** A client message, or undefined when it is malformed. Unknown operations come back with empty fields. */
 export function readRequest(b: Uint8Array): SocketRequest | undefined {
   if (b.length < 8 || b[7] !== 0) return undefined;
   const id = (b[0] | (b[1] << 8) | (b[2] << 16) | (b[3] << 24)) >>> 0;
   const op = b[4];
-  if (op === OP_STOP) return { id, op, path: '', hash: '', input: b.subarray(8) };
-  if (op !== OP_START) return undefined;
+  if (op !== OP_START) return { id, op, path: '', hash: '', input: b.subarray(8) };
   const p = b[5], h = b[6], at = (8 + p + h + 7) & ~7;
   if (b.length < at) return undefined;
   return { id, op, path: text.decode(b.subarray(8, 8 + p)), hash: text.decode(b.subarray(8 + p, 8 + p + h)), input: b.subarray(at) };

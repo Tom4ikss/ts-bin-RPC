@@ -156,6 +156,14 @@ describe('limits and encoder checks', () => {
     expect(() => nodeCodec().view(bytes, { limits: { maxNodes: 100 } })).toThrow(/too many elements/);
   });
 
+  it('bounds the elements of a message by its length', () => {
+    const g = gen.codec, codec = g.mod.codecs['Everything'];
+    const [value] = fc.sample(arbitraries(g.schema)({ kind: 'object', name: 'Everything' }), { numRuns: 1, seed: 1 }) as object[];
+    // literals take no bytes: without the bound, a short message would make a huge array
+    expect(() => codec.view(codec.encode({ ...value, consts: Array(200_000).fill('x') }))).toThrow('message holds too many elements');
+    expect(() => codec.view(codec.encode({ ...value, consts: Array(1000).fill('x') }))).not.toThrow();
+  });
+
   it('rejects a non-ASCII byte in the ASCII block', () => {
     const text = gen.codec.mod.procedures['text'].input!;
     const bytes = text.encode('abcdefghijklmnopqrstuvwxyz0123456789!');

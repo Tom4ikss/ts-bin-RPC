@@ -9,7 +9,10 @@ export const CONTENT_TYPE = 'application/vnd.tbr';
 /** Request: the client's hash of the procedure's contract. Response: the server's. */
 export const SCHEMA_HEADER = 'x-tbr-schema';
 
-/** HTTP status per error code. Codes not listed here are application errors and map to 400. */
+/**
+ * HTTP status per error code. These codes are ts-bin-rpc's; codes not listed here are application
+ * errors and map to 400. `DISCONNECTED` is the client's own (status 0): the connection broke.
+ */
 export const STATUS: Readonly<Record<string, number>> = {
   BAD_INPUT: 400,
   UNAUTHORIZED: 401,
@@ -21,9 +24,12 @@ export const STATUS: Readonly<Record<string, number>> = {
   PAYLOAD_TOO_LARGE: 413,
   UNSUPPORTED_MEDIA_TYPE: 415,
   TOO_MANY_REQUESTS: 429,
+  SLOW_CONSUMER: 429,
   INTERNAL: 500,
   BAD_OUTPUT: 500,
   BAD_RESPONSE: 502,
+  UNAVAILABLE: 503,
+  TIMEOUT: 504,
 };
 
 export interface RpcErrorOptions {
@@ -126,9 +132,25 @@ export function fromBase64Url(text: string): Uint8Array | null {
   return out;
 }
 
+/** The code of a response that is not ours (a proxy's 503, a 404 page): by its status. */
 export function codeForStatus(status: number): string {
   for (const code in STATUS) if (STATUS[code] === status) return code;
   return status >= 500 ? 'INTERNAL' : 'BAD_RESPONSE';
+}
+
+/** The status a server sends for an error: its own when that is an error status, else 500. */
+export function wireStatus(e: RpcError): number {
+  return Number.isInteger(e.status) && e.status >= 400 && e.status <= 599 ? e.status : 500;
+}
+
+/** `data` of an error as JSON: bigints as decimal strings; data that is not JSON (a cycle) is dropped. */
+export function errorData(data: unknown): string | undefined {
+  if (data === undefined) return undefined;
+  try {
+    return JSON.stringify(data, (_, v) => (typeof v === 'bigint' ? v.toString() : v));
+  } catch {
+    return undefined;
+  }
 }
 
 /** An error envelope: of an HTTP response with its status, or of a stream frame (status from the code). */

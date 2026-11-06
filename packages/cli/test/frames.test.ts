@@ -66,9 +66,14 @@ describe('frames', () => {
 
   it('rejects unknown kinds, reserved bytes and frames over the limit', () => {
     const bad = (bytes: number[]) => () => read([Uint8Array.from(bytes)]);
-    expect(bad([0, 0, 0, 0, 9, 0, 0, 0])).toThrow('malformed stream frame (kind 9)');
-    expect(bad([0, 0, 0, 0, 0, 0, 0, 0])).toThrow('malformed stream frame (kind 0)');
+    expect(bad([0, 0, 0, 0, 9, 0, 0, 0])).toThrow('unknown stream frame kind 9: update ts-bin-rpc');
+    expect(bad([0, 0, 0, 0, 0, 0, 0, 0])).toThrow('unknown stream frame kind 0');
     expect(bad([0, 0, 0, 0, 3, 0, 1, 0])).toThrow('malformed stream frame');
     expect(bad([1, 4, 0, 0, 1, 0, 0, 0])).toThrow('stream frame of 1025 bytes is over the limit of 1024');
+  });
+
+  it('skips frames of kinds from 128 up', () => {
+    const skipped = [...encodeFrame(200, Uint8Array.of(1, 2, 3)), ...encodeFrame(FRAME_END)];
+    expect(read([Uint8Array.from(skipped)]).got.map((f) => f.kind)).toEqual([FRAME_END]);
   });
 });

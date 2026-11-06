@@ -2,7 +2,7 @@
 // replaces it, a delta frame sets rows, merges changed fields into rows and removes keys. Rows are
 // plain objects; a changed row is a new object, so that UI code can tell what changed by identity.
 import { devtoolsHook, type ClientEntry, type DevtoolsTap, type RpcError } from './rpc.ts';
-import { FRAME_DELTA, FRAME_SNAPSHOT } from './frames.ts';
+import { FrameError, FRAME_DELTA, FRAME_SNAPSHOT } from './frames.ts';
 import { pump, safely, type StreamEnv } from './stream-client.ts';
 import type { LiveChanges, LiveHandler, LiveOptions, LiveSubscription } from './router.ts';
 
@@ -55,8 +55,13 @@ export function subscribeLive(env: StreamEnv, path: string, proc: ClientEntry, a
 
   const changed = (changes: LiveChanges<unknown>) => h.change && safely(() => h.change!(state as ReadonlyMap<string, Row>, changes as LiveChanges<string>));
 
+  let snapshot = false;
   const frame = (kind: number, payload: Uint8Array) => {
+    // FORMAT §12: the first frame of live state is a snapshot
+    if (kind !== FRAME_SNAPSHOT && kind !== FRAME_DELTA) throw new FrameError(`a frame of rows (kind ${kind}) in live state`);
+    if (kind === FRAME_DELTA && !snapshot) throw new FrameError('live state that does not start with a snapshot');
     if (kind === FRAME_SNAPSHOT) {
+      snapshot = true;
       tap?.batch(payload, kind);
       const rows = proc.output!.decode(payload, read) as Row[];
       const before = new Set(state.keys());

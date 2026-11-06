@@ -1,12 +1,12 @@
 // createHandler: a Fetch API handler, `(Request) => Promise<Response>`, for Bun.serve, Deno.serve,
 // Cloudflare Workers, or Node through `ts-bin-rpc/node`.
 import { DEFAULT_LIMITS, EncodeError, encodeError, RuleError, VerifyError, type Limits } from './runtime.ts';
-import { CONTENT_TYPE, fromBase64Url, HASH_PARAM, INPUT_PARAM, RpcError, SCHEMA_HEADER, toBase64Url, type ServerEntry, type ServerProcedures } from './rpc.ts';
+import { CONTENT_TYPE, errorData, fromBase64Url, HASH_PARAM, INPUT_PARAM, RpcError, SCHEMA_HEADER, toBase64Url, wireStatus, type ServerEntry, type ServerProcedures } from './rpc.ts';
 import type { AnyProcedure, AnyRouter } from './router.ts';
 import { Validation, type InputValidation, type Validator } from './validate.ts';
 import { STREAM_CONTENT_TYPE } from './frames.ts';
 import { SINKS, Sink, toSource, type DirectOut } from './stream-server.ts';
-import { encodeReply, MSG_FRAMES, MSG_RESPONSE, OP_START, OP_STOP, readRequest, type SocketRequest } from './socket.ts';
+import { encodeReply, MSG_FRAMES, MSG_RESPONSE, OP_START, OP_STOP, readRequest, SKIPPABLE, SOCKET_PROTOCOL, type SocketRequest } from './socket.ts';
 import { BATCH_CONTENT_TYPE, batchFrame, readBatch } from './batch.ts';
 import { LiveSource } from './live-server.ts';
 import { compose, unwrap } from './middleware.ts';
@@ -19,6 +19,7 @@ export type { Stream, LiveStream } from './router.ts';
 export { use, middleware, around, type Call, type Middleware, type Keep, type WithContext, type ContextMismatch } from './middleware.ts';
 export { query, type QueryOptions, type Queried } from './query.ts';
 export type { Query } from './router.ts';
+export { SOCKET_PROTOCOL } from './socket.ts';
 
 type CtxUnion<R> = {
   [K in keyof R]: R[K] extends AnyProcedure ? (Parameters<R[K]> extends [unknown, infer C, ...unknown[]] ? C : never) : CtxUnion<R[K]>;
@@ -69,6 +70,22 @@ export interface HandlerOptions<R> {
    * caps the calls in one batch; `false` refuses batches. Default: `{ maxCalls: 64 }`.
    */
   batch?: { maxCalls?: number } | false;
+  /** WebSocket connections (`handler.socket()`, FORMAT §13). */
+  socket?: SocketOptions;
+}
+
+export interface SocketOptions {
+  /**
+   * Origins of pages that may open a socket, besides the server's own. Browsers send cookies with
+   * a WebSocket from any site, and a socket has no CORS preflight: without this check any page could
+   * call procedures as the user. A function decides alone. Sockets without an Origin (not from a
+   * browser) are taken. Default: only the server's own origin.
+   */
+  allowedOrigins?: readonly string[] | ((origin: string) => boolean);
+  /** Subscriptions open at once on one socket; past it a new one gets TOO_MANY_REQUESTS. Default: 256. */
+  maxSubscriptions?: number;
+  /** Calls running at once on one socket; past it a new one gets TOO_MANY_REQUESTS. Default: 64. */
+  maxCalls?: number;
 }
 
 interface Route {
@@ -83,9 +100,12 @@ interface Route {
 
 const encoder = new TextEncoder();
 
+/** Default `limits.maxBytes` of a request: inputs are small; raise it for uploads. */
+export const SERVER_MAX_BYTES = 1024 * 1024;
+
 export function createHandler<R extends AnyRouter>(router: R, options: HandlerOptions<R>): Handler {
   const { procedures, context, schemaMismatch = 'warn', onError = defaultOnError } = options;
-  const limits = { ...DEFAULT_LIMITS, ...options.limits };
+  const limits = { ...DEFAULT_LIMITS, maxBytes: SERVER_MAX_BYTES, ...options.limits };
   let prefix = options.prefix ?? '/';
   if (!prefix.endsWith('/')) prefix += '/';
 
@@ -103,6 +123,9 @@ export function createHandler<R extends AnyRouter>(router: R, options: HandlerOp
         const q = queryOptions(value) ?? queryOptions(fn);
         if (q && proc.stream) throw new Error(`procedure '${p}' is a stream and cannot be a query`);
         if (proc.get && !q) throw new Error(`generated code calls '${p}' with GET, but the router does not mark it with query(); run tbr generate`);
+        // ctx is built from the request (cookies, Authorization): a shared cache would hand one
+        // user's response to another
+        if (q?.public && proc.ctx) throw new Error(`query '${p}' takes ctx, so its responses may differ by user: it cannot be public`);
         const validate = proc.inputDesc ? validation.plan(proc.inputDesc.schema, proc.inputDesc.type) : null;
         routes.set(p, { fn: chain.length ? compose(chain, fn, self, p) : fn, self, proc, cache: q && cacheControl(q), validate });
       } else if (value !== null && typeof value === 'object') walk(value, p + '.');
@@ -177,12 +200,31 @@ export function createHandler<R extends AnyRouter>(router: R, options: HandlerOp
     }
   };
 
-  /** The body of a POST, within `limits.maxBytes`. */
+  /** The body of a POST, within `limits.maxBytes`: read no further than that, declared length or not. */
   const readBody = async (request: Request): Promise<Uint8Array> => {
-    const declared = Number(request.headers.get('content-length') ?? 0);
-    if (declared > limits.maxBytes) throw new RpcError('PAYLOAD_TOO_LARGE', `request is larger than ${limits.maxBytes} bytes`);
-    const bytes = new Uint8Array(await request.arrayBuffer());
-    if (bytes.length > limits.maxBytes) throw new RpcError('PAYLOAD_TOO_LARGE', `request is larger than ${limits.maxBytes} bytes`);
+    const tooLarge = () => new RpcError('PAYLOAD_TOO_LARGE', `request is larger than ${limits.maxBytes} bytes`);
+    if (Number(request.headers.get('content-length') ?? 0) > limits.maxBytes) throw tooLarge();
+    if (!request.body) return new Uint8Array(0);
+    const reader = request.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    for (;;) {
+      const r = await reader.read();
+      if (r.done) break;
+      size += r.value.length;
+      if (size > limits.maxBytes) {
+        void reader.cancel().catch(() => {});
+        throw tooLarge();
+      }
+      chunks.push(r.value);
+    }
+    if (chunks.length === 1 && chunks[0].byteOffset % 8 === 0) return chunks[0];
+    const bytes = new Uint8Array(size);
+    let at = 0;
+    for (const c of chunks) {
+      bytes.set(c, at);
+      at += c.length;
+    }
     return bytes;
   };
 
@@ -199,7 +241,7 @@ export function createHandler<R extends AnyRouter>(router: R, options: HandlerOp
       throw e;
     }
     const starts = calls?.map(readRequest);
-    if (!starts || starts.some((r) => r?.op !== OP_START)) return fail(new RpcError('BAD_INPUT', 'malformed batch'));
+    if (!starts || starts.some((r) => r?.op !== OP_START) || new Set(starts.map((r) => r!.id)).size !== starts.length) return fail(new RpcError('BAD_INPUT', 'malformed batch'));
     if (starts.length > maxCalls) return fail(new RpcError('PAYLOAD_TOO_LARGE', `a batch takes at most ${maxCalls} calls`));
     let ctx: Promise<unknown> | undefined;
     const ctxOf = () => (ctx ??= Promise.resolve().then(() => context!(request)));
@@ -212,7 +254,7 @@ export function createHandler<R extends AnyRouter>(router: R, options: HandlerOp
         const wrong = mismatch(path, route.proc, hash || null);
         out = wrong ? { error: wrong } : await execute(route, path, input, request, ctxOf);
       }
-      if ('error' in out) return batchFrame(encodeReply(id, MSG_RESPONSE, out.error.status, errorBody(out.error)));
+      if ('error' in out) return batchFrame(encodeReply(id, MSG_RESPONSE, wireStatus(out.error), errorBody(out.error)));
       return batchFrame(encodeReply(id, MSG_RESPONSE, 200, 'body' in out ? out.body : new Uint8Array(0)));
     };
     let left = starts.length;
@@ -220,7 +262,12 @@ export function createHandler<R extends AnyRouter>(router: R, options: HandlerOp
       start(c) {
         if (!left) return c.close();
         for (const s of starts as SocketRequest[]) {
-          void answer(s).then((frame) => {
+          const internal = (e: unknown) => {
+            // a bug of ours: the call gets INTERNAL, the batch goes on
+            onError(e, { path: s.path, request });
+            return batchFrame(encodeReply(s.id, MSG_RESPONSE, 500, errorBody(new RpcError('INTERNAL', 'internal error'))));
+          };
+          void answer(s).catch(internal).then((frame) => {
             try {
               c.enqueue(frame);
               if (--left === 0) c.close();
@@ -240,11 +287,13 @@ export function createHandler<R extends AnyRouter>(router: R, options: HandlerOp
     const path = pathname.startsWith(prefix) ? pathname.slice(prefix.length) : '';
     if (path === '' && request.method === 'POST' && request.headers.get('content-type')?.split(';')[0].trim() === BATCH_CONTENT_TYPE) return batch(request);
     const route = routes.get(path);
-    if (!route) return fail(new RpcError('NOT_FOUND', `unknown procedure '${path || pathname}'`));
     const get = request.method === 'GET';
+    // Errors of a GET must not be cached: the next call should reach the procedure again.
+    const noStore: Record<string, string> = get ? { 'cache-control': 'no-store' } : {};
+    if (!route) return fail(new RpcError('NOT_FOUND', `unknown procedure '${path || pathname}'`), noStore);
     if (get ? !route.cache : request.method !== 'POST') {
       const allow = route.cache ? 'GET, POST' : 'POST';
-      return fail(new RpcError('METHOD_NOT_ALLOWED', route.cache ? 'queries are called with GET or POST' : 'procedures are called with POST'), { allow });
+      return fail(new RpcError('METHOD_NOT_ALLOWED', route.cache ? 'queries are called with GET or POST' : 'procedures are called with POST'), { allow, ...noStore });
     }
     // Requiring our content type also keeps cross-site HTML forms and simple requests out: browsers send
     // a CORS preflight for anything else. A GET has no body; only queries, free of side effects, take it.
@@ -252,8 +301,6 @@ export function createHandler<R extends AnyRouter>(router: R, options: HandlerOp
       return fail(new RpcError('UNSUPPORTED_MEDIA_TYPE', `expected content-type ${CONTENT_TYPE}`));
     }
     const { proc } = route;
-    // Errors of a GET must not be cached: the next call should reach the procedure again.
-    const noStore: Record<string, string> = get ? { 'cache-control': 'no-store' } : {};
     const wrong = mismatch(path, proc, get ? url.searchParams.get(HASH_PARAM) : request.headers.get(SCHEMA_HEADER));
     if (wrong) return fail(wrong, noStore, proc);
 
@@ -268,7 +315,8 @@ export function createHandler<R extends AnyRouter>(router: R, options: HandlerOp
       } else bytes = await readBody(request);
     } catch (e) {
       if (e instanceof RpcError) return fail(e, noStore, proc);
-      onError(e, { path, request });
+      // the client went away while sending: nobody to answer, nothing to report
+      if (!request.signal.aborted) onError(e, { path, request });
       return fail(new RpcError('INTERNAL', 'internal error'), noStore, proc);
     }
 
@@ -299,23 +347,46 @@ export function createHandler<R extends AnyRouter>(router: R, options: HandlerOp
   // One WebSocket connection (FORMAT §13): calls and subscriptions by ID. `request` is the upgrade
   // request: `context` gets it for every call, as it gets the request of an HTTP call, so its headers
   // have to stay readable (Deno closes the request it upgrades: pass a copy made before).
+  const maxSubscriptions = options.socket?.maxSubscriptions ?? 256, maxSocketCalls = options.socket?.maxCalls ?? 64;
   const socket = (ws: SocketLike, request: Request): SocketConnection => {
     const subs = new Map<number, AbortController>();
+    /** IDs of calls that have not been answered yet. */
+    const calls = new Set<number>();
+    /** Subscriptions waiting for the socket to drain: polled, so stopped when it closes. */
+    const timers = new Set<ReturnType<typeof setInterval>>();
     let closed = false;
+    const refuse = (code: number, reason: string): SocketConnection => {
+      ws.close(code, reason);
+      return { message() {}, close() {} };
+    };
+    if (!originAllowed(request, options.socket?.allowedOrigins)) return refuse(1008, 'origin not allowed');
+    const protocols = request.headers.get('sec-websocket-protocol')?.split(',').map((p) => p.trim()) ?? [];
+    if (!protocols.includes(SOCKET_PROTOCOL)) return refuse(1002, `not a ${SOCKET_PROTOCOL} client: a client and a server of different ts-bin-rpc versions`);
+
     const reply = (id: number, type: number, status: number, body: Uint8Array) => {
       if (!closed) ws.send(encodeReply(id, type, status, body));
     };
     const start = async (id: number, path: string, hash: string, bytes: Uint8Array) => {
       const route = routes.get(path);
-      const respond = (e: RpcError) => reply(id, MSG_RESPONSE, e.status, errorBody(e));
+      const respond = (e: RpcError) => reply(id, MSG_RESPONSE, wireStatus(e), errorBody(e));
       if (!route) return respond(new RpcError('NOT_FOUND', `unknown procedure '${path}'`));
       const wrong = mismatch(path, route.proc, hash || null);
       if (wrong) return respond(wrong);
       if (bytes.length > limits.maxBytes) return respond(new RpcError('PAYLOAD_TOO_LARGE', `request is larger than ${limits.maxBytes} bytes`));
+      const stream = !!route.proc.stream;
+      if (stream ? subs.size >= maxSubscriptions : calls.size >= maxSocketCalls) {
+        return respond(new RpcError('TOO_MANY_REQUESTS', stream ? `at most ${maxSubscriptions} subscriptions on one socket` : `at most ${maxSocketCalls} calls at once on one socket`));
+      }
       const abort = new AbortController();
-      if (route.proc.stream) subs.set(id, abort);
-      // a view over a message needs it 8-aligned; WebSocket servers may hand out slices of a pool
-      const out = await execute(route, path, bytes.byteOffset % 8 ? bytes.slice() : bytes, request);
+      if (stream) subs.set(id, abort);
+      else calls.add(id);
+      let out: Outcome;
+      try {
+        // a view over a message needs it 8-aligned; WebSocket servers may hand out slices of a pool
+        out = await execute(route, path, bytes.byteOffset % 8 ? bytes.slice() : bytes, request);
+      } finally {
+        calls.delete(id);
+      }
       if (closed || abort.signal.aborted) return;
       if ('error' in out) {
         subs.delete(id);
@@ -324,25 +395,37 @@ export function createHandler<R extends AnyRouter>(router: R, options: HandlerOp
       if ('body' in out) return reply(id, MSG_RESPONSE, 200, out.body);
       const sink = new Sink(abort.signal);
       out.start(sink);
-      sink.direct(socketOut(ws, (chunk) => reply(id, MSG_FRAMES, 0, chunk), () => subs.get(id) === abort && subs.delete(id)));
+      sink.direct(socketOut(ws, timers, (chunk) => reply(id, MSG_FRAMES, 0, chunk), () => subs.get(id) === abort && subs.delete(id)));
     };
     return {
       message(data) {
         if (closed) return;
         if (typeof data === 'string') return ws.close(1003, 'ts-bin-rpc messages are binary');
         const req = readRequest(toBytes(data));
-        if (!req) return ws.close(1002, 'malformed ts-bin-rpc message');
+        if (!req || req.id === 0) return ws.close(1002, 'malformed ts-bin-rpc message');
         if (req.op === OP_STOP) {
           subs.get(req.id)?.abort();
           subs.delete(req.id);
           return;
         }
-        void start(req.id, req.path, req.hash, req.input);
+        if (req.op !== OP_START) {
+          if (req.op < SKIPPABLE) reply(req.id, MSG_RESPONSE, 400, errorBody(new RpcError('BAD_INPUT', `unknown operation ${req.op}: the server runs an older ts-bin-rpc`)));
+          return;
+        }
+        // a second request under a live ID would leave the first one running, out of reach of STOP
+        if (subs.has(req.id) || calls.has(req.id)) return ws.close(1002, `request ID ${req.id} is in use`);
+        start(req.id, req.path, req.hash, req.input).catch((e) => {
+          onError(e, { path: req.path, request });
+          subs.delete(req.id);
+          reply(req.id, MSG_RESPONSE, 500, errorBody(new RpcError('INTERNAL', 'internal error')));
+        });
       },
       close() {
         closed = true;
         for (const a of subs.values()) a.abort();
         subs.clear();
+        for (const t of timers) clearInterval(t);
+        timers.clear();
       },
     };
   };
@@ -373,7 +456,7 @@ export type Handler = ((request: Request) => Promise<Response>) & { socket(ws: S
 const SOCKET_HIGH_WATER = 1 << 20;
 
 /** A sink's output over a socket shared by subscriptions; 'drain' is polled, as sockets do not tell. */
-function socketOut(ws: SocketLike, send: (chunk: Uint8Array) => void, end: () => void): DirectOut {
+function socketOut(ws: SocketLike, timers: Set<ReturnType<typeof setInterval>>, send: (chunk: Uint8Array) => void, end: () => void): DirectOut {
   return {
     write(chunk) {
       send(chunk);
@@ -384,10 +467,26 @@ function socketOut(ws: SocketLike, send: (chunk: Uint8Array) => void, end: () =>
       const timer = setInterval(() => {
         if ((ws.bufferedAmount ?? 0) >= SOCKET_HIGH_WATER / 2) return;
         clearInterval(timer);
+        timers.delete(timer);
         listener();
       }, 5);
+      timers.add(timer);
     },
   };
+}
+
+/** The upgrade request of a socket comes from the server's own origin, an allowed one, or not from a browser. */
+function originAllowed(request: Request, allowed: SocketOptions['allowedOrigins']): boolean {
+  const origin = request.headers.get('origin');
+  if (origin === null) return true;
+  if (typeof allowed === 'function') return allowed(origin);
+  if (allowed?.includes(origin)) return true;
+  const host = request.headers.get('host') ?? new URL(request.url).host;
+  try {
+    return new URL(origin).host === host;
+  } catch {
+    return false;
+  }
 }
 
 function toBytes(data: ArrayBuffer | ArrayBufferView | ArrayBufferView[]): Uint8Array {
@@ -454,12 +553,12 @@ function headers(proc?: ServerEntry, extra: Record<string, string> = {}): Record
 }
 
 function errorBody(e: RpcError): Uint8Array<ArrayBuffer> {
-  const data = e.data === undefined ? undefined : encoder.encode(JSON.stringify(e.data));
-  return encodeError({ code: e.code, message: e.message, data }) as Uint8Array<ArrayBuffer>;
+  const json = errorData(e.data);
+  return encodeError({ code: e.code, message: e.message, data: json === undefined ? undefined : encoder.encode(json) }) as Uint8Array<ArrayBuffer>;
 }
 
 function fail(e: RpcError, extra: Record<string, string> = {}, proc?: ServerEntry): Response {
-  return new Response(errorBody(e), { status: e.status, headers: headers(proc, extra) });
+  return new Response(errorBody(e), { status: wireStatus(e), headers: headers(proc, extra) });
 }
 
 function defaultOnError(error: unknown, info: { path: string }) {

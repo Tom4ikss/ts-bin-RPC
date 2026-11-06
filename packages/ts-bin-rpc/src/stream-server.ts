@@ -3,7 +3,7 @@
 // message in a frame (frames.ts), and a bounded queue per subscriber feeds the response body.
 import { EncodeError, encodeError, type Encoder } from './runtime.ts';
 import { encodeFrame, FRAME_DATA, FRAME_END, FRAME_ERROR, FRAME_HEARTBEAT } from './frames.ts';
-import { RpcError } from './rpc.ts';
+import { errorData, RpcError } from './rpc.ts';
 import type { Stream } from './router.ts';
 
 export interface BatchOptions {
@@ -477,7 +477,8 @@ export class Sink {
   }
 
   fail(e: RpcError): void {
-    const data = e.data === undefined ? undefined : encoder.encode(JSON.stringify(e.data));
+    const json = errorData(e.data);
+    const data = json === undefined ? undefined : encoder.encode(json);
     this.#finish(encodeFrame(FRAME_ERROR, encodeError({ code: e.code, message: e.message, data })));
   }
 

@@ -3,7 +3,7 @@
 // to iterators of the subscription.
 import { columnsOf, toPlain, VerifyError, type Limits } from './runtime.ts';
 import { CONTENT_TYPE, codeForStatus, devtoolsHook, readError, RpcError, type ClientEntry, type DevtoolsTap } from './rpc.ts';
-import { FrameReader, FRAME_DATA, FRAME_END, FRAME_ERROR, FRAME_HEARTBEAT, STREAM_CONTENT_TYPE } from './frames.ts';
+import { FrameError, FrameReader, FRAME_DATA, FRAME_END, FRAME_ERROR, FRAME_GOING_AWAY, FRAME_HEARTBEAT, STREAM_CONTENT_TYPE } from './frames.ts';
 import type { CallOptions, DecodeMode, StreamHandler, Subscription } from './router.ts';
 import type { SocketTransport } from './ws-client.ts';
 
@@ -25,6 +25,9 @@ interface Queue {
   wake?: () => void;
 }
 
+/** Rows an iterator may have waiting before the stream stops reading, until it is down to half. */
+const ITERATOR_HIGH_WATER = 4096;
+
 /**
  * Generated code puts this function into the client table of a router with streams, so that
  * clients of routers without them do not ship it.
@@ -38,6 +41,18 @@ export function subscribe(env: StreamEnv, path: string, proc: ClientEntry, args:
   let over = false; // stopped, ended or failed: nothing more is delivered
   let stopped = false;
   let tap: DevtoolsTap | undefined;
+  // Iterators read at their own pace: past the high water mark the response is not read further,
+  // and over HTTP the server sees it (SLOW_CONSUMER). A handler takes every row as it comes.
+  let resume: (() => void) | undefined;
+  const full = () => !over && [...queues].some((q) => q.rows.length >= ITERATOR_HIGH_WATER);
+  const ready = () => (full() ? new Promise<void>((r) => (resume = r)) : undefined);
+  const drained = () => {
+    if (resume && ![...queues].some((q) => q.rows.length > ITERATOR_HIGH_WATER / 2)) {
+      const r = resume;
+      resume = undefined;
+      r();
+    }
+  };
 
   const wakeAll = () => {
     for (const q of queues) q.wake?.();
@@ -54,6 +69,7 @@ export function subscribe(env: StreamEnv, path: string, proc: ClientEntry, args:
     tap?.end(error, stopped);
     for (const q of queues) q.done = true;
     wakeAll();
+    resume?.();
   };
 
   const deliver = (payload: Uint8Array) => {
@@ -74,7 +90,11 @@ export function subscribe(env: StreamEnv, path: string, proc: ClientEntry, args:
   const run = async () => {
     started = true;
     tap = devtoolsHook()?.stream(path, input, proc);
-    await pump(env, path, proc, input, opts, abort, () => over, (kind, payload) => kind === FRAME_DATA && deliver(payload), finish);
+    const frame = (kind: number, payload: Uint8Array) => {
+      if (kind !== FRAME_DATA) throw new FrameError(`a live state frame (kind ${kind}) in a stream of rows`);
+      deliver(payload);
+    };
+    await pump(env, path, proc, input, opts, abort, () => over, frame, finish, ready);
   };
 
   const start = () => {
@@ -93,7 +113,11 @@ export function subscribe(env: StreamEnv, path: string, proc: ClientEntry, args:
         next: async (): Promise<IteratorResult<unknown>> => {
           start();
           for (;;) {
-            if (q.rows.length) return { value: q.rows.shift(), done: false };
+            if (q.rows.length) {
+              const value = q.rows.shift();
+              drained();
+              return { value, done: false };
+            }
             if (q.error) throw q.error;
             if (q.done) return { value: undefined, done: true };
             await new Promise<void>((r) => (q.wake = r));
@@ -102,6 +126,7 @@ export function subscribe(env: StreamEnv, path: string, proc: ClientEntry, args:
         },
         return: async (): Promise<IteratorResult<unknown>> => {
           queues.delete(q);
+          drained();
           if (!queues.size && !handler) sub.stop();
           return { value: undefined, done: true };
         },
@@ -131,6 +156,8 @@ export async function pump(
   over: () => boolean,
   frame: (kind: number, payload: Uint8Array) => void,
   finish: (error?: RpcError) => void,
+  /** Before each read: a promise to wait for while the reader of the rows is behind. */
+  ready: () => Promise<void> | undefined = () => undefined,
 ): Promise<void> {
   let frames = 0, bytes = 0;
   const t0 = env.debug ? performance.now() : 0;
@@ -147,6 +174,9 @@ export async function pump(
     const reader = res.body.getReader();
     const fr = new FrameReader(env.limits?.maxBytes ?? 64 * 1024 * 1024);
     for (;;) {
+      const wait = ready();
+      if (wait) await wait;
+      if (over()) return void reader.cancel().catch(() => {});
       const r = await reader.read();
       if (over()) return void reader.cancel().catch(() => {});
       if (r.done) return finish(new RpcError('DISCONNECTED', `stream '${path}' closed before the server ended it`, undefined, { status: 0 }));
@@ -156,12 +186,13 @@ export async function pump(
         frames++;
         if (f.kind === FRAME_ERROR) return void (finish(readError(f.payload)), reader.cancel().catch(() => {}));
         if (f.kind === FRAME_END) return void (finish(), reader.cancel().catch(() => {}));
+        if (f.kind === FRAME_GOING_AWAY) return void (finish(new RpcError('UNAVAILABLE', `the server ended stream '${path}': it is going away; subscribe again`, undefined, { status: 503 })), reader.cancel().catch(() => {}));
         if (f.kind !== FRAME_HEARTBEAT) frame(f.kind, f.payload);
       }
     }
   } catch (e) {
     if (over()) return;
-    if (e instanceof VerifyError || (e instanceof Error && e.message.startsWith('malformed stream frame'))) {
+    if (e instanceof VerifyError || e instanceof FrameError) {
       finish(new RpcError('BAD_RESPONSE', `invalid stream: ${e.message}`, undefined, { status: 200, cause: e }));
     } else finish(new RpcError('DISCONNECTED', `stream '${path}' failed: ${e instanceof Error ? e.message : String(e)}`, undefined, { status: 0, cause: e }));
   } finally {

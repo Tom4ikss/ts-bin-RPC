@@ -35,11 +35,18 @@ export const COL_DELTA = 8;
 export interface Limits {
   maxBytes: number;
   maxDepth: number;
-  /** Tables and vector elements the verifier may visit: bounds the work for reused offsets. */
+  /**
+   * Tables and vector elements the verifier may visit: bounds the work for reused offsets. A message
+   * may hold at most `4096 + 8 × its length` of them whatever this says: elements that take no bytes
+   * (objects without columns, literals) would otherwise let a short message build huge arrays.
+   */
   maxNodes: number;
 }
 
 export const DEFAULT_LIMITS: Limits = { maxBytes: 64 * 1024 * 1024, maxDepth: 64, maxNodes: 16 * 1024 * 1024 };
+
+/** Nodes a message may hold besides 8 per byte (Limits.maxNodes). */
+const NODE_SLACK = 4096;
 
 const SPLIT = 'string splits a surrogate pair';
 
@@ -922,7 +929,7 @@ export class Check {
     this.len = bytes.length;
     const maxBytes = limits.maxBytes ?? DEFAULT_LIMITS.maxBytes;
     this.#maxDepth = limits.maxDepth ?? DEFAULT_LIMITS.maxDepth;
-    this.#nodes = limits.maxNodes ?? DEFAULT_LIMITS.maxNodes;
+    this.#nodes = Math.min(limits.maxNodes ?? DEFAULT_LIMITS.maxNodes, NODE_SLACK + 8 * bytes.length);
     if (this.len > maxBytes) this.fail(`message is larger than ${maxBytes} bytes`);
     if (this.len < 8 || bytes[0] !== 0x54 || bytes[1] !== 0x42) this.fail('not a ts-bin-rpc message');
     if (bytes[2] !== VERSION) this.fail(versionError(bytes[2]));

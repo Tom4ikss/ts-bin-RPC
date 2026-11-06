@@ -139,7 +139,9 @@ export function serveWebSockets(server: Server, routes: Record<string, OnConnect
       return;
     }
     const accept = createHash('sha1').update(key + GUID).digest('base64');
-    socket.write(`HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${accept}\r\n\r\n`);
+    // the first subprotocol the client offers, as the ws package picks it
+    const protocol = String(req.headers['sec-websocket-protocol'] ?? '').split(',')[0].trim();
+    socket.write(`HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${accept}\r\n${protocol ? `Sec-WebSocket-Protocol: ${protocol}\r\n` : ''}\r\n`);
     onConnection(new TestSocket(socket), req);
   });
 }

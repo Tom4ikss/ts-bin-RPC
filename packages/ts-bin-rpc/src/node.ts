@@ -1,51 +1,75 @@
 /// <reference types="node" />
 // Node's http/https/http2-compat servers speak (req, res), not Fetch: this adapts a Fetch handler.
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { DEFAULT_LIMITS } from './runtime.ts';
 import { STREAM_CONTENT_TYPE } from './frames.ts';
 import { BATCH_CONTENT_TYPE } from './batch.ts';
 import { SINKS } from './stream-server.ts';
 import type { Handler } from './server.ts';
 
 export interface NodeListenerOptions {
-  /** Requests with a larger body are answered 413 before the handler runs. Default: 64 MB. */
+  /**
+   * Requests with a larger body get 413. The handler has its own `limits.maxBytes`, and reads a body
+   * only after it found the procedure, so this is a second fence. Default: 64 MB.
+   */
   maxBytes?: number;
 }
+
+const NODE_MAX_BYTES = 64 * 1024 * 1024;
 
 export function toNodeListener(
   handler: (request: Request) => Response | Promise<Response>,
   options: NodeListenerOptions = {},
 ): (req: IncomingMessage, res: ServerResponse) => Promise<void> {
-  const maxBytes = options.maxBytes ?? DEFAULT_LIMITS.maxBytes;
+  const maxBytes = options.maxBytes ?? NODE_MAX_BYTES;
   return async (req, res) => {
     try {
-      const chunks: Uint8Array[] = [];
-      let size = 0;
-      for await (const chunk of req as AsyncIterable<Uint8Array>) {
-        size += chunk.length;
-        if (size > maxBytes) {
-          res.writeHead(413).end();
-          req.destroy();
-          return;
-        }
-        chunks.push(chunk);
-      }
-      const body = new Uint8Array(size);
-      let at = 0;
-      for (const c of chunks) {
-        body.set(c, at);
-        at += c.length;
-      }
-
       const { url, headers } = head(req);
       const method = req.method ?? 'GET';
+      const tooLarge = () => {
+        if (!res.headersSent) res.writeHead(413).end();
+        req.destroy();
+      };
+      if (Number(req.headers['content-length'] ?? 0) > maxBytes) return tooLarge();
       // request.signal aborts when the client goes away: streaming procedures stop their sources.
       const abort = new AbortController();
       res.once('close', () => abort.abort());
-      const response = await handler(new Request(url, { method, headers, body: method === 'GET' || method === 'HEAD' ? undefined : body, signal: abort.signal }));
+      // The body streams into the request: the handler reads it only for a procedure that takes it.
+      let body: ReadableStream<Uint8Array> | undefined;
+      if (method !== 'GET' && method !== 'HEAD') {
+        let size = 0, done = false;
+        body = new ReadableStream<Uint8Array>({
+          start(c) {
+            const error = (e: Error) => {
+              if (done) return;
+              done = true;
+              c.error(e);
+            };
+            req.on('data', (chunk: Uint8Array) => {
+              if (done) return;
+              size += chunk.length;
+              if (size > maxBytes) {
+                error(new RangeError('request body too large'));
+                tooLarge();
+              } else c.enqueue(new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength));
+            });
+            req.on('end', () => {
+              if (!done) (done = true), c.close();
+            });
+            req.on('error', error);
+            // a client that goes away mid-body: 'close' without 'end'
+            req.on('close', () => error(new Error('the client went away')));
+          },
+          cancel: () => void req.resume(),
+        });
+      }
+      const response = await handler(new Request(url, { method, headers, body, signal: abort.signal, duplex: 'half' } as RequestInit));
+      if (res.headersSent) return;
 
       res.statusCode = response.status;
-      response.headers.forEach((v, k) => res.setHeader(k, v));
+      response.headers.forEach((v, k) => k !== 'set-cookie' && res.setHeader(k, v));
+      // forEach joins every Set-Cookie into one header, which browsers do not split
+      const cookies = response.headers.getSetCookie();
+      if (cookies.length) res.setHeader('set-cookie', cookies);
       const type = response.headers.get('content-type');
       // streams and batches go out as they come: a batch answers each call as it ends
       if (!response.body || (type !== STREAM_CONTENT_TYPE && type !== BATCH_CONTENT_TYPE)) {

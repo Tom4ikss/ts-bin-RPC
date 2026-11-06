@@ -4,7 +4,7 @@
 // one, and its first frame is a fresh snapshot.
 import { CONTENT_TYPE, type ClientEntry } from './rpc.ts';
 import { encodeFrame, FRAME_ERROR, STREAM_CONTENT_TYPE } from './frames.ts';
-import { encodeStart, encodeStop, MSG_FRAMES, MSG_RESPONSE } from './socket.ts';
+import { encodeStart, encodeStop, MSG_FRAMES, MSG_RESPONSE, SKIPPABLE, SOCKET_PROTOCOL } from './socket.ts';
 
 export interface WebSocketOptions {
   /**
@@ -15,7 +15,7 @@ export interface WebSocketOptions {
   /** Closes the socket after this many milliseconds with nothing open; it opens again on use. Default: 30000. */
   idle?: number;
   /** Default: globalThis.WebSocket. */
-  WebSocket?: new (url: string) => WebSocket;
+  WebSocket?: new (url: string, protocols?: string | string[]) => WebSocket;
 }
 
 /** `createClient({ socket })`: sends requests over a socket instead of fetch. */
@@ -35,6 +35,9 @@ interface Route {
   body?: ReadableStreamDefaultController<Uint8Array>;
 }
 
+/** How long a socket has to stay open for reconnecting to start again from the shortest delay. */
+const STABLE_MS = 5000;
+
 /**
  * Subscriptions (and calls, with `calls: true`) over one WebSocket:
  * `createClient({ url: '/rpc', procedures, socket: webSocket('wss://example.com/rpc') })`.
@@ -52,11 +55,12 @@ export function webSocket(url: string, options: WebSocketOptions = {}): SocketTr
 
   const connect = () => {
     if (ws || retryTimer) return;
-    const s = (ws = new WS(url));
+    const s = (ws = new WS(url, [SOCKET_PROTOCOL]));
     s.binaryType = 'arraybuffer';
+    let opened = 0;
     s.onopen = () => {
       ready = true;
-      retries = 0;
+      opened = Date.now();
       for (const r of routes.values()) send(r);
     };
     s.onmessage = (e) => message(new Uint8Array(e.data as ArrayBuffer));
@@ -64,6 +68,9 @@ export function webSocket(url: string, options: WebSocketOptions = {}): SocketTr
       if (ws !== s) return;
       ws = undefined;
       ready = false;
+      // A server that closes sockets as soon as they open must not get a new one every 250 ms:
+      // the backoff starts over only after a socket that lasted.
+      if (opened && Date.now() - opened >= STABLE_MS) retries = 0;
       for (const [id, r] of routes) {
         if (r.live) {
           r.sent = false;
@@ -140,6 +147,8 @@ export function webSocket(url: string, options: WebSocketOptions = {}): SocketTr
         r.resolve(new Response(stream, { status: 200, headers: { 'content-type': STREAM_CONTENT_TYPE } }));
       }
       r.body!.enqueue(body);
+    } else if (b[4] < SKIPPABLE) {
+      drop(id, new TypeError(`unknown WebSocket message type ${b[4]}: update ts-bin-rpc`));
     }
   };
 
