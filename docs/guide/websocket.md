@@ -109,9 +109,11 @@ Bun.serve({
 ```ts
 Deno.serve((request) => {
   if (request.headers.get('upgrade') !== 'websocket') return handler(request);
+  // upgradeWebSocket closes the request, and context() reads its headers: keep a copy
+  const upgrade = new Request(request.url, { headers: request.headers });
   const { socket, response } = Deno.upgradeWebSocket(request);
   socket.binaryType = 'arraybuffer';
-  const conn = handler.socket(socket, request); // before returning the response
+  const conn = handler.socket(socket, upgrade);
   socket.onmessage = (e) => conn.message(e.data);
   socket.onclose = () => conn.close();
   return response;

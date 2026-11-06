@@ -239,10 +239,9 @@ export function createHandler<R extends AnyRouter>(router: R, options: HandlerOp
   };
 
   // One WebSocket connection (FORMAT §13): calls and subscriptions by ID. `request` is the upgrade
-  // request: `context` gets it for every call, as it gets the request of an HTTP call. A copy, since
-  // some servers (Deno) close the upgrade request once the handler returned its response.
-  const socket = (ws: SocketLike, upgrade: Request): SocketConnection => {
-    const request = new Request(upgrade.url, { headers: upgrade.headers, signal: upgrade.signal });
+  // request: `context` gets it for every call, as it gets the request of an HTTP call, so its headers
+  // have to stay readable (Deno closes the request it upgrades: pass a copy made before).
+  const socket = (ws: SocketLike, request: Request): SocketConnection => {
     const subs = new Map<number, AbortController>();
     let closed = false;
     const reply = (id: number, type: number, status: number, body: Uint8Array) => {

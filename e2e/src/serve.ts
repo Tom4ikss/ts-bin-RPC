@@ -34,11 +34,11 @@ if (typeof Deno !== 'undefined') {
   const deno = Deno;
   deno.serve({ port, onListen: (a) => console.log(`listening ${a.port}`) }, (r) => {
     if (!upgrade(r)) return handler(r);
+    // upgradeWebSocket closes the request: context() reads a copy
+    const request = new Request(r.url, { headers: r.headers });
     const { socket, response } = deno.upgradeWebSocket(r);
     socket.binaryType = 'arraybuffer';
-    socket.onerror = (e) => console.error('socket error', (e as ErrorEvent).message ?? e);
-    // before returning: Deno closes the request with its response
-    const conn = handler.socket(socket, r);
+    const conn = handler.socket(socket, request);
     socket.onmessage = (e) => (typeof e.data === 'string' ? socket.close(1003) : conn.message(e.data as ArrayBuffer));
     socket.onclose = () => conn.close();
     return response;
