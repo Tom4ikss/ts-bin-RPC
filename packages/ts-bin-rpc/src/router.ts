@@ -1,7 +1,7 @@
 // Types derived from a router: a plain object of `(input, ctx) => result` functions, nested by namespace.
 // Shared by the client (call signatures), the server (lookup) and generated code (staleness checks).
 import type { RpcError } from './rpc.ts';
-import type { tbr } from './brands.ts';
+import type { tbr, tbrEnc } from './brands.ts';
 
 export type AnyProcedure = (...args: any[]) => unknown;
 export type AnyRouter = { readonly [key: string]: AnyProcedure | AnyRouter };
@@ -56,14 +56,17 @@ export type StreamItemOf<R, P extends string> = StreamItem<OutputOf<R, P>>;
 type BrandTag<V> = [V extends { readonly [tbr]?: infer B } ? Exclude<B, undefined> : never] extends [infer B] ? ([B] extends [never] ? 'none' : B) : 'none';
 type NumberColumn<B> = [B] extends ['u8'] ? Uint8Array : [B] extends ['i8'] ? Int8Array : [B] extends ['u16'] ? Uint16Array : [B] extends ['i16'] ? Int16Array
   : [B] extends ['u32'] ? Uint32Array : [B] extends ['i32'] ? Int32Array : [B] extends ['f32'] ? Float32Array : Float64Array;
-type ColumnOf<V> = [V] extends [boolean] ? Uint8Array : [V] extends [Date] ? Float64Array : [V] extends [bigint] ? ([BrandTag<V>] extends ['u64'] ? BigUint64Array : BigInt64Array) : NumberColumn<BrandTag<V>>;
+/** `{ scale: N }` of `Scale<N>`, never for values without one. */
+type ScaleOf<V> = V extends { readonly [tbrEnc]?: infer E } ? Extract<E, { readonly scale: number }> : never;
+type ColumnOf<V> = [ScaleOf<V>] extends [never] ? PlainColumnOf<V> : Float64Array;
+type PlainColumnOf<V> = [V] extends [boolean] ? Uint8Array : [V] extends [Date] ? Float64Array : [V] extends [bigint] ? ([BrandTag<V>] extends ['u64'] ? BigUint64Array : BigInt64Array) : NumberColumn<BrandTag<V>>;
 type ColumnKey<T, K extends keyof T> = undefined extends T[K] ? never : null extends T[K] ? never
   : [number] extends [T[K]] ? K : [bigint] extends [T[K]] ? K : [boolean] extends [T[K]] ? K : [T[K]] extends [Date] ? K : never;
 
 /**
  * Required numeric, boolean and Date fields of a batch as typed arrays over the message bytes:
  * `Float32Array` for `f32`, `Uint32Array` for `u32`, `Float64Array` for `number` and `Date`
- * (milliseconds), `Uint8Array` (0 or 1) for `boolean`.
+ * (milliseconds) and `Scale`d numbers (a copy, in their units), `Uint8Array` (0 or 1) for `boolean`.
  */
 export type Columns<T> = { readonly [K in keyof T as K extends string ? ColumnKey<T, K> : never]: ColumnOf<T[K]> };
 

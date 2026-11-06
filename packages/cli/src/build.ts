@@ -170,7 +170,7 @@ class Builder {
     }
   }
 
-  // Rules go on numbers, strings and arrays; anything else, or an argument that is not a literal, is
+// Rules go on numbers, strings and arrays; anything else, or an argument that is not a literal, is
   // an error here rather than a rule that silently does nothing.
   private withRules(t: IRType, raw: RawRules, checks: RawChecks, ctx: Ctx): IRType | undefined {
     const rules: Rules = {};
@@ -179,9 +179,19 @@ class Builder {
     const sized = t.kind === 'string' || t.kind === 'bytes' || t.kind === 'typedArray' || t.kind === 'array';
     let ok = true;
     const bad = (message: string) => { this.fail(ctx, message); ok = false; };
+    const enc: { scale?: number; delta?: true } = {};
     for (const [name, v] of Object.entries(raw)) {
       if (v === null) { bad(`${ruleName(name)} needs a literal argument`); continue; }
       switch (name) {
+        case 'scale':
+          if (t.kind !== 'scalar' || !SCALABLE.has(t.scalar)) bad(`Scale goes with an integer brand of 8 to 32 bits: i32 & Scale<100>`);
+          else if (typeof v !== 'number' || !Number.isSafeInteger(v) || v < 1) bad('Scale takes a positive integer');
+          else enc.scale = v;
+          break;
+        case 'delta':
+          if (t.kind !== 'scalar' || !(SCALABLE.has(t.scalar) || t.scalar === 'timestamp')) bad('Delta applies to integer brands of 8 to 32 bits and Date: differences of floats are not exact');
+          else if (v === true) enc.delta = true;
+          break;
         case 'min': case 'max':
           if (!numeric) bad(`${ruleName(name)} applies to numbers and bigints`);
           else if (wide ? typeof v !== 'bigint' && typeof v !== 'number' : typeof v !== 'number') bad(`${ruleName(name)} on a number takes a number literal`);
@@ -213,11 +223,15 @@ class Builder {
       else if (!CHECK_NAME.test(name)) bad(`Check name '${name}' must be an identifier`);
       else (rules.checks ??= []).includes(name) || rules.checks.push(name);
     }
-    if (!ok) return undefined;
     const prev = (t as { rules?: Rules }).rules;
     const merged: Rules = { ...prev, ...rules };
     if (prev?.checks && rules.checks) merged.checks = [...new Set([...prev.checks, ...rules.checks])];
-    return { ...t, rules: merged } as IRType;
+    // the verifier checks limits on the values in the message, and a delta column holds differences
+    if ((enc.delta || (t.kind === 'scalar' && t.delta)) && (merged.min !== undefined || merged.max !== undefined)) bad('Delta does not go with Min or Max yet');
+    if (!ok) return undefined;
+    const out = { ...t, ...enc } as IRType;
+    if (Object.keys(merged).length) (out as { rules?: Rules }).rules = merged;
+    return out;
   }
 
   // Unions without null/undefined: booleans, string literal enums, discriminated unions of objects.
@@ -382,6 +396,9 @@ function display(t: IRType): string {
   const parts = [s, ...Object.entries(limits).map(([k, v]) => `${ruleName(k)}<${v}>`), ...(pattern === undefined ? [] : [`Pattern<${JSON.stringify(pattern)}>`]), ...checks.map((c) => `Check<'${c}'>`)];
   return `(${parts.join(' & ')})`;
 }
+
+/** Integer brands that take `Scale` and `Delta`. */
+const SCALABLE = new Set(['u8', 'i8', 'u16', 'i16', 'u32', 'i32']);
 
 function ruleName(k: string): string {
   return k[0].toUpperCase() + k.slice(1);

@@ -64,6 +64,51 @@ EncodeError: at [17].manager.age: expected u8, got 300
 
 `u64` and `i64` are `bigint`. Plain `bigint` is `i64`.
 
+## Scale and Delta
+
+Two encodings make realtime feeds smaller without changing what your code reads:
+
+```ts
+import type { Delta, i32, Scale, u32 } from 'ts-bin-rpc';
+
+interface Tick {
+  t: Date & Delta;                   // time stamps as differences
+  price: i32 & Scale<100> & Delta;   // cents in an i32, as differences
+  size: u32;
+  side: 'buy' | 'sell';
+}
+```
+
+- **`Scale<N>`** on an integer brand stores `Math.round(value * N)` in it: `i32 & Scale<100>` keeps
+  two decimals in 4 bytes, `i16 & Scale<100>` coordinates of ±327 in 2. You write and read plain
+  numbers (`64250.25`); a value that does not fit the brand after scaling is an `EncodeError`, and
+  a column of it in `columns()` is a `Float64Array` of the scaled-back values.
+- **`Delta`** sends a column of an array of objects as its first value and the differences between
+  neighbours, in 1, 2 or 4 bytes each, whichever fits. It works on 8–32 bit integer brands, scaled
+  ones included, and on `Date`. It pays off on sorted or slowly changing values: time stamps,
+  sequence numbers, prices. The encoder falls back to the plain column when differences would not
+  be smaller.
+
+The price is zero-copy: such a column is decoded into its own typed array when the view of the
+array is created, instead of being a window into the message. That is one pass over the column,
+which costs nothing next to the network on a feed, but `Delta` is not for a column you mostly do
+not read.
+
+16 ticks per message, 300 messages, deflate with a context for the whole stream
+([deltas.md](https://github.com/Tom4ikss/ts-bin-RPC/blob/main/bench/results/deltas.md)):
+
+| `Tick` | Raw | Deflate |
+|---|---|---|
+| JSON | 979 B | 159 B |
+| `t: number; price: f32` | 328 B | 144 B |
+| `t: Date & Delta; price: i32 & Scale<100> & Delta` | 180 B | 77 B |
+
+Without any of this, optional and nullable columns that are empty in most rows (patches of [live
+state](live.md), sparse fields) are packed: only the rows that have a value take space.
+
+Both are part of the field's type for `tbr check`: adding or removing `Delta` or changing `N` is a
+breaking change, as changing the brand is.
+
 ## Objects
 
 Interfaces, type aliases of object types and inline object literals all work. An inline type gets

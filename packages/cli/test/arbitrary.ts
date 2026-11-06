@@ -35,13 +35,17 @@ const strings = fc.oneof(
   fc.constantFrom('', 'Привет', 'a😀b', 'same', 'same', '__proto__', 'constructor', '1'),
 );
 
+/** Values close to each other, so that delta columns take their narrow forms. */
+const near = (k: ScalarKind) => fc.integer({ min: 0, max: k.endsWith('8') ? 120 : 300 }).map((x) => (k === 'timestamp' ? new Date(1.7e12 + x) : k.startsWith('i') ? x - 60 : x));
+
 // Explicit depth budget: at the last level arrays are empty, nullable fields null and optional ones absent,
 // so recursive types (`children: Node[]`, `manager: User | null`) stay finite.
 export function arbitraries(schema: Schema, maxDepth = 3) {
   const memo = new Map<string, fc.Arbitrary<unknown>>();
   const arb = (t: IRType, d: number): fc.Arbitrary<unknown> => {
     switch (t.kind) {
-      case 'scalar': return scalars[t.scalar];
+      // on the grid of the scale, so that values come back equal
+      case 'scalar': return t.scale ? scalars[t.scalar].map((v) => (v as number) / t.scale!) : t.delta ? fc.oneof(scalars[t.scalar], near(t.scalar)) : scalars[t.scalar];
       case 'string': return strings;
       case 'bytes': return fc.uint8Array({ maxLength: 6 });
       case 'typedArray': return typed[t.array];

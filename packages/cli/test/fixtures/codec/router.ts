@@ -1,5 +1,5 @@
 // Every IR construct in both layouts: a single object (row table) and a vector of objects (columns).
-import type { u8, i8, u16, i16, u32, i32, f32, u64, i64 } from 'ts-bin-rpc';
+import type { u8, i8, u16, i16, u32, i32, f32, u64, i64, Delta, Scale } from 'ts-bin-rpc';
 
 export type Color = 'red' | 'green' | 'blue';
 
@@ -13,6 +13,14 @@ export interface Node {
   children: Node[];
   leaf?: Leaf | null;
   tags?: string[] | null;
+}
+
+/** Delta columns and scaled numbers. */
+export interface Tick {
+  seq: u16 & Delta;
+  at?: Date & Delta;
+  p: (i16 & Scale<4> & Delta) | null;
+  q: u32 & Scale<1000>;
 }
 
 export type Event =
@@ -100,4 +108,6 @@ export const appRouter = {
   folders: async (input: Folder[]): Promise<Folder> => input[0],
   entries: async (input: [string, u32][]): Promise<[Leaf, u64]> => [{ label: '' }, 0n],
   sameWire: async (input: Map<string, u32>): Promise<Record<string, u32>> => ({}),
+  ticks: async (input: Tick[]): Promise<Tick> => input[0],
+  scaled: async (input: (i8 & Scale<2>)[]): Promise<u8 & Scale<10>> => 0,
 };

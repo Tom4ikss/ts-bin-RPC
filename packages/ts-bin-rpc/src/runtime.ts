@@ -3,11 +3,22 @@
 
 if (new Uint8Array(new Uint16Array([1]).buffer)[0] !== 1) throw new Error('ts-bin-rpc needs a little-endian platform');
 
-export const VERSION = 0;
+/**
+ * Format version a writer puts in the header: 0, or 1 when the message has packed columns, which a
+ * reader of version 0 would misread. Readers take both.
+ */
+export const VERSION = 1;
 export const FLAG_STRINGS = 1;
 export const FLAG_ERROR = 2;
 export const COL_OPTIONAL = 1;
 export const COL_NULLABLE = 2;
+/** Column data holds only the rows with a value, one after another (FORMAT §6). */
+export const COL_PACKED = 4;
+/**
+ * Column data holds the values of the rows with one as the first value and differences between
+ * neighbours, signed, of `1 << ((flags >> 4) & 3)` bytes (FORMAT §6).
+ */
+export const COL_DELTA = 8;
 
 export interface Limits {
   maxBytes: number;
@@ -133,22 +144,28 @@ export function ranks(b: Uint8Array, pres: number, nul: number, n: number): Int3
 }
 
 let scratch = new Int32Array(48);
+/** Codecs generated before packed and delta columns would misread them. */
+const STALE = 'a packed or delta column: regenerate the codecs';
 
 /**
  * Column set of an object vector (FORMAT §6): `spec` holds `[fieldId, align, flags]` per field, flags bit 0 for
- * optional, bit 1 for nullable. Returns `[data, presence, null]` offsets per field, at the field's spec index;
- * -1 where the column or bitmap is absent. Columns of unknown fields are skipped.
+ * optional, bit 1 for nullable, bit 2 for a field whose column may be packed. Returns `[data, presence, null]`
+ * offsets per field, at the field's spec index, -1 where the column or bitmap is absent, then the column flags
+ * per field, from index `spec.length`. Columns of unknown fields are skipped.
  * The result is a shared buffer, valid until the next call: read it before constructing nested columns.
  */
 export function catalog(dv: DataView, vec: number, spec: readonly number[]): Int32Array {
-  const n = dv.getUint32(vec, true), nc = dv.getUint16(vec + 4, true), nb = (n + 7) >>> 3;
-  if (scratch.length < spec.length) scratch = new Int32Array(spec.length);
-  const out = scratch.fill(-1, 0, spec.length);
+  const n = dv.getUint32(vec, true), nc = dv.getUint16(vec + 4, true), nb = (n + 7) >>> 3, len = spec.length + spec.length / 3;
+  if (scratch.length < len) scratch = new Int32Array(len);
+  const out = scratch.fill(-1, 0, spec.length).fill(0, spec.length, len);
   for (let j = 0; j < nc; j++) {
     const e = vec + 8 + 8 * j, id = dv.getUint16(e, true), fl = dv.getUint16(e + 2, true);
     let k = 0;
     while (k < spec.length && spec[k] !== id) k += 3;
     if (k === spec.length) continue;
+    // codecs generated before packed columns would read one as a plain column
+    if (fl & (COL_PACKED | COL_DELTA) & ~spec[k + 2]) throw new VerifyError(STALE);
+    out[spec.length + k / 3] = fl;
     let o = dv.getUint32(e + 4, true);
     if (fl & 1) (out[k + 1] = o), (o += nb);
     if (fl & 2) (out[k + 2] = o), (o += nb);
@@ -157,7 +174,7 @@ export function catalog(dv: DataView, vec: number, spec: readonly number[]): Int
   return out;
 }
 
-export type { u8, i8, u16, i16, u32, i32, f32, f64, u64, i64, Min, Max, MinLength, MaxLength, Pattern, Email, Uuid, Url, IsoDate, IsoDateTime } from './brands.ts';
+export type { u8, i8, u16, i16, u32, i32, f32, f64, u64, i64, Min, Max, MinLength, MaxLength, Pattern, Scale, Delta, Email, Uuid, Url, IsoDate, IsoDateTime } from './brands.ts';
 export type { Expect, Same, InputOf, InputOptional, OutputOf, ProcedurePath, StreamItemOf, LiveItemOf, LiveKeyOf, TakesContext, IsQuery, Columns } from './router.ts';
 export { subscribe } from './stream-client.ts';
 export { subscribeLive } from './live-client.ts';
@@ -257,6 +274,8 @@ export class Writer {
   #utf16: string[] = [];
   #utf16Len = 0;
   #vtables = new Map<number, number>();
+  /** Raised to 1 by the first packed column. */
+  version = 0;
 
   constructor(strings: boolean, capacity = 256) {
     this.buf = new Uint8Array(capacity);
@@ -456,11 +475,80 @@ export class Writer {
     }
     this.buf[0] = 0x54;
     this.buf[1] = 0x42;
-    this.buf[2] = VERSION;
+    this.buf[2] = this.version;
     this.buf[3] = flags;
     this.dv.setUint32(4, root, true);
     return this.buf.subarray(0, this.pos);
   }
+}
+
+// Column writers of generated encoders: functions, so that a bundle without such columns drops them.
+
+/**
+ * After a fixed-width column of `n` rows at `d` was written with its `m` values one after another
+ * (`t`, the bitmaps at `pres` and `nul` or -1): packs it when that halves it or better, and returns
+ * `COL_PACKED`, or spreads the values to their rows and returns 0. The column is the last allocation.
+ */
+export function packCol(w: Writer, t: TypedArray, d: number, m: number, n: number, pres: number, nul: number): number {
+  if (m === n) return 0;
+  if (2 * m <= n) {
+    w.pos = d + m * t.BYTES_PER_ELEMENT; // the rest was never written: still zero for the next alloc
+    w.version = 1;
+    return COL_PACKED;
+  }
+  const b = w.buf, a = t as unknown as unknown[], zero = t instanceof BigInt64Array || t instanceof BigUint64Array ? 0n : 0;
+  for (let i = n - 1; i >= 0; i--) a[i] = (pres < 0 || bit(b, pres, i)) && (nul < 0 || !bit(b, nul, i)) ? a[--m] : zero;
+  return 0;
+}
+
+/**
+ * `packCol`, but first tries differences between neighbours: when they fit a signed integer narrower than
+ * the values, rewrites the column as the first value and the differences, and returns `COL_DELTA` with
+ * their width. Integer columns and timestamps only.
+ */
+export function deltaCol(w: Writer, t: TypedArray, d: number, m: number, n: number, pres: number, nul: number): number {
+  const a = t as unknown as number[], size = t.BYTES_PER_ELEMENT;
+  let max = 0;
+  for (let j = 1; j < m && max <= 0x7fffffff; j++) {
+    const x = a[j] - a[j - 1];
+    if (!Number.isInteger(x)) max = Infinity; // a timestamp of fractional milliseconds
+    else if ((x < 0 ? -x - 1 : x) > max) max = x < 0 ? -x - 1 : x;
+  }
+  const code = max <= 0x7f ? 0 : max <= 0x7fff ? 1 : max <= 0x7fffffff ? 2 : 3, width = 1 << code;
+  if (m < 2 || code === 3 || width >= size) return packCol(w, t, d, m, n, pres, nul);
+  // in place: difference j ends at d + size + j * width, before value j + 1, which is still to be read
+  const dv = w.dv;
+  let prev = a[0], at = d + size;
+  for (let j = 1; j < m; j++) {
+    const v = a[j], x = v - prev;
+    prev = v;
+    if (width === 1) dv.setInt8(at, x);
+    else if (width === 2) dv.setInt16(at, x, true);
+    else dv.setInt32(at, x, true);
+    at += width;
+  }
+  w.buf.fill(0, at, d + m * size); // the next alloc takes zeroed bytes
+  w.pos = at;
+  w.version = 1;
+  return COL_DELTA | (code << 4);
+}
+
+/**
+ * String column of `n` rows from the `vals` of the rows with a value (bitmaps at `pres` and `nul`, or -1):
+ * packed when that halves the refs or better, returning `COL_PACKED`, or with '' in the other rows, returning 0.
+ */
+export function strsCol(w: Writer, vals: string[], n: number, pres: number, nul: number): number {
+  const m = vals.length;
+  if (m === n) return w.strCol(vals, n), 0;
+  if (2 * m <= n) {
+    w.strCol(vals, m);
+    w.version = 1;
+    return COL_PACKED;
+  }
+  const col = new Array<string>(n), b = w.buf;
+  for (let i = 0, j = 0; i < n; i++) col[i] = (pres < 0 || bit(b, pres, i)) && (nul < 0 || !bit(b, nul, i)) ? vals[j++] : '';
+  w.strCol(col, n);
+  return 0;
 }
 
 // ---------------------------------------------------------------------------------------------- reader
@@ -484,7 +572,7 @@ export class Reader {
     this.bytes = bytes;
     this.dv = dv ?? new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     if (bytes.length < 8 || bytes[0] !== 0x54 || bytes[1] !== 0x42) throw new VerifyError('not a ts-bin-rpc message');
-    if (bytes[2] !== VERSION) throw new VerifyError(`unsupported format version ${bytes[2]}`);
+    if (bytes[2] > VERSION) throw new VerifyError(`unsupported format version ${bytes[2]}`);
     this.flags = bytes[3];
     this.root = this.dv.getUint32(4, true);
     if (this.flags & FLAG_STRINGS) {
@@ -606,6 +694,71 @@ export class StrCol implements Col<string> {
     else v = (ref & 2 ? this.#r.utf16 : this.#r.ascii).substring(starts[i], starts[i] + (ref >>> 2));
     return (vals[i] = v);
   }
+}
+
+/** A packed string column: its values are a column of their own, row i is value `rk[i]`. */
+export class PackedStrCol implements Col<string> {
+  readonly #c: StrCol;
+  readonly #rk: Int32Array;
+  constructor(c: StrCol, rk: Int32Array) {
+    this.#c = c;
+    this.#rk = rk;
+  }
+  get(i: number): string { return this.#c.get(this.#rk[i]); }
+}
+
+/**
+ * A packed fixed-width column (COL_PACKED) at `off`, spread to its `n` rows: an array of its own of
+ * `WHOLE[k]` elements, zero in the rows without a value (bitmaps at `pres` and `nul`, or -1).
+ */
+export function spread(r: Reader, k: number, off: number, pres: number, nul: number, n: number): TypedArray {
+  const ctor = WHOLE[k], out = new ctor(n), src = r.whole(k) as unknown as unknown[], to = out as unknown as unknown[], b = r.bytes;
+  let j = off / ctor.BYTES_PER_ELEMENT;
+  for (let i = 0; i < n; i++) if ((pres < 0 || bit(b, pres, i)) && (nul < 0 || !bit(b, nul, i))) to[i] = src[j++];
+  return out;
+}
+
+/** `spread` of a delta column (COL_DELTA, the width in `fl`): the first value, then differences. */
+export function undelta(r: Reader, k: number, off: number, pres: number, nul: number, n: number, fl: number): TypedArray {
+  const ctor = WHOLE[k], size = ctor.BYTES_PER_ELEMENT, out = new ctor(n), to = out as unknown as number[], b = r.bytes;
+  // differences start at off + size, a multiple of their width; whole(1|3|5) is Int8Array, Int16Array, Int32Array
+  const code = (fl >>> 4) & 3, d = r.whole(2 * code + 1) as unknown as number[];
+  let v = (r.whole(k) as unknown as number[])[off / size], j = (off + size) >> code, i = 0;
+  if (pres < 0 && nul < 0) {
+    for (to[0] = v; ++i < n; ) to[i] = v += d[j++];
+    return out;
+  }
+  for (let first = true; i < n; i++) {
+    if ((pres >= 0 && !bit(b, pres, i)) || (nul >= 0 && bit(b, nul, i))) continue;
+    if (first) first = false;
+    else v += d[j++];
+    to[i] = v;
+  }
+  return out;
+}
+
+/** A column of a `Scale`d number: the integers of the message over the scale. */
+export class ScaleCol implements Col<number> {
+  readonly #t: ArrayLike<number>;
+  readonly #b: number;
+  readonly #s: number;
+  constructor(t: ArrayLike<number>, base: number, scale: number) { this.#t = t; this.#b = base; this.#s = scale; }
+  get(i: number): number { return this.#t[this.#b + i] / this.#s; }
+}
+
+/** The values of a `Scale`d column, for `columns()`. */
+export function unscale(a: ArrayLike<number>, scale: number): Float64Array {
+  const out = new Float64Array(a.length);
+  for (let i = 0; i < a.length; i++) out[i] = a[i] / scale;
+  return out;
+}
+
+/** A packed string column (COL_PACKED) of `n` rows at `body`, bitmaps at `pres` and `nul` or -1. */
+export function packedStrs(r: Reader, body: number, pres: number, nul: number, n: number): PackedStrCol {
+  const rk = ranks(r.bytes, pres, nul, n);
+  let m = 0;
+  for (let i = 0; i < n; i++) if (rk[i] >= 0) m++;
+  return new PackedStrCol(new StrCol(r, body, m), rk);
 }
 
 /** Column `b..b + n` of a message-wide array, for `columns()`. */
@@ -758,7 +911,7 @@ export class Check {
     this.#nodes = limits.maxNodes ?? DEFAULT_LIMITS.maxNodes;
     if (this.len > maxBytes) this.fail(`message is larger than ${maxBytes} bytes`);
     if (this.len < 8 || bytes[0] !== 0x54 || bytes[1] !== 0x42) this.fail('not a ts-bin-rpc message');
-    if (bytes[2] !== VERSION) this.fail(`unsupported format version ${bytes[2]}`);
+    if (bytes[2] > VERSION) this.fail(`unsupported format version ${bytes[2]}`);
     this.flags = bytes[3];
     if (this.flags & ~(FLAG_STRINGS | FLAG_ERROR)) this.fail('reserved flags are set');
     this.root = this.dv.getUint32(4, true);
@@ -941,10 +1094,11 @@ export class Check {
 
   /**
    * Column set of an object vector (spec as in `catalog`, names for messages): verifies the catalog and
-   * calls `body(k, data, n, presence, null)` for each column of a known field, k its spec index / 3.
+   * calls `body(k, data, n, presence, null, m)` for each column of a known field, k its spec index / 3,
+   * m the number of values the data holds: n, or the rows with a value when it is packed.
    * Returns the row count.
    */
-  cols(off: number, d: number, type: string, names: readonly string[], spec: readonly number[], body: (k: number, b: number, n: number, pres: number, nul: number) => void): number {
+  cols(off: number, d: number, type: string, names: readonly string[], spec: readonly number[], body: (k: number, b: number, n: number, pres: number, nul: number, m: number) => void): number {
     const n = this.vec(off, d);
     this.need(off + 4, 4);
     const dv = this.dv, nc = dv.getUint16(off + 4, true), nb = (n + 7) >>> 3;
@@ -952,7 +1106,7 @@ export class Check {
     const seen = new Uint8Array(names.length);
     for (let j = 0; j < nc; j++) {
       const e = off + 8 + 8 * j, id = dv.getUint16(e, true), fl = dv.getUint16(e + 2, true), o0 = dv.getUint32(e + 4, true);
-      if (fl & ~3) this.fail(`${type}: unknown column flags`);
+      if (fl & ~0x3f || (fl & 0x30) === 0x30) this.fail(`${type}: unknown column flags`);
       let o = o0;
       const pres = fl & 1 ? o : -1;
       if (fl & 1) o += nb;
@@ -966,11 +1120,22 @@ export class Check {
       if (seen[k]++) this.fail(`${type}.${names[k]}: duplicate column`);
       if (fl & 1 & ~allow) this.fail(`${type}.${names[k]}: required column has absent rows`);
       if (fl & 2 & ~allow) this.fail(`${type}.${names[k]}: column has nulls`);
-      body(k, align(o, spec[3 * k + 1]), n, pres, nul);
+      if (fl & (COL_PACKED | COL_DELTA) & ~allow) this.fail(`${type}.${names[k]}: ${STALE}`);
+      const b = align(o, spec[3 * k + 1]), m = fl & (COL_PACKED | COL_DELTA) ? this.count(pres, nul, n) : n;
+      // a delta column: the first value, then m - 1 differences; any bits are a value of these types
+      if (fl & COL_DELTA) this.need(b, m && spec[3 * k + 1] + (m - 1) * (1 << ((fl >>> 4) & 3)));
+      else body(k, b, n, pres, nul, m);
     }
     for (let k = 0; k < names.length; k++) if (!seen[k] && !(spec[3 * k + 2] & 1)) this.fail(`${type}.${names[k]}: column is missing`);
     return n;
   }
+}
+
+/** The rows with a value, in order: the row of each value of a packed column, for messages. */
+export function rowsOf(c: Check, pres: number, nul: number, n: number): Int32Array {
+  const out = new Int32Array(c.count(pres, nul, n));
+  for (let i = 0, j = 0; i < n; i++) if (c.has(pres, nul, i)) out[j++] = i;
+  return out;
 }
 
 // ------------------------------------------------------------------------------ rules
@@ -1023,8 +1188,8 @@ export function ruleStr(c: Check, at: number, min: number | undefined, max: numb
  * String column body, after `c.strCol()`. A back-reference is checked as the row it points to, and
  * skipped when that row had a value and so was checked already.
  */
-export function ruleStrs(c: Check, b: number, n: number, min: number | undefined, max: number | undefined, re: RegExp | undefined, pres: number, nul: number, field: string) {
-  const dv = c.dv;
+export function ruleStrs(c: Check, b: number, n: number, min: number | undefined, max: number | undefined, re: RegExp | undefined, pres: number, nul: number, field: string, rows?: Int32Array) {
+  const dv = c.dv, row = (i: number) => (rows === undefined ? i : rows[i]);
   if (re === undefined) {
     // lengths only: they are in the refs, no text and no offsets needed
     for (let i = 0; i < n; i++) {
@@ -1034,7 +1199,7 @@ export function ruleStrs(c: Check, b: number, n: number, min: number | undefined
         if (c.has(pres, nul, j)) continue;
         ref = dv.getUint32(b + 8 + 4 * j, true);
       }
-      if (c.has(pres, nul, i)) ruleLen(ref >>> 2, min, max, field, i);
+      if (c.has(pres, nul, i)) ruleLen(ref >>> 2, min, max, field, row(i));
     }
     return;
   }
@@ -1047,8 +1212,8 @@ export function ruleStrs(c: Check, b: number, n: number, min: number | undefined
     else (starts[i] = a), (a += ref >>> 2);
     if (!c.has(pres, nul, i) || (j !== i && c.has(pres, nul, j))) continue;
     const len = ref >>> 2;
-    ruleLen(len, min, max, field, i);
-    if (re && !re.test(c.text(starts[j], (len << 1) | ((ref >>> 1) & 1)))) broke(field, 'pattern', re.source, i);
+    ruleLen(len, min, max, field, row(i));
+    if (re && !re.test(c.text(starts[j], (len << 1) | ((ref >>> 1) & 1)))) broke(field, 'pattern', re.source, row(i));
   }
 }
 
@@ -1081,7 +1246,7 @@ export interface Codec<T> extends Encoder<T>, Decoder<T> {}
 
 /** The schema as data, emitted next to the codecs. Only read after an encode fails, to find where. */
 export type TypeDesc = (
-  | { kind: 'scalar'; scalar: string }
+  | { kind: 'scalar'; scalar: string; scale?: number; delta?: true }
   | { kind: 'string' }
   | { kind: 'bytes' }
   | { kind: 'typedArray'; array: string }
@@ -1156,6 +1321,7 @@ export function locate(schema: SchemaDesc, type: TypeDesc, value: unknown, path 
   const miss = (expected: string, got: unknown = value): Mismatch => ({ path, expected, got });
   switch (type.kind) {
     case 'scalar':
+      if (type.scale) return typeof value === 'number' && SCALAR_OK[type.scalar](Math.round(value * type.scale)) ? null : miss(`${type.scalar} & Scale<${type.scale}>`);
       return SCALAR_OK[type.scalar](value) ? null : miss(SCALAR_NAME[type.scalar] ?? type.scalar);
     case 'string':
       if (typeof value !== 'string') return miss('string');

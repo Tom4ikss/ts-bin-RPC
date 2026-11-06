@@ -66,6 +66,9 @@ function tickBatches() {
   return out;
 }
 
+// The rows as the contract of bench/gen/router.ts has them; `t` goes as a number or a Date.
+const tbr = (r, date = true) => r.map((x) => ({ t: date ? new Date(x.t) : x.t, price: x.price, size: x.size, side: x.side ? 'sell' : 'buy' }));
+
 const ticks = {
   'JSON': (r) => te.encode(JSON.stringify(r.map((x) => ({ t: x.t, price: x.price, size: x.size, side: x.side ? 'sell' : 'buy' })))),
   'columns: t f64, price f32': (r) => pack(head(4), [[Float64Array, r.map((x) => x.t)], [Float32Array, r.map((x) => x.price)], [Uint32Array, r.map((x) => x.size)], [Uint8Array, r.map((x) => x.side)]]),
@@ -73,6 +76,9 @@ const ticks = {
   '+ t as u32 delta from the first': (r) => pack(head(5), [[Float64Array, [r[0].t]], [Uint32Array, r.map((x) => x.t - r[0].t)], [Float32Array, r.map((x) => x.price)], [Uint32Array, r.map((x) => x.size)], [Uint8Array, r.map((x) => x.side)]]),
   '+ price as i32 cents': (r) => pack(head(5), [[Float64Array, [r[0].t]], [Uint32Array, r.map((x) => x.t - r[0].t)], [Int32Array, r.map((x) => Math.round(x.price * 100))], [Uint32Array, r.map((x) => x.size)], [Uint8Array, r.map((x) => x.side)]]),
   '+ price as i16 delta of cents': (r) => pack(head(6), [[Float64Array, [r[0].t]], [Uint32Array, r.map((x) => x.t - r[0].t)], [Int32Array, [Math.round(r[0].price * 100)]], [Int16Array, r.map((x, i) => (i ? Math.round(x.price * 100) - Math.round(r[i - 1].price * 100) : 0))], [Uint32Array, r.map((x) => x.size)], [Uint8Array, r.map((x) => x.side)]]),
+  'ts-bin-rpc: t number, price f32': (r) => P.ticks.output.encode(tbr(r, false)),
+  'ts-bin-rpc: t Date, price i32 & Scale<100>': (r) => P.ticksScaled.output.encode(tbr(r)),
+  'ts-bin-rpc: + Delta on t and price': (r) => P.ticksDelta.output.encode(tbr(r)),
 };
 
 // ------------------------------------------------------------------------------------------- state

@@ -53,3 +53,22 @@ export type Url = string & Check<'url'>;
 export type IsoDate = string & Check<'isoDate'>;
 /** A date and time with an offset (RFC 3339), `2026-11-04T18:00:00Z`, checked by `formats.isoDateTime`. */
 export type IsoDateTime = string & Check<'isoDateTime'>;
+
+// Encodings: how a value goes on the wire, read by tbr generate like the rules. Like rules, any value
+// fits them for the type checker.
+export declare const tbrEnc: unique symbol;
+type Enc<E> = { readonly [tbrEnc]?: E | object };
+
+/**
+ * A number stored as the integer `Math.round(value * N)` in the integer brand it goes with:
+ * `i32 & Scale<100>` keeps two decimals in 4 bytes, `i16 & Scale<100>` coordinates of ±327 in 2.
+ * Reads give `raw / N`. `N` is a positive integer; values out of the brand's range are an encoder error.
+ */
+export type Scale<N extends number> = Enc<{ readonly scale: N }>;
+/**
+ * In an array of objects, the field's column is sent as its first value and the differences
+ * between neighbours, in 1, 2 or 4 bytes each, when that is smaller. For integer brands (8–32 bit),
+ * scaled ones and `Date`; sorted or slowly changing values: time stamps, sequence numbers, prices.
+ */
+export type Delta = Enc<{ readonly delta: true }>;
+

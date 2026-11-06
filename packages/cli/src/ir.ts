@@ -31,7 +31,8 @@ export interface Rules {
 }
 
 export type IRType =
-  | { kind: 'scalar'; scalar: ScalarKind; rules?: Rules }
+  // `scale`: an integer brand holding round(value * scale) (`Scale<N>`); `delta`: columns go as differences (`Delta`)
+  | { kind: 'scalar'; scalar: ScalarKind; rules?: Rules; scale?: number; delta?: true }
   | { kind: 'string'; rules?: Rules }
   | { kind: 'bytes'; rules?: Rules } //          Uint8Array, zero-copy subarray
   | { kind: 'typedArray'; array: TypedArrayKind; rules?: Rules } // zero-copy column
@@ -111,7 +112,7 @@ export interface Schema {
 // Canonical text of a type; two fields are wire-compatible only if their signatures are equal.
 export function signature(t: IRType): string {
   switch (t.kind) {
-    case 'scalar': return t.scalar;
+    case 'scalar': return `${t.scalar}${t.scale ? ` scale ${t.scale}` : ''}${t.delta ? ' delta' : ''}`;
     case 'string': return 'string';
     case 'bytes': return 'bytes';
     case 'typedArray': return t.array;

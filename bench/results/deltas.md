@@ -12,6 +12,9 @@ Deflate: level 6, one context for the whole stream, flushed after each frame.
 | + t as u32 delta from the first | 272 | 110 |
 | + price as i32 cents | 272 | 109 |
 | + price as i16 delta of cents | 252 | 92 |
+| ts-bin-rpc: t number, price f32 | 328 | 144 |
+| ts-bin-rpc: t Date, price i32 & Scale<100> | 328 | 143 |
+| ts-bin-rpc: + Delta on t and price | 180 | 77 |
 
 ## State of 100 entities, 5% move each frame, 1% lose hp
 
@@ -24,7 +27,7 @@ Deflate: level 6, one context for the whole stream, flushed after each frame.
 | JSON, changed fields | 359 | 159 |
 | columns, changed fields | 159 | 76 |
 | ts-bin-rpc live: snapshot every frame | 3498 | 114 |
-| ts-bin-rpc live: delta, changed fields | 345 | 87 |
+| ts-bin-rpc live: delta, changed fields | 244 | 85 |
 
 ## State of 100 entities, 30% move each frame, 1% lose hp
 
@@ -37,4 +40,4 @@ Deflate: level 6, one context for the whole stream, flushed after each frame.
 | JSON, changed fields | 1749 | 688 |
 | columns, changed fields | 460 | 306 |
 | ts-bin-rpc live: snapshot every frame | 3498 | 358 |
-| ts-bin-rpc live: delta, changed fields | 1020 | 330 |
+| ts-bin-rpc live: delta, changed fields | 554 | 319 |

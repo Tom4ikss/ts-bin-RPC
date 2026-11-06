@@ -20,8 +20,8 @@ export interface PropDesc {
 }
 
 /** Literals of `Min`, `Max`, `MinLength`, `MaxLength`, `Pattern` found on a type. */
-/** null: a rule whose argument is not a literal type (`MaxLength<number>`). */
-export type RawRules = Record<string, string | number | bigint | null>;
+/** null: a rule whose argument is not a literal type (`MaxLength<number>`). Encodings too: `scale`, `delta`. */
+export type RawRules = Record<string, string | number | bigint | boolean | null>;
 
 /** `rules` and, for `T & Rule<…>`, `of` = T without the rule parts. */
 /** `Check<'name'>` arguments in source order; null for one that is not a string literal. */
@@ -83,6 +83,7 @@ const STREAM_PREFIX = '__@tbrStream@';
 const LIVE_PREFIX = '__@tbrLive@';
 const QUERY_PREFIX = '__@tbrQuery@';
 const RULE_PREFIX = '__@tbrRule@';
+const ENC_PREFIX = '__@tbrEnc@';
 const ITERABLES = new Set(['AsyncIterable', 'AsyncIterableIterator', 'AsyncGenerator', 'ReadableStream']);
 const BUILTINS = new Set([
   'Date', 'Uint8Array', 'Int8Array', 'Uint16Array', 'Int16Array', 'Uint32Array', 'Int32Array', 'Float32Array',
@@ -222,7 +223,7 @@ export class Ts71Source implements TypeSource {
 
     if (t.isIntersectionType()) {
       const parts = t.getTypes();
-      const ruleParts = parts.filter((p) => p.isObjectType() && p.getProperties().some((x) => x.name.startsWith(RULE_PREFIX)));
+      const ruleParts = parts.filter((p) => p.isObjectType() && p.getProperties().some((x) => x.name.startsWith(RULE_PREFIX) || x.name.startsWith(ENC_PREFIX)));
       if (ruleParts.length) {
         const { rules, checks } = this.rulesOf(ruleParts);
         const rest = parts.filter((p) => !ruleParts.includes(p));
@@ -262,7 +263,7 @@ export class Ts71Source implements TypeSource {
     const checks: RawChecks = [];
     for (const part of parts) {
       for (const prop of part.getProperties()) {
-        if (!prop.name.startsWith(RULE_PREFIX)) continue;
+        if (!prop.name.startsWith(RULE_PREFIX) && !prop.name.startsWith(ENC_PREFIX)) continue;
         // `{ readonly maxLength: 64 } | object | undefined`: the member with properties
         const t = this.checker.getTypeOfSymbol(prop);
         const obj = (t.isUnionType() ? t.getTypes() : [t]).find((m) => m.isObjectType() && m.getProperties().length > 0);
@@ -271,6 +272,7 @@ export class Ts71Source implements TypeSource {
           const v = this.checker.getTypeOfSymbol(r);
           if (r.name === 'check') checks.push(v.isStringLiteralType() ? v.value : null);
           else if (v.isNumberLiteralType() || v.isStringLiteralType() || v.isBigIntLiteralType()) out[r.name] = v.value as string | number | bigint;
+          else if (v.flags & TypeFlags.BooleanLiteral) out[r.name] = this.checker.typeToString(v) === 'true';
           else out[r.name] = null;
         }
       }
