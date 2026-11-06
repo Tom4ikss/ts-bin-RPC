@@ -9,7 +9,7 @@ breaking Role: value 'guest' added; old clients cannot read it in output
 breaking Shape: variant 'dot' added; old clients cannot read it in output
 
 {
-  "format": 0,
+  "format": 1,
   "procedures": {
     "get": { "input": "object get:input", "output": "object User" },
     "list": { "input": "object list:input?", "output": "object User[]" },

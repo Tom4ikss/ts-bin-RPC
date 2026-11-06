@@ -8,6 +8,16 @@ if (new Uint8Array(new Uint16Array([1]).buffer)[0] !== 1) throw new Error('ts-bi
  * earlier (versions 0 and 1) lay unions out differently.
  */
 export const VERSION = 2;
+/**
+ * Version of the interface between generated code and this runtime. Generated code passes the one it
+ * was generated for to `abi()` first thing; any change to that interface raises it.
+ */
+export const ABI = 1;
+
+export function abi(version: number): void {
+  if (version !== ABI) throw new Error(`the generated codecs (tbr.gen.ts) are for another version of ts-bin-rpc than the one installed: run tbr generate`);
+}
+
 export const FLAG_STRINGS = 1;
 export const FLAG_ERROR = 2;
 /** Header flags a reader must understand: bits 2–4, none defined yet. Bits 5–7 a reader ignores. */
@@ -219,13 +229,6 @@ interface ColumnSet {
 }
 
 /**
- * Column sets of arrays read by code that `tbr generate` of 0.2 emitted. Newer code does not
- * register arrays: a WeakMap key outlives minor GCs in SpiderMonkey, and with it the whole view,
- * which made reading a small response 1.7 times slower in Firefox.
- */
-export const COLUMN_SETS: WeakMap<object, ColumnSet> = new WeakMap();
-
-/**
  * Required numeric, boolean and Date fields of an array of row views as typed arrays over the
  * message, without copying. `undefined` for arrays that are not views (plain objects, toPlain) and
  * for arrays that no longer hold every row of the view in order (filtered, sorted, spliced), whose
@@ -234,7 +237,7 @@ export const COLUMN_SETS: WeakMap<object, ColumnSet> = new WeakMap();
 export function columnsOf<T>(rows: readonly T[]): Partial<Columns<T>> | undefined {
   const first = rows[0] as { [S_COLS]?: ColumnSet } | null | undefined;
   const c = typeof first === 'object' && first !== null ? first[S_COLS] : undefined;
-  if (c === undefined) return COLUMN_SETS.get(rows)?.columns() as Partial<Columns<T>> | undefined;
+  if (c === undefined) return undefined;
   if (c.n !== rows.length) return undefined;
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i] as { [S_COLS]?: ColumnSet; [S_ROW]?: number } | null;
@@ -1450,7 +1453,7 @@ export interface DecoderDef<T> {
   read(r: Reader, at: number): T;
   check(c: Check, at: number): void;
   plain(v: T): T;
-  /** Plain value straight from the message, where it beats `plain(read())`; generated code before 0.2.4 has none. */
+  /** Plain value straight from the message, where it beats `plain(read())`. */
   decode?(r: Reader, at: number): T;
 }
 

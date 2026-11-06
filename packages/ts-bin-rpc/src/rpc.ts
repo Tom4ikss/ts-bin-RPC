@@ -59,16 +59,13 @@ interface Entry<In, Out> {
   delta?: Out;
   /** Of a streaming procedure in the client table: opens subscriptions. */
   subscribe?: typeof subscribe | typeof subscribeLive;
-  /**
-   * In the server table: whether the procedure takes `ctx`. Without it the handler does not call
-   * `context`. Absent in code generated before 0.1.0-alpha.3: the handler always calls it.
-   */
+  /** In the server table: whether the procedure takes `ctx`. Without it the handler does not call `context`. */
   ctx?: boolean;
   /** Marked by `query()`: the client sends GET with the input in the URL. */
   get?: boolean;
   /** Hash of the contract: the lockfile entries of every type the procedure reaches. */
   hash: string;
-  /** In the server table: the input type and the schema, for `checks` and `refine`. Absent before 0.2.3. */
+  /** In the server table: the input type and the schema, for `checks` and `refine`. */
   inputDesc?: { schema: SchemaDesc; type: TypeDesc };
 }
 

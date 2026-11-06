@@ -45,7 +45,7 @@ export interface LockState {
 
 export function readLock(lockPath: string): LockState {
   const exists = fs.existsSync(lockPath);
-  return { exists, lock: exists ? parseLock(fs.readFileSync(lockPath, 'utf8')) : emptyLock() };
+  return { exists, lock: exists ? parseLock(fs.readFileSync(lockPath, 'utf8'), rel(lockPath)) : emptyLock() };
 }
 
 export const rel = (p: string) => path.relative(process.cwd(), p) || p;

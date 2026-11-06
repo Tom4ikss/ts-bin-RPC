@@ -2,6 +2,7 @@
 import { createClient, type ClientOptions } from 'ts-bin-rpc/client';
 import { createHandler } from 'ts-bin-rpc/server';
 import { RpcError } from 'ts-bin-rpc';
+import { ABI, abi } from 'ts-bin-rpc/runtime';
 import { describe, expect, it, vi } from 'vitest';
 import { appRouter } from '../src/router.ts';
 import { procedures } from '../src/tbr.gen.ts';
@@ -42,11 +43,9 @@ describe('createHandler', () => {
     expect(context).toHaveBeenCalledTimes(2);
   });
 
-  it('builds it for every procedure with code generated before the ctx flag', async () => {
-    const context = vi.fn(() => ({ user: null }));
-    const old = Object.fromEntries(Object.entries(procedures).map(([p, { ctx: _, ...e }]) => [p, e]));
-    await client(via(createHandler(appRouter, { procedures: old, prefix: '/rpc', context }))).user.get({ id: 1 });
-    expect(context).toHaveBeenCalledTimes(1);
+  it('refuses generated code of another runtime ABI', () => {
+    expect(() => abi(ABI)).not.toThrow();
+    expect(() => abi(ABI - 1)).toThrow('run tbr generate');
   });
 
   it('limits the request size', async () => {

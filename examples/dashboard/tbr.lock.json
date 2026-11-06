@@ -1,5 +1,5 @@
 {
-  "format": 0,
+  "format": 1,
   "procedures": {
     "hosts": { "input": "object hosts:input?", "output": "object Host[]" },
     "live": { "input": "object LiveQuery", "output": "stream object Sample" },

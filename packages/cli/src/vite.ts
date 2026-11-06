@@ -2,8 +2,8 @@
 // of the TypeScript project. Errors go to the terminal and to the browser's error overlay.
 import path from 'node:path';
 import type { Plugin, ResolvedConfig, ViteDevServer } from 'vite';
-import { generate, readLock, resolvePaths, watch, type GenerateOptions, type Generated } from './generate.ts';
-import { Ts71Source } from './source.ts';
+import type { GenerateOptions, Generated } from './generate.ts';
+import { typescriptProblem } from './typescript.ts';
 
 export interface TbrOptions {
   /** The router as `file#export`, relative to the tsconfig. Default: `src/router.ts#appRouter`. */
@@ -41,7 +41,11 @@ export function tbr(options: TbrOptions = {}): Plugin {
     configureServer(s) {
       server = s;
     },
-    buildStart() {
+    async buildStart() {
+      const problem = typescriptProblem();
+      if (problem) this.error(problem);
+      // TypeScript loads only now: a config that imports the plugin works without it
+      const [{ generate, readLock, resolvePaths, watch }, { Ts71Source }] = await Promise.all([import('./generate.ts'), import('./source.ts')]);
       const project = path.resolve(config.root, options.project ?? 'tsconfig.json');
       const paths = resolvePaths(project, options.router ?? 'src/router.ts#appRouter', options.lock, options.out);
       const o: GenerateOptions = {

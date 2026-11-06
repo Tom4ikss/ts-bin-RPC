@@ -1,7 +1,7 @@
 error    User.nick: 'nick' was removed earlier with type string | undefined (id 5); old peers may still send it. Use another name  (v4.ts:14:3)
 
 {
-  "format": 0,
+  "format": 1,
   "procedures": {
     "get": { "input": "object get:input", "output": "object User" },
     "list": { "input": "object list:input?", "output": "object User[]" },

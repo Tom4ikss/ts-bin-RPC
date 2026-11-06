@@ -1,7 +1,7 @@
 
 
 {
-  "format": 0,
+  "format": 1,
   "procedures": {
     "create": { "input": "object NewUser", "output": "object User" },
     "get": { "input": "object get:input", "output": "object User" },

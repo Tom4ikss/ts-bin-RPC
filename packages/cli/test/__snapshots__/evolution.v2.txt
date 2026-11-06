@@ -6,7 +6,7 @@ safe     User.bio: 'nick' removed and 'bio' added with the same type; if this is
 safe     list:input: type added  (v2.ts:30:24)
 
 {
-  "format": 0,
+  "format": 1,
   "procedures": {
     "create": { "input": "object NewUser", "output": "object User" },
     "get": { "input": "object get:input", "output": "object User" },

@@ -103,7 +103,6 @@ export function createHandler<R extends AnyRouter>(router: R, options: HandlerOp
         const q = queryOptions(value) ?? queryOptions(fn);
         if (q && proc.stream) throw new Error(`procedure '${p}' is a stream and cannot be a query`);
         if (proc.get && !q) throw new Error(`generated code calls '${p}' with GET, but the router does not mark it with query(); run tbr generate`);
-        if (proc.input && !proc.inputDesc && !validation.empty) throw new Error(`generated code for '${p}' predates checks and refine; run tbr generate`);
         const validate = proc.inputDesc ? validation.plan(proc.inputDesc.schema, proc.inputDesc.type) : null;
         routes.set(p, { fn: chain.length ? compose(chain, fn, self, p) : fn, self, proc, cache: q && cacheControl(q), validate });
       } else if (value !== null && typeof value === 'object') walk(value, p + '.');
@@ -147,7 +146,7 @@ export function createHandler<R extends AnyRouter>(router: R, options: HandlerOp
       }
 
       // Only procedures that take ctx (and their middleware) pay for building it.
-      const ctx = context && proc.ctx !== false ? await ctxOf() : undefined;
+      const ctx = context && proc.ctx ? await ctxOf() : undefined;
       const result = await route.fn.call(route.self, input, ctx);
       if (proc.stream) {
         const source = toSource(result);

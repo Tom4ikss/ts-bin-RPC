@@ -58,7 +58,7 @@ describe('tbr generate / check', () => {
 
   it('breaking changes need --allow-breaking', () => {
     const c = tbr('check', ...at('v3'));
-    expect(c.code).toBe(1);
+    expect(c.code).toBe(3);
     expect(c.output).toContain('add /** @renamedFrom name */ to keep id 1');
     expect(c.output).toContain('User.age: type changed: u8 -> u16');
     expect(c.output).toContain('the contract has breaking changes');
@@ -114,7 +114,7 @@ describe('streams', () => {
 
   it('turning a stream into a call, or a call into a stream, is breaking', () => {
     const r = tbr('check', ...at('s2'));
-    expect(r.code).toBe(1);
+    expect(r.code).toBe(3);
     expect(r.output).toContain('output changed: stream object Tick -> object Tick[]');
     expect(r.output).toContain('output changed: object Tick -> stream object Tick');
     expect(r.output).toContain('the contract has breaking changes');
@@ -133,7 +133,7 @@ describe('streams', () => {
     expect(code).not.toMatch(/, subscribe[,}]/);
 
     const r = tbr('check', ...live('live2'));
-    expect(r.code).toBe(1);
+    expect(r.code).toBe(3);
     expect(r.output).toContain("Unit.title: renamed from 'name', keeps id 1");
     expect(r.output).toContain('Account.balance: type changed: u64 -> u32');
     expect(r.output).not.toContain('Patch<');
@@ -198,6 +198,69 @@ describe('stale generated code', () => {
       generate();
     }
   }, 60_000);
+});
+
+describe('tbr check', () => {
+  const dir = path.join(import.meta.dirname, '.gen', 'check');
+  const routerFile = path.join(dir, 'router.ts'), lockFile = path.join(dir, 'tbr.lock.json');
+  const v1 = fs.readFileSync(fixture('evolution', 'v1.ts'), 'utf8');
+  const v3 = fs.readFileSync(fixture('evolution', 'v3.ts'), 'utf8');
+  const args = ['--project', path.join(dir, 'tsconfig.json'), '--router', 'router.ts'];
+  const json = (...a: string[]) => {
+    const r = tbr('check', '--json', ...args, ...a);
+    return { code: r.code, ...(JSON.parse(r.output) as { status: string; changes: { path: string; message: string }[] }) };
+  };
+
+  beforeAll(() => {
+    fs.rmSync(dir, { recursive: true, force: true });
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'tsconfig.json'), JSON.stringify({ compilerOptions: { strict: true, module: 'nodenext', noEmit: true }, include: ['*.ts'] }));
+    fs.writeFileSync(routerFile, v1);
+    expect(tbr('generate', ...args).code).toBe(0);
+  });
+
+  it('reports as JSON, and takes a lockfile with CRLF line ends', () => {
+    expect(json()).toMatchObject({ code: 0, status: 'ok' });
+    fs.writeFileSync(lockFile, fs.readFileSync(lockFile, 'utf8').replace(/\n/g, '\r\n'));
+    expect(json()).toMatchObject({ code: 0, status: 'ok' });
+  });
+
+  it('--base finds breaking changes already in the lockfile', () => {
+    fs.copyFileSync(lockFile, path.join(dir, 'base.json'));
+    fs.writeFileSync(routerFile, v3);
+    expect(tbr('generate', '--allow-breaking', ...args).code).toBe(0);
+    expect(json()).toMatchObject({ code: 0, status: 'ok' });
+    const r = json('--base', path.join(dir, 'base.json'));
+    expect(r).toMatchObject({ code: 3, status: 'breaking' });
+    expect(r.changes.map((c) => c.path)).toContain('User.age');
+    fs.writeFileSync(routerFile, v1);
+  });
+
+  it('a query that stops being one is breaking', () => {
+    const query = `import { query } from 'ts-bin-rpc/server';\n${v1.replace('get: async (input: { id: u32 }): Promise<User> => null!,', 'get: query(async (input: { id: u32 }): Promise<User> => null!),')}`;
+    fs.writeFileSync(routerFile, query);
+    expect(tbr('generate', '--allow-breaking', ...args).code).toBe(0);
+    fs.writeFileSync(routerFile, v1);
+    const r = json();
+    expect(r).toMatchObject({ code: 3, status: 'breaking' });
+    expect(r.changes).toContainEqual(expect.objectContaining({ path: 'get', message: 'no longer a query: old clients call it with GET, which the server refuses' }));
+  });
+
+  it('explains a lockfile it cannot read, and keeps keys it does not know', () => {
+    expect(tbr('generate', '--allow-breaking', ...args).code).toBe(0);
+    const text = fs.readFileSync(lockFile, 'utf8');
+    try {
+      fs.writeFileSync(lockFile, text.replace('  "procedures": {', '<<<<<<< HEAD\n  "procedures": {'));
+      expect(tbr('check', ...args)).toMatchObject({ code: 1, output: expect.stringContaining('has merge conflict markers') });
+      fs.writeFileSync(lockFile, text.replace('"format": 1', '"format": 9'));
+      expect(tbr('generate', ...args)).toMatchObject({ code: 1, output: expect.stringContaining('has format 9, from a newer tbr than this one (format 1): update ts-bin-rpc') });
+      fs.writeFileSync(lockFile, text.replace('"format": 1,', '"format": 1,\n  "future": { "x": 1 },'));
+      expect(tbr('generate', ...args).code).toBe(0);
+      expect(JSON.parse(fs.readFileSync(lockFile, 'utf8')).future).toEqual({ x: 1 });
+    } finally {
+      fs.writeFileSync(lockFile, text);
+    }
+  });
 });
 
 describe('tbr generate --watch', () => {

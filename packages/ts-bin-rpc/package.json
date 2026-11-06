@@ -110,7 +110,7 @@
       }
     },
     "bin": {
-      "tbr": "./dist/cli/cli.js"
+      "tbr": "./dist/cli/bin.js"
     }
   },
   "scripts": {
@@ -120,7 +120,7 @@
   },
   "peerDependencies": {
     "@tanstack/query-core": "^5.62.0",
-    "typescript": "7.1.0-beta",
+    "typescript": ">=7.1.0-beta <7.2.0",
     "vite": ">=6"
   },
   "peerDependenciesMeta": {

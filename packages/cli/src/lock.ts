@@ -1,4 +1,4 @@
-// Lockfile v0: owns wire IDs of fields, enum values and union variants, and records the last generated
+// Lockfile format 1: owns wire IDs of fields, enum values and union variants, and records the last generated
 // contract so `check` can classify what changed. Names are not on the wire; IDs are.
 import { fieldSignature, signature, type IRType, type Location, type Schema } from './ir.ts';
 
@@ -25,9 +25,19 @@ export interface LockUnion {
   variants: { tag: string; object: string; retired?: true }[]; // index = wire tag
 }
 
+export interface LockProcedure {
+  input: string;
+  output: string;
+  /** Marked by `query()`: clients call it with GET. */
+  get?: true;
+}
+
+/** Format of the lockfile. A newer tbr keeps keys it does not know at the top level. */
+export const LOCK_FORMAT = 1;
+
 export interface Lock {
-  format: 0;
-  procedures: Record<string, { input: string; output: string }>;
+  format: typeof LOCK_FORMAT;
+  procedures: Record<string, LockProcedure>;
   objects: Record<string, LockObject>;
   enums: Record<string, LockEnum>;
   unions: Record<string, LockUnion>;
@@ -43,13 +53,26 @@ export interface Change {
 }
 
 export function emptyLock(): Lock {
-  return { format: 0, procedures: {}, objects: {}, enums: {}, unions: {} };
+  return { format: LOCK_FORMAT, procedures: {}, objects: {}, enums: {}, unions: {} };
 }
 
-export function parseLock(text: string): Lock {
-  const lock = JSON.parse(text) as Lock;
-  if (lock.format !== 0) throw new Error(`unsupported lockfile format ${String(lock.format)}`);
-  return { ...emptyLock(), ...lock };
+/** A lockfile that cannot be read: the message says what to do. */
+export class LockError extends Error {}
+
+export function parseLock(text: string, file = 'the lockfile'): Lock {
+  if (/^(<{7}|={7}|>{7})( |$)/m.test(text)) {
+    throw new LockError(`${file} has merge conflict markers. Keep both sides' entries, giving no ID to two fields, or take one side and run tbr generate`);
+  }
+  let lock: { format?: unknown };
+  try {
+    lock = JSON.parse(text);
+  } catch (e) {
+    throw new LockError(`${file} is not valid JSON: ${(e as Error).message}`);
+  }
+  if (typeof lock !== 'object' || lock === null || typeof lock.format !== 'number') throw new LockError(`${file} is not a ts-bin-rpc lockfile: no "format"`);
+  if (lock.format > LOCK_FORMAT) throw new LockError(`${file} has format ${lock.format}, from a newer tbr than this one (format ${LOCK_FORMAT}): update ts-bin-rpc`);
+  // format 0 (0.5 and earlier) is format 1 without enum widths, which are derived from the value count
+  return { ...emptyLock(), ...(lock as Partial<Lock>), format: LOCK_FORMAT };
 }
 
 // One leaf per line (a field, an enum, a variant) so lockfile diffs read like the contract diff.
@@ -99,17 +122,21 @@ export function updateLock(prev: Lock, schema: Schema): { lock: Lock; changes: C
   const dir = (name: string) => [input.has(name) && 'input', output.has(name) && 'output'].filter(Boolean).join(' and ');
 
   const next = emptyLock();
+  for (const [k, v] of Object.entries(prev)) if (!(k in next)) (next as unknown as Record<string, unknown>)[k] = v;
 
   // Procedures
   for (const p of schema.procedures) {
     const out = p.output ? signature(p.output) : 'void';
-    const sig = { input: p.input ? signature(p.input) + (p.inputOptional ? '?' : '') : 'void', output: p.live ? `live ${out} by ${p.live.key}` : p.stream ? `stream ${out}` : out };
+    const sig: LockProcedure = { input: p.input ? signature(p.input) + (p.inputOptional ? '?' : '') : 'void', output: p.live ? `live ${out} by ${p.live.key}` : p.stream ? `stream ${out}` : out, ...(p.get && { get: true as const }) };
     next.procedures[p.path] = sig;
     const old = prev.procedures[p.path];
     if (!old) add('safe', p.path, 'procedure added', p.location);
     else {
       if (old.input !== sig.input) add(compatibleInput(old.input, sig.input) ? 'safe' : 'breaking', p.path, `input changed: ${old.input} -> ${sig.input}`, p.location);
       if (old.output !== sig.output) add('breaking', p.path, `output changed: ${old.output} -> ${sig.output}`, p.location);
+      // the server takes queries by POST too
+      if (old.get && !sig.get) add('breaking', p.path, 'no longer a query: old clients call it with GET, which the server refuses', p.location);
+      else if (!old.get && sig.get) add('safe', p.path, 'became a query', p.location);
     }
   }
   for (const path of Object.keys(prev.procedures)) {

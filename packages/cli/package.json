@@ -5,10 +5,10 @@
   "description": "Sources and tests of the tbr command. Published inside ts-bin-rpc as dist/cli, not on its own.",
   "type": "module",
   "bin": {
-    "tbr": "./src/cli.ts"
+    "tbr": "./src/bin.ts"
   },
   "scripts": {
-    "tbr": "node --experimental-strip-types --no-warnings src/cli.ts",
+    "tbr": "node --experimental-strip-types --no-warnings src/bin.ts",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json"
   },

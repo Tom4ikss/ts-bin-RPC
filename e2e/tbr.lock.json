@@ -1,15 +1,15 @@
 {
-  "format": 0,
+  "format": 1,
   "procedures": {
     "account.deposit": { "input": "object account.deposit:input", "output": "object account.deposit:output" },
     "account.me": { "input": "void", "output": "object account.me:output" },
-    "account.profile": { "input": "void", "output": "object account.profile:output" },
+    "account.profile": { "input": "void", "output": "object account.profile:output", "get": true },
     "account.ticks": { "input": "object account.ticks:input", "output": "stream object Tick" },
     "account.trace.get": { "input": "void", "output": "object account.trace.get:output" },
     "audit": { "input": "void", "output": "object audit:output" },
-    "catalog.echo": { "input": "object catalog.echo:input", "output": "object catalog.echo:input" },
-    "catalog.size": { "input": "void", "output": "object catalog.size:output" },
-    "catalog.user": { "input": "object catalog.user:input", "output": "object User" },
+    "catalog.echo": { "input": "object catalog.echo:input", "output": "object catalog.echo:output", "get": true },
+    "catalog.size": { "input": "void", "output": "object catalog.size:output", "get": true },
+    "catalog.user": { "input": "object catalog.user:input", "output": "object User", "get": true },
     "crash": { "input": "void", "output": "string" },
     "echo": { "input": "object echo:input", "output": "object echo:output" },
     "events": { "input": "void", "output": "union Event[]" },
@@ -31,7 +31,7 @@
     "user.list": { "input": "object user.list:input?", "output": "object User[]" },
     "user.page": { "input": "object user.page:input", "output": "object user.page:output" },
     "user.rename": { "input": "object user.rename:input", "output": "void" },
-    "version": { "input": "void", "output": "object version:output" },
+    "version": { "input": "void", "output": "object version:output", "get": true },
     "whoami": { "input": "void", "output": "object whoami:output" }
   },
   "objects": {
@@ -125,6 +125,11 @@
       }
     },
     "catalog.echo:input": {
+      "fields": {
+        "text": { "id": 0, "type": "string" }
+      }
+    },
+    "catalog.echo:output": {
       "fields": {
         "text": { "id": 0, "type": "string" }
       }
