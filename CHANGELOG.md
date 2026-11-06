@@ -10,6 +10,19 @@ From 0.2.0, a change to the wire format or another breaking change bumps the min
 0.3), and patch versions stay compatible: `^0.2.0` never picks up a new format. Versions before
 0.2.0 were prereleases under the `alpha` dist-tag.
 
+## 0.4.4
+
+Compatible with 0.4.3: the wire format of calls and the generated code are unchanged. Batches are a
+new request, which servers before 0.4.4 answer with `404`.
+
+- Batching: `createClient({ batch: batch() })` sends the calls made in the same task in one request
+  ([guide](https://tom4ikss.github.io/ts-bin-RPC/guide/batching/)). The server answers each call as
+  it ends and builds the context once per batch. Queries keep GET, calls with their own `headers`
+  go alone. 50 calls at once from Chromium: 9.3 → 1.2 ms over HTTP/1.1, 9.1 → 1.4 ms over HTTP/2;
+  50 calls of 20 ms over HTTP/1.1: 207 → 26 ms. `batch()` adds about 1.1 KB gzip to a client that
+  imports it.
+- `toNodeListener` works with `node:http2` servers: HTTP/2 pseudo-headers made it fail.
+
 ## 0.4.3
 
 Compatible with 0.4.2: the wire format is unchanged. `tbr generate` adds an export, `inputRules`, to
