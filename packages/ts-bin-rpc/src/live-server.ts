@@ -7,7 +7,7 @@ import { RpcError } from './rpc.ts';
 import type { LiveStream } from './router.ts';
 import { StreamSource, toRpcError, type Binding, type SubscriberOptions } from './stream-server.ts';
 
-export interface LiveOptions {
+export interface LiveStateOptions {
   /** Milliseconds changes wait to go out together after the first one. 0: changes of the same task. Default: 16. */
   window?: number;
 }
@@ -40,8 +40,8 @@ export interface Live<T, K extends keyof T> {
   subscribe(options?: SubscriberOptions): LiveStream<T, K>;
   /** Sends pending changes and ends every subscription (with an error, the subscribers get it). The rows stay. */
   end(error?: unknown): void;
-  /** Subscribers right now. */
-  readonly subscribers: number;
+  /** Subscribers right now; a method, as `Channel.subscribers(topic)`. */
+  subscribers(): number;
 }
 
 type Row = Record<string, unknown>;
@@ -59,7 +59,7 @@ const same = (a: unknown, b: unknown) => Object.is(a, b) || (a instanceof Date &
  * export const appRouter = { units: () => units.subscribe() };
  * ```
  */
-export function live<T>(): { by<K extends keyof T & string>(key: K, options?: LiveOptions): Live<T, K> } {
+export function live<T>(): { by<K extends keyof T & string>(key: K, options?: LiveStateOptions): Live<T, K> } {
   return { by: (key, options = {}) => new LiveState(key, options.window ?? 16) as unknown as Live<T, never> };
 }
 
@@ -89,7 +89,7 @@ class LiveState {
   get size() {
     return this.#rows.size;
   }
-  get subscribers() {
+  subscribers() {
     let n = 0;
     for (const g of this.#groups.values()) n += g.subs.size;
     return n;

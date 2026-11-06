@@ -32,6 +32,12 @@ interface Ctx {
   location?: Location;
 }
 
+/** Names the clients take for themselves: a procedure under one of them would be unreachable. */
+const RESERVED = new Map<string, string>([
+  ['then', 'promises look it up, so `await api.user` would call it'],
+  ...['pathKey', 'queryKey', 'queryOptions', 'infiniteQueryKey', 'infiniteQueryOptions', 'mutationOptions'].map((k) => [k, `'ts-bin-rpc/tanstack' has a method of that name on every procedure`] as const),
+]);
+
 class Builder {
   schema: Schema = { procedures: [], objects: {}, enums: {}, unions: {} };
   errors: SchemaError[] = [];
@@ -55,6 +61,8 @@ class Builder {
   procedure(entry: ReturnType<TypeSource['router']>[number]) {
     const ctx: Ctx = { path: entry.path, anon: entry.path, location: entry.location };
     if ('problem' in entry) return this.fail(ctx, entry.problem);
+    const reserved = entry.path.split('.').find((k) => RESERVED.has(k));
+    if (reserved) return this.fail(ctx, `'${reserved}' cannot name a procedure or a namespace: ${RESERVED.get(reserved)}`);
     if (entry.overloads > 1) return this.fail(ctx, 'overloaded procedures are not supported');
     if (entry.params.length > 2) return this.fail(ctx, 'a procedure takes at most (input, ctx)');
 

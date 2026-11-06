@@ -2,7 +2,7 @@
 // Each data frame is a batch of rows; rows go to the handler, batches with their columns, and
 // to iterators of the subscription.
 import { columnsOf, toPlain, VerifyError, type Limits } from './runtime.ts';
-import { CONTENT_TYPE, codeForStatus, devtoolsHook, readError, RpcError, type ClientEntry, type DevtoolsTap } from './rpc.ts';
+import { CONTENT_TYPE, codeForStatus, devtoolsHook, readError, RpcError, SCHEMA_HEADER, type ClientEntry, type DevtoolsTap } from './rpc.ts';
 import { FrameError, FrameReader, FRAME_DATA, FRAME_END, FRAME_ERROR, FRAME_GOING_AWAY, FRAME_HEARTBEAT, STREAM_CONTENT_TYPE } from './frames.ts';
 import type { CallOptions, DecodeMode, StreamHandler, Subscription } from './router.ts';
 import type { SocketTransport } from './ws-client.ts';
@@ -12,7 +12,8 @@ export interface StreamEnv {
   fetch: typeof fetch;
   headers: (proc: ClientEntry, opts: CallOptions) => Promise<Headers>;
   mode: (path: string, opts: CallOptions) => DecodeMode | undefined;
-  verify: boolean;
+  /** Undefined: verify unless the response shows the server has the same contract (see ClientOptions.verify). */
+  verify: boolean | undefined;
   limits?: Partial<Limits>;
   debug: boolean;
   socket?: SocketTransport;
@@ -72,9 +73,9 @@ export function subscribe(env: StreamEnv, path: string, proc: ClientEntry, args:
     resume?.();
   };
 
-  const deliver = (payload: Uint8Array) => {
+  const deliver = (payload: Uint8Array, verify: boolean) => {
     tap?.batch(payload);
-    const view = proc.output!.view(payload, { verify: env.verify, rules: false, limits: env.limits }) as unknown[];
+    const view = proc.output!.view(payload, { verify, rules: false, limits: env.limits }) as unknown[];
     const rows = env.mode(path, opts) === 'eager' ? (toPlain(view) as unknown[]) : view;
     if (h.batch) {
       Object.defineProperty(rows, 'columns', { get: () => columnsOf(view) ?? {} });
@@ -90,9 +91,9 @@ export function subscribe(env: StreamEnv, path: string, proc: ClientEntry, args:
   const run = async () => {
     started = true;
     tap = devtoolsHook()?.stream(path, input, proc);
-    const frame = (kind: number, payload: Uint8Array) => {
+    const frame = (kind: number, payload: Uint8Array, verify: boolean) => {
       if (kind !== FRAME_DATA) throw new FrameError(`a live state frame (kind ${kind}) in a stream of rows`);
-      deliver(payload);
+      deliver(payload, verify);
     };
     await pump(env, path, proc, input, opts, abort, () => over, frame, finish, ready);
   };
@@ -154,7 +155,8 @@ export async function pump(
   opts: CallOptions,
   abort: AbortController,
   over: () => boolean,
-  frame: (kind: number, payload: Uint8Array) => void,
+  /** `verify`: whether to verify the payload, by `env.verify` and the response. */
+  frame: (kind: number, payload: Uint8Array, verify: boolean) => void,
   finish: (error?: RpcError) => void,
   /** Before each read: a promise to wait for while the reader of the rows is behind. */
   ready: () => Promise<void> | undefined = () => undefined,
@@ -171,6 +173,7 @@ export async function pump(
       const b = new Uint8Array(await res.arrayBuffer());
       return finish(type === CONTENT_TYPE ? readError(b, res.status) : new RpcError(res.ok ? 'BAD_RESPONSE' : codeForStatus(res.status), `HTTP ${res.status}: not a ts-bin-rpc stream`, undefined, { status: res.status }));
     }
+    const verify = env.verify ?? res.headers.get(SCHEMA_HEADER) !== proc.hash;
     const reader = res.body.getReader();
     const fr = new FrameReader(env.limits?.maxBytes ?? 64 * 1024 * 1024);
     for (;;) {
@@ -187,14 +190,15 @@ export async function pump(
         if (f.kind === FRAME_ERROR) return void (finish(readError(f.payload)), reader.cancel().catch(() => {}));
         if (f.kind === FRAME_END) return void (finish(), reader.cancel().catch(() => {}));
         if (f.kind === FRAME_GOING_AWAY) return void (finish(new RpcError('UNAVAILABLE', `the server ended stream '${path}': it is going away; subscribe again`, undefined, { status: 503 })), reader.cancel().catch(() => {}));
-        if (f.kind !== FRAME_HEARTBEAT) frame(f.kind, f.payload);
+        if (f.kind !== FRAME_HEARTBEAT) frame(f.kind, f.payload, verify);
       }
     }
   } catch (e) {
     if (over()) return;
     if (e instanceof VerifyError || e instanceof FrameError) {
       finish(new RpcError('BAD_RESPONSE', `invalid stream: ${e.message}`, undefined, { status: 200, cause: e }));
-    } else finish(new RpcError('DISCONNECTED', `stream '${path}' failed: ${e instanceof Error ? e.message : String(e)}`, undefined, { status: 0, cause: e }));
+    } else if (e instanceof RpcError) finish(e);
+    else finish(new RpcError('DISCONNECTED', `stream '${path}' failed: ${e instanceof Error ? e.message : String(e)}`, undefined, { status: 0, cause: e }));
   } finally {
     if (env.debug) console.log(`tbr ${path} stream closed after ${(performance.now() - t0).toFixed(0)} ms: ${frames} frames, ${bytes} B`);
   }

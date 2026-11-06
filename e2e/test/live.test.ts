@@ -5,9 +5,10 @@ import type { LiveChanges, LiveSubscription, RpcError } from 'ts-bin-rpc';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { appRouter, resetUnits, units, type Unit } from '../src/router.ts';
 import { procedures } from '../src/tbr.gen.ts';
+import { context } from '../src/app.ts';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-const handler = createHandler(appRouter, { procedures, prefix: '/rpc' });
+const handler = createHandler(appRouter, { context, procedures, prefix: '/rpc' });
 const via = (delay = 0) =>
   (async (input: RequestInfo | URL, init?: RequestInit) => {
     const res = await handler(new Request(input, init));
@@ -130,7 +131,7 @@ describe('live state', () => {
     await a.next();
     await b.next();
     expect(b.sub.state.get(1)?.name).toBe('moved');
-    expect(units.subscribers).toBe(2);
+    expect(units.subscribers()).toBe(2);
 
     const encode = vi.spyOn(procedures['stream.units'].delta, 'encode');
     units.update(2, { x: 99 });
@@ -144,9 +145,9 @@ describe('live state', () => {
   it('stops: the server forgets the subscriber', async () => {
     const w = open();
     await w.next();
-    expect(units.subscribers).toBe(1);
+    expect(units.subscribers()).toBe(1);
     w.sub.stop();
-    await w.until(() => units.subscribers === 0);
+    await w.until(() => units.subscribers() === 0);
     units.update(1, { x: 5 });
     await sleep(20);
     expect(w.changes).toHaveLength(1);
@@ -176,7 +177,7 @@ describe('live state', () => {
     units.set({ id: 9, name: 42 as unknown as string, x: 0, y: 0, hp: 0, kind: 'unit' });
     await w.until(() => !!w.error);
     expect(w.error?.code).toBe('BAD_OUTPUT');
-    expect(units.subscribers).toBe(0);
+    expect(units.subscribers()).toBe(0);
 
     resetUnits();
     const v = track(open());
@@ -191,6 +192,6 @@ describe('live state', () => {
     const w = watch((h) => clientOf().stream.units.subscribe(h, { signal: ctl.signal }));
     await w.next();
     ctl.abort();
-    await w.until(() => units.subscribers === 0);
+    await w.until(() => units.subscribers() === 0);
   });
 });

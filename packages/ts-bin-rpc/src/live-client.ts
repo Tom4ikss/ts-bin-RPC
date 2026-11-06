@@ -29,7 +29,6 @@ export function subscribeLive(env: StreamEnv, path: string, proc: ClientEntry, a
   let over = false;
   let stopped = false;
   let tap: DevtoolsTap | undefined;
-  const read = { verify: env.verify, rules: false, limits: env.limits };
 
   const finish = (error?: RpcError) => {
     if (over) return;
@@ -56,7 +55,8 @@ export function subscribeLive(env: StreamEnv, path: string, proc: ClientEntry, a
   const changed = (changes: LiveChanges<unknown>) => h.change && safely(() => h.change!(state as ReadonlyMap<string, Row>, changes as LiveChanges<string>));
 
   let snapshot = false;
-  const frame = (kind: number, payload: Uint8Array) => {
+  const frame = (kind: number, payload: Uint8Array, verify: boolean) => {
+    const read = { verify, rules: false, limits: env.limits };
     // FORMAT §12: the first frame of live state is a snapshot
     if (kind !== FRAME_SNAPSHOT && kind !== FRAME_DELTA) throw new FrameError(`a frame of rows (kind ${kind}) in live state`);
     if (kind === FRAME_DELTA && !snapshot) throw new FrameError('live state that does not start with a snapshot');

@@ -1,5 +1,8 @@
 // Runtime of generated codecs, wire format 2 (docs/FORMAT.md): message writer, lazy reader, column
 // accessors and the verifier. Generated code calls into this module; nothing here knows user types.
+//
+// Internal: `ts-bin-rpc/runtime` is the interface of generated code, versioned by ABI below, not by
+// semver. Applications import from `ts-bin-rpc`, `/client`, `/server` and the other entry points.
 
 if (new Uint8Array(new Uint16Array([1]).buffer)[0] !== 1) throw new Error('ts-bin-rpc needs a little-endian platform');
 
@@ -573,7 +576,7 @@ export function strsCol(w: Writer, vals: string[], n: number, pres: number, nul:
 
 // ---------------------------------------------------------------------------------------------- reader
 
-/** Lazy reader over one message. Trusts the bytes: run `Check` first on anything not from your own server. */
+/** Lazy reader over one message. Trusts the bytes: run `Verifier` first on anything not from your own server. */
 export class Reader {
   readonly bytes: Uint8Array;
   readonly dv: DataView;
@@ -586,7 +589,7 @@ export class Reader {
   #ascii: string | undefined = undefined;
   #utf16: string | undefined;
 
-  /** `utf16`, `dv` and `ascii` come from `Check`, which has already decoded and wrapped the same aligned bytes. */
+  /** `utf16`, `dv` and `ascii` come from `Verifier`, which has already decoded and wrapped the same aligned bytes. */
   constructor(bytes: Uint8Array, utf16?: string, dv?: DataView, ascii?: string) {
     if (bytes.byteOffset & 7) bytes = bytes.slice(); // typed array columns need an aligned start
     this.bytes = bytes;
@@ -905,7 +908,7 @@ export function asciiOnly(bytes: Uint8Array, off: number, n: number): boolean {
   return (acc & 0x80808080) === 0;
 }
 
-export class Check {
+export class Verifier {
   readonly bytes: Uint8Array;
   readonly dv: DataView;
   readonly len: number;
@@ -1174,14 +1177,14 @@ export class Check {
 }
 
 /** The rows with a value, in order: the row of each value of a packed column, for messages. */
-export function rowsOf(c: Check, pres: number, nul: number, n: number): Int32Array {
+export function rowsOf(c: Verifier, pres: number, nul: number, n: number): Int32Array {
   const out = new Int32Array(c.count(pres, nul, n));
   for (let i = 0, j = 0; i < n; i++) if (c.has(pres, nul, i)) out[j++] = i;
   return out;
 }
 
 // ------------------------------------------------------------------------------ rules
-// Functions rather than methods of Check, so that a bundle without rules (every client) drops them.
+// Functions rather than methods of Verifier, so that a bundle without rules (every client) drops them.
 // The generated code reads a number with the getter of its type, so that each call site sees one
 // type: a shared reader switching on the kind made the checks megamorphic.
 
@@ -1199,7 +1202,7 @@ export function ruleNum(v: number, min: number | undefined, max: number | undefi
  * `ruleNum` for the u64 or i64 at `at`, by its two 32-bit words: a BigInt per value made these checks
  * the slowest. Limits come split into words, the high one signed for i64; NaN is no limit.
  */
-export function ruleNum64(c: Check, at: number, signed: boolean, minHi: number, minLo: number, maxHi: number, maxLo: number, field: string, index?: number) {
+export function ruleNum64(c: Verifier, at: number, signed: boolean, minHi: number, minLo: number, maxHi: number, maxLo: number, field: string, index?: number) {
   const dv = c.dv, lo = dv.getUint32(at, true), hi = signed ? dv.getInt32(at + 4, true) : dv.getUint32(at + 4, true);
   if (hi < minHi || (hi === minHi && lo < minLo)) broke(field, 'min', (BigInt(minHi) << 32n) | BigInt(minLo), index);
   if (hi > maxHi || (hi === maxHi && lo > maxLo)) broke(field, 'max', (BigInt(maxHi) << 32n) | BigInt(maxLo), index);
@@ -1212,7 +1215,7 @@ export function ruleLen(n: number, min: number | undefined, max: number | undefi
 }
 
 /** Lengths of the n lists of a list body, from its offsets at `off`. */
-export function ruleLens(c: Check, off: number, n: number, min: number | undefined, max: number | undefined, pres: number, nul: number, field: string) {
+export function ruleLens(c: Verifier, off: number, n: number, min: number | undefined, max: number | undefined, pres: number, nul: number, field: string) {
   const dv = c.dv;
   for (let i = 0; i < n; i++) {
     if (c.has(pres, nul, i)) ruleLen(dv.getUint32(off + 4 * i + 4, true) - dv.getUint32(off + 4 * i, true), min, max, field, i);
@@ -1220,7 +1223,7 @@ export function ruleLens(c: Check, off: number, n: number, min: number | undefin
 }
 
 /** String slot at `at`, after `c.str()`. */
-export function ruleStr(c: Check, at: number, min: number | undefined, max: number | undefined, re: RegExp | undefined, field: string, index?: number) {
+export function ruleStr(c: Verifier, at: number, min: number | undefined, max: number | undefined, re: RegExp | undefined, field: string, index?: number) {
   const lb = c.dv.getUint32(at + 4, true);
   ruleLen(lb >>> 1, min, max, field, index);
   if (re && !re.test(c.text(c.dv.getUint32(at, true), lb))) broke(field, 'pattern', re.source, index);
@@ -1230,7 +1233,7 @@ export function ruleStr(c: Check, at: number, min: number | undefined, max: numb
  * String column body, after `c.strCol()`. A back-reference is checked as the row it points to, and
  * skipped when that row had a value and so was checked already.
  */
-export function ruleStrs(c: Check, b: number, n: number, min: number | undefined, max: number | undefined, re: RegExp | undefined, pres: number, nul: number, field: string, rows?: Int32Array) {
+export function ruleStrs(c: Verifier, b: number, n: number, min: number | undefined, max: number | undefined, re: RegExp | undefined, pres: number, nul: number, field: string, rows?: Int32Array) {
   const dv = c.dv, row = (i: number) => (rows === undefined ? i : rows[i]);
   if (re === undefined) {
     // lengths only: they are in the refs, no text and no offsets needed
@@ -1458,7 +1461,7 @@ export interface EncoderDef<T> {
 export interface DecoderDef<T> {
   size: number;
   read(r: Reader, at: number): T;
-  check(c: Check, at: number): void;
+  check(c: Verifier, at: number): void;
   plain(v: T): T;
   /** Plain value straight from the message, where it beats `plain(read())`. */
   decode?(r: Reader, at: number): T;
@@ -1491,7 +1494,7 @@ export function decoder<T>(d: DecoderDef<T>): Decoder<T> {
       if (r.flags & FLAG_ERROR) throw new VerifyError('message is an error envelope');
       return r;
     }
-    const c = new Check(bytes, o.limits, o.rules !== false);
+    const c = new Verifier(bytes, o.limits, o.rules !== false);
     if (c.flags & FLAG_ERROR) c.fail('message is an error envelope');
     c.need(c.root, d.size);
     d.check(c, c.root);
@@ -1546,7 +1549,7 @@ export function encodeError(e: ErrorEnvelope): Uint8Array<ArrayBuffer> {
 
 /** Verifies and reads an error envelope; throws VerifyError on anything else. */
 export function decodeError(bytes: Uint8Array, limits?: Partial<Limits>): ErrorEnvelope {
-  const c = new Check(bytes, limits);
+  const c = new Verifier(bytes, limits);
   if (!(c.flags & FLAG_ERROR)) c.fail('not an error envelope');
   const t = c.u32(c.root);
   const vt = c.table(t, 1);

@@ -139,7 +139,6 @@ describe('batches', () => {
       fetch: (async () => new Response(new Uint8Array([8, 0, 0, 0, 0, 0, 0, 0, 1]), { headers: { 'content-type': 'application/vnd.tbr.batch' } })) as unknown as typeof fetch,
     });
     const results = await Promise.allSettled([api.user.get({ id: 2 }), api.user.get({ id: 3 })]);
-    for (const r of results) expect((r as PromiseRejectedResult).reason).toBeInstanceOf(TypeError);
-    expect(results[0]).not.toBeInstanceOf(RpcError);
+    for (const r of results) expect((r as PromiseRejectedResult).reason).toMatchObject({ name: 'RpcError', code: 'DISCONNECTED', status: 0 });
   });
 });

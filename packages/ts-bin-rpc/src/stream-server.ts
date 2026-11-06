@@ -6,7 +6,7 @@ import { encodeFrame, FRAME_DATA, FRAME_END, FRAME_ERROR, FRAME_HEARTBEAT } from
 import { errorData, RpcError } from './rpc.ts';
 import type { Stream } from './router.ts';
 
-export interface BatchOptions {
+export interface RowBatchOptions {
   /** Milliseconds a batch waits for more rows after its first one. 0: only rows emitted in the same task. Default: 16. */
   window?: number;
   /** A batch is sent as soon as it has this many rows. Default: 512. */
@@ -26,7 +26,7 @@ export interface SubscriberOptions {
   heartbeat?: number;
 }
 
-export interface StreamOptions extends BatchOptions, SubscriberOptions {}
+export interface StreamOptions extends RowBatchOptions, SubscriberOptions {}
 
 export interface StreamControl {
   /** Ends the stream; with an error, the client gets it (an RpcError keeps its code, others become INTERNAL). */
@@ -200,7 +200,7 @@ interface Topic {
  * export const appRouter = { prices: (input: { symbol: string }) => prices.subscribe(input.symbol) };
  * ```
  */
-export function channel<T>(options: BatchOptions = {}): Channel<T> {
+export function channel<T>(options: RowBatchOptions = {}): Channel<T> {
   const topics = new Map<string, Topic>();
 
   const flush = (topic: Topic, rows: unknown[]) => {
@@ -285,7 +285,7 @@ class Batcher {
   readonly #maxRows: number;
   readonly #send: (rows: unknown[]) => void;
 
-  constructor(o: BatchOptions, send: (rows: unknown[]) => void) {
+  constructor(o: RowBatchOptions, send: (rows: unknown[]) => void) {
     this.#window = o.window ?? DEFAULTS.window;
     this.#maxRows = o.maxRows ?? DEFAULTS.maxRows;
     this.#send = send;

@@ -9,6 +9,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { encodeFrame, FrameReader, FRAME_DATA, FRAME_END, FRAME_HEARTBEAT, STREAM_CONTENT_TYPE } from '../../packages/ts-bin-rpc/src/frames.ts';
 import { appRouter, type Tick } from '../src/router.ts';
 import { procedures } from '../src/tbr.gen.ts';
+import { context } from '../src/app.ts';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const tick = (seq: number): Tick => ({ seq, price: 1.5, side: 'buy' }) as Tick;
@@ -16,7 +17,7 @@ const tick = (seq: number): Tick => ({ seq, price: 1.5, side: 'buy' }) as Tick;
 type Ticks = (typeof appRouter)['stream']['ticks'];
 /** The fixture router with `stream.ticks` replaced. */
 const withTicks = (ticks: Ticks) => ({ ...appRouter, stream: { ...appRouter.stream, ticks } });
-const handlerOf = (router: typeof appRouter, onError?: (e: unknown) => void) => createHandler(router, { procedures, prefix: '/rpc', onError });
+const handlerOf = (router: typeof appRouter, onError?: (e: unknown) => void) => createHandler(router, { context, procedures, prefix: '/rpc', onError });
 /** A fetch that answers in process; `delay` holds the response back, so the server queues frames. */
 const via = (handler: (r: Request) => Promise<Response>, delay = 0) =>
   (async (input: RequestInfo | URL, init?: RequestInit) => {

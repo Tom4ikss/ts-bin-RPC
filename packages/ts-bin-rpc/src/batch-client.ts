@@ -1,7 +1,7 @@
 // Batching on the client (DESIGN §21): calls made close together go in one request, and each gets
 // a Response of its own as the server answers it, so the code that reads HTTP responses reads these
 // too. A module of its own: clients without `batch()` do not carry it.
-import { CONTENT_TYPE, SCHEMA_HEADER, type ClientEntry } from './rpc.ts';
+import { CONTENT_TYPE, RpcError, SCHEMA_HEADER, type ClientEntry } from './rpc.ts';
 import { BATCH_CONTENT_TYPE, BatchReader, encodeBatch } from './batch.ts';
 import { encodeStart, MSG_RESPONSE } from './socket.ts';
 
@@ -97,16 +97,16 @@ export function batch(options: BatchOptions = {}): BatchLink {
           const { done, value } = await stream.read();
           if (done) break;
           const messages = reader.push(value);
-          if (!messages) throw new TypeError('malformed batch response');
+          if (!messages) throw new RpcError('BAD_RESPONSE', 'malformed batch response', undefined, { status: res.status });
           for (const m of messages) {
             const p = m.length >= 8 && m[4] === MSG_RESPONSE ? calls[(m[0] | (m[1] << 8) | (m[2] << 16) | (m[3] << 24)) >>> 0] : undefined;
             if (p) settle(p, new Response(m.subarray(8), { status: m[6] | (m[7] << 8), headers: { 'content-type': CONTENT_TYPE } }));
           }
         }
-        if (!reader.done) throw new TypeError('the batch response was cut off');
-        for (const p of calls) failed(p, new TypeError('the batch response has no answer to this call'));
+        if (!reader.done) throw new RpcError('DISCONNECTED', 'the batch response was cut off', undefined, { status: 0 });
+        for (const p of calls) failed(p, new RpcError('BAD_RESPONSE', 'the batch response has no answer to this call', undefined, { status: res.status }));
       } catch (e) {
-        // as fetch does when the connection fails
+        // createClient turns a failed fetch into DISCONNECTED, as for a call alone
         for (const p of calls) failed(p, e);
       }
     };

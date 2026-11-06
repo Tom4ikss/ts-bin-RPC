@@ -213,4 +213,16 @@ describe('hashKey', () => {
     expect(() => tanstackHash([['x'], { n: 1n }])).toThrow();
     expect(hashKey([['x'], { n: 1n }])).toBe('[["x"],{"n":{"$bigint":"1"}}]');
   });
+
+  it('tells maps, sets and typed arrays apart by their contents, not their order', () => {
+    const key = (v: unknown) => hashKey([['x'], { v }]);
+    expect(key(new Map([['a', 1]]))).not.toBe(key(new Map([['b', 1]])));
+    expect(key(new Map([['a', 1], ['b', 2]]))).toBe(key(new Map([['b', 2], ['a', 1]])));
+    expect(key(new Set([1, 2]))).toBe(key(new Set([2, 1])));
+    expect(key(new Set([1]))).not.toBe(key(new Set([2])));
+    expect(key(new Float32Array([1, 2]))).not.toBe(key(new Float32Array([1, 3])));
+    expect(key(new Float32Array([1]))).not.toBe(key(new Int32Array([1])));
+    expect(key(new Uint8Array([1]))).not.toBe(key({ 0: 1 }));
+    expect(key(new BigInt64Array([1n]))).toBe('[["x"],{"v":{"$BigInt64Array":["1"]}}]');
+  });
 });

@@ -98,7 +98,7 @@ export const appRouter = {
 **`end(error?)`** sends the pending changes and ends every subscription; with an error, subscribers
 get it, as with `stream()`. The rows stay, and later subscribers get them.
 
-`subscribers` counts the subscriptions open right now.
+`subscribers()` counts the subscriptions open right now.
 
 ## Client
 

@@ -78,7 +78,7 @@ describe('tbr generate / check', () => {
   it('unsupported types fail generation', () => {
     const r = tbr('generate', '--dry-run', '--project', fixture('rejected', 'tsconfig.json'), '--router', 'router.ts');
     expect(r.code).toBe(1);
-    expect(r.output).toMatch(/^47 type\(s\) cannot be sent over the wire/);
+    expect(r.output).toMatch(/^49 type\(s\) cannot be sent over the wire/);
   });
 });
 

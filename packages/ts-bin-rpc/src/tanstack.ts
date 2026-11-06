@@ -157,6 +157,10 @@ export interface QueryOptionsConfig {
 export function hashKey(key: QueryKey): string {
   return JSON.stringify(key, (_, v: unknown) => {
     if (typeof v === 'bigint') return { $bigint: v.toString() };
+    // entries in a stable order: equal maps are one key, whatever order they were filled in
+    if (v instanceof Map) return { $map: [...v].map(([k, x]) => [hashKey([k]), k, x]).sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)).map(([, k, x]) => [k, x]) };
+    if (v instanceof Set) return { $set: [...v].map((x) => [hashKey([x]), x]).sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)).map(([, x]) => x) };
+    if (ArrayBuffer.isView(v) && !(v instanceof DataView)) return { [`$${v.constructor.name}`]: Array.from(v as unknown as ArrayLike<number | bigint>, (x) => (typeof x === 'bigint' ? x.toString() : x)) };
     if (!isPlainObject(v)) return v;
     const sorted: Record<string, unknown> = {};
     for (const k of Object.keys(v).sort()) sorted[k] = v[k];

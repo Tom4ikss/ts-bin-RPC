@@ -5,7 +5,7 @@ import type { Plugin, ResolvedConfig, ViteDevServer } from 'vite';
 import type { GenerateOptions, Generated } from './generate.ts';
 import { typescriptProblem } from './typescript.ts';
 
-export interface TbrOptions {
+export interface TbrPluginOptions {
   /** The router as `file#export`, relative to the tsconfig. Default: `src/router.ts#appRouter`. */
   router?: string;
   /** The TypeScript project, relative to Vite's root. Default: `tsconfig.json`. */
@@ -18,7 +18,7 @@ export interface TbrOptions {
   allowBreaking?: boolean;
 }
 
-export function tbr(options: TbrOptions = {}): Plugin {
+export function tbr(options: TbrPluginOptions = {}): Plugin {
   let config: ResolvedConfig;
   let server: ViteDevServer | undefined;
   let stop: AbortController | undefined;

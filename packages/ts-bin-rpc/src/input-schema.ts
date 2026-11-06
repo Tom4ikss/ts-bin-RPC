@@ -4,22 +4,10 @@
 //   inputSchema(inputRules['user.create'], { checks: formats })
 // A module of its own: a client that does not import it carries neither it nor `inputRules`.
 import { isRecord, locate, RULE_TEXT, show, type InputRules, type SchemaDesc, type TypeDesc, type TypeRules } from './runtime.ts';
-import type { StandardSchemaV1, Validator } from './validate.ts';
+import type { InputIssue as Base, StandardSchemaV1, Validator } from './validate.ts';
 
-export interface InputIssue {
-  /** As the server says it after the path: `is shorter than 3`, `is not a valid email`, `expected u8, got 300`. */
-  readonly message: string;
-  /** Path of the value in the input: `['guests', 1, 'email']`; empty for the input itself. */
-  readonly path: readonly PropertyKey[];
-  /** Where the rule is declared, as in the server's `BAD_INPUT` data: `CreateUser.name`, `CreateUser.tags[]`. */
-  readonly field: string;
-  /** `'type'`: not a value of the type, as the encoder would reject it. */
-  readonly rule: 'type' | 'min' | 'max' | 'minLength' | 'maxLength' | 'pattern' | 'check' | 'refine';
-  /** Of a check or a refinement: the check, or the refined type. */
-  readonly name?: string;
-  /** Of a rule: its argument; a decimal string for `u64` and `i64`, the source of a `Pattern`. */
-  readonly limit?: number | string;
-}
+/** An issue: what is wrong and where, as the server's `BAD_INPUT` data. Here `path` and `field` are always there. */
+export type InputIssue = Base & { readonly path: readonly PropertyKey[]; readonly field: string };
 
 export type InputResult<T> = { readonly value: T; readonly issues?: undefined } | { readonly issues: readonly InputIssue[] };
 

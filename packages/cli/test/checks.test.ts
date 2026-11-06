@@ -61,23 +61,23 @@ describe('checks and refine', () => {
     expect(await failure(api.invite(invite({ guests: [guest(), guest({ email: 'nope' })] })))).toEqual({
       code: 'BAD_INPUT',
       message: 'guests[1].email is not a valid email',
-      data: { field: 'Guest.email', rule: 'check', name: 'email', path: 'guests[1].email', message: 'is not a valid email' },
+      data: { field: 'Guest.email', rule: 'check', name: 'email', path: ['guests', 1, 'email'], message: 'is not a valid email' },
     });
-    expect(await failure(api.invite(invite({ host: guest({ tags: ['ok', 'Not ok'] }) })))).toMatchObject({ data: { field: 'Guest.tags[]', name: 'slug', path: 'host.tags[1]' } });
-    expect(await failure(api.invite(invite({ host: guest({ site: 'not a url' }) })))).toMatchObject({ data: { name: 'url', path: 'host.site' } });
-    expect(await failure(api.invite(invite({ host: guest({ id: 'x' }) })))).toMatchObject({ data: { name: 'uuid', path: 'host.id' } });
+    expect(await failure(api.invite(invite({ host: guest({ tags: ['ok', 'Not ok'] }) })))).toMatchObject({ data: { field: 'Guest.tags[]', name: 'slug', path: ['host', 'tags', 1] } });
+    expect(await failure(api.invite(invite({ host: guest({ site: 'not a url' }) })))).toMatchObject({ data: { name: 'url', path: ['host', 'site'] } });
+    expect(await failure(api.invite(invite({ host: guest({ id: 'x' }) })))).toMatchObject({ data: { name: 'uuid', path: ['host', 'id'] } });
     expect(await failure(api.invite(invite({ seats: 3 })))).toMatchObject({ message: 'seats is not a valid even', data: { field: 'Invite.seats', name: 'even' } });
-    expect(await failure(api.slug('No'))).toMatchObject({ message: 'input is not a valid slug', data: { field: 'input', path: '' } });
+    expect(await failure(api.slug('No'))).toMatchObject({ message: 'input is not a valid slug', data: { field: 'input', path: [] } });
   });
 
   it('run on map keys and values and on tuple elements', async () => {
     const api = client();
     const dir = (o: object = {}) => ({ owners: new Map([['ann@example.com', ['a-b']]]), labels: { x: 'ok' }, pair: ['bo@example.com', 2], ...o }) as never;
     expect(await api.directory(dir())).toBe(1);
-    expect(await failure(api.directory(dir({ owners: new Map([['nope', []]]) })))).toMatchObject({ data: { field: 'Directory.owners[key]', name: 'email', path: 'owners["nope"]' } });
-    expect(await failure(api.directory(dir({ owners: new Map([['ann@example.com', ['a', 'B']]]) })))).toMatchObject({ data: { field: 'Directory.owners[value][]', name: 'slug', path: 'owners["ann@example.com"][1]' } });
-    expect(await failure(api.directory(dir({ labels: { 'a key': 'No' } })))).toMatchObject({ data: { field: 'Directory.labels[value]', name: 'slug', path: 'labels["a key"]' } });
-    expect(await failure(api.directory(dir({ pair: ['bo@example.com', 3] })))).toMatchObject({ data: { field: 'Directory.pair[1]', name: 'even', path: 'pair[1]' } });
+    expect(await failure(api.directory(dir({ owners: new Map([['nope', []]]) })))).toMatchObject({ data: { field: 'Directory.owners[key]', name: 'email', path: ['owners', 'nope'] } });
+    expect(await failure(api.directory(dir({ owners: new Map([['ann@example.com', ['a', 'B']]]) })))).toMatchObject({ data: { field: 'Directory.owners[value][]', name: 'slug', path: ['owners', 'ann@example.com', 1] } });
+    expect(await failure(api.directory(dir({ labels: { 'a key': 'No' } })))).toMatchObject({ data: { field: 'Directory.labels[value]', name: 'slug', path: ['labels', 'a key'] } });
+    expect(await failure(api.directory(dir({ pair: ['bo@example.com', 3] })))).toMatchObject({ data: { field: 'Directory.pair[1]', name: 'even', path: ['pair', 1] } });
     // rules are verified on the wire, before the checks
     expect(await failure(api.directory(dir({ labels: { x: 'a'.repeat(9) } })))).toMatchObject({ data: { field: 'Map<string, (string & MaxLength<8> & Check<\'slug\'>)>.values[]', rule: 'maxLength' } });
   });
@@ -96,12 +96,12 @@ describe('checks and refine', () => {
     expect(await failure(api.invite(events({ kind: 'meet', range: { start: '2026-11-05', end: '2026-11-04' } })))).toEqual({
       code: 'BAD_INPUT',
       message: 'events[0].range: starts after it ends',
-      data: { field: 'DateRange', rule: 'refine', name: 'DateRange', path: 'events[0].range', message: 'starts after it ends' },
+      data: { field: 'DateRange', rule: 'refine', name: 'DateRange', path: ['events', 0, 'range'], message: 'starts after it ends' },
     });
     // the field check runs first: an invalid date never reaches the refinement
-    expect(await failure(api.invite(events({ kind: 'meet', range: { start: '2026-02-30', end: '2026-01-01' } })))).toMatchObject({ data: { rule: 'check', name: 'isoDate', path: 'events[0].range.start' } });
+    expect(await failure(api.invite(events({ kind: 'meet', range: { start: '2026-02-30', end: '2026-01-01' } })))).toMatchObject({ data: { rule: 'check', name: 'isoDate', path: ['events', 0, 'range', 'start'] } });
     expect(await failure(api.invite(events({ kind: 'call', at: '1999-01-01T00:00:00Z' })))).toMatchObject({ message: 'events[0] is not a valid Event', data: { rule: 'refine', name: 'Event' } });
-    expect(await failure(api.invite(invite({ guests: [guest({ email: 'host@example.com' })] })))).toMatchObject({ message: 'input: the host is not a guest', data: { name: 'Invite', path: '' } });
+    expect(await failure(api.invite(invite({ guests: [guest({ email: 'host@example.com' })] })))).toMatchObject({ message: 'input: the host is not a guest', data: { name: 'Invite', path: [] } });
   });
 
   it('take Standard Schemas', async () => {
@@ -118,7 +118,7 @@ describe('checks and refine', () => {
     const range: StandardSchemaV1 = { '~standard': { version: 1, vendor: 'test', validate: () => ({ issues: [{ message: 'Too early', path: [{ key: 'start' }] }] }) } };
     const api = client({ checks: { ...checks, slug: schema((v) => v === 'ok', true) }, refine: { DateRange: range } });
     expect(await failure(api.slug('no'))).toMatchObject({ message: 'input: Invalid', data: { name: 'slug' } });
-    expect(await failure(api.invite(invite({ host: guest({ tags: ['ok'] }), guests: [guest({ tags: ['ok'] })] })))).toMatchObject({ message: 'events[0].range.start: Too early', data: { rule: 'refine', path: 'events[0].range.start' } });
+    expect(await failure(api.invite(invite({ host: guest({ tags: ['ok'] }), guests: [guest({ tags: ['ok'] })] })))).toMatchObject({ message: 'events[0].range.start: Too early', data: { rule: 'refine', path: ['events', 0, 'range', 'start'] } });
   });
 
   it('skip inputs that reach nothing to run', async () => {

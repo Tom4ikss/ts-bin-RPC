@@ -50,7 +50,7 @@ export function groups() {
     });
   }
   {
-    // One user is a table, not columns: no typed arrays, but the same Check, Reader and two
+    // One user is a table, not columns: no typed arrays, but the same Verifier, Reader and two
     // TextDecoder calls on blocks of a few dozen bytes.
     const [user] = makeUsers(4).filter((u) => /[^\x00-\x7f]/.test(u.name));
     const K1 = procedures.user.output;

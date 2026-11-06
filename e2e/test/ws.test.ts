@@ -9,6 +9,7 @@ import type { RpcError } from 'ts-bin-rpc';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { appRouter, resetUnits, units, type Tick } from '../src/router.ts';
 import { procedures } from '../src/tbr.gen.ts';
+import { context } from '../src/app.ts';
 import { serveWebSockets, type TestSocket } from '../src/ws-server.ts';
 import { encodeStart } from '../../packages/ts-bin-rpc/src/socket.ts';
 
@@ -33,7 +34,7 @@ const flood = async () =>
     return () => (clearInterval(timer), floods.cleaned++);
   }, { maxBuffered: 1 << 20 });
 const router = { ...appRouter, stream: { ...appRouter.stream, forever: flood } };
-const handler = createHandler(router, { procedures, prefix: '/rpc', onError: () => {} });
+const handler = createHandler(router, { context, procedures, prefix: '/rpc', onError: () => {} });
 
 let server: http.Server;
 let ws: string;
@@ -156,7 +157,7 @@ describe('WebSocket transport', () => {
     handler.socket(own, upgrade({ origin: 'http://x', host: 'x' }));
     expect(own.code).toBe(0);
     const allowed = fake();
-    createHandler(router, { procedures, prefix: '/rpc', socket: { allowedOrigins: ['https://app.example'] } }).socket(allowed, upgrade({ origin: 'https://app.example', host: 'api.example' }));
+    createHandler(router, { context, procedures, prefix: '/rpc', socket: { allowedOrigins: ['https://app.example'] } }).socket(allowed, upgrade({ origin: 'https://app.example', host: 'api.example' }));
     expect(allowed.code).toBe(0);
     const old = fake();
     handler.socket(old, new Request('http://x/rpc'));
@@ -173,7 +174,7 @@ describe('WebSocket transport', () => {
     conn.close();
 
     const few = fake();
-    const limited = createHandler(router, { procedures, prefix: '/rpc', onError: () => {}, socket: { maxSubscriptions: 2 } });
+    const limited = createHandler(router, { context, procedures, prefix: '/rpc', onError: () => {}, socket: { maxSubscriptions: 2 } });
     const c = limited.socket(few, upgrade());
     for (const id of [1, 2, 3]) c.message(encodeStart(id, 'stream.forever', procedures['stream.forever'].hash, new Uint8Array(0)));
     await until(() => few.sent.some((b) => b[0] === 3));

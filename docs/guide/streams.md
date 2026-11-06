@@ -171,7 +171,7 @@ There is no automatic reconnect yet. Rows sent while a client was disconnected a
 ## Wire
 
 The request is the same `POST {prefix}/{procedure}`. The response has
-`content-type: application/vnd.tbr-stream` and is a sequence of frames: an 8-byte header (payload
+`content-type: application/vnd.tbr.stream` and is a sequence of frames: an 8-byte header (payload
 length, frame kind), then the payload padded to 8 bytes. A data frame carries one message of type
 `T[]`; error frames carry the usual error envelope. With `debug: true` the client logs each stream
 when it closes, with its frames and bytes.

@@ -2,7 +2,7 @@
 // 8-byte header (u32 payload length, u8 kind, 3 reserved zero bytes) and the payload padded to a
 // multiple of 8, so every payload starts 8-aligned from the start of the stream.
 
-export const STREAM_CONTENT_TYPE = 'application/vnd.tbr-stream';
+export const STREAM_CONTENT_TYPE = 'application/vnd.tbr.stream';
 
 /** Payload: a message of the procedure's batch type, `T[]`. */
 export const FRAME_DATA = 1;

@@ -26,8 +26,12 @@ export interface ClientOptions<R = unknown> {
    */
   decode?: DecodeMode | { readonly [P in ProcedurePath<R>]?: DecodeMode };
   /**
-   * Verify responses before reading them. Default: on in development, off in production builds
-   * (`process.env.NODE_ENV === 'production'`, which bundlers replace at build time).
+   * Verify responses before reading them, so that a malformed or foreign message fails with
+   * `BAD_RESPONSE` instead of giving wrong values or throwing as it is read. Default: on in
+   * development; in production builds (`process.env.NODE_ENV === 'production'`, which bundlers
+   * replace at build time) only for responses that do not show the server has the client's version
+   * of the procedure: an HTTP response whose `x-tbr-schema` is another hash, and every response
+   * over a WebSocket or in a batch, which carry no hash.
    */
   verify?: boolean;
   limits?: Partial<Limits>;
@@ -59,7 +63,9 @@ function production(): boolean {
 }
 
 export function createClient<R>(options: ClientOptions<R>): Client<R> {
-  const { procedures, verify = !production(), limits, debug = false } = options;
+  const { procedures, limits, debug = false } = options;
+  /** Undefined: by the response, see `verify` above. */
+  const verify = options.verify ?? (production() ? undefined : true);
   const decode = options.decode as DecodeMode | Readonly<Record<string, DecodeMode | undefined>> | undefined;
   const base = options.url.replace(/\/+$/, '');
   const warned = new Set<string>();
@@ -97,14 +103,24 @@ export function createClient<R>(options: ClientOptions<R>): Client<R> {
     const t0 = performance.now();
     const fetchFn = options.fetch ?? globalThis.fetch;
     const socket = !get && options.socket?.calls ? options.socket : undefined;
-    const res = socket
-      ? await socket.request(path, proc, body, opts.signal)
-      : batched && !get && !opts.headers
-      ? await batched(path, proc, body, opts.signal)
-      : get
-      ? await fetchFn(`${base}/${path}?${HASH_PARAM}=${proc.hash}${encoded ? `&${INPUT_PARAM}=${encoded}` : ''}`, { method: 'GET', headers: await userHeaders(opts), signal: opts.signal })
-      : await fetchFn(`${base}/${path}`, { method: 'POST', body, headers: await requestHeaders(proc, opts), signal: opts.signal });
-    const bytes = new Uint8Array(await res.arrayBuffer());
+    const viaBatch = !socket && batched && !get && !opts.headers;
+    // the caller's headers function throws its own errors, outside the transport's
+    const headers = socket || viaBatch ? undefined : get ? await userHeaders(opts) : await requestHeaders(proc, opts);
+    let res: Response, bytes: Uint8Array;
+    try {
+      res = socket
+        ? await socket.request(path, proc, body, opts.signal)
+        : viaBatch
+        ? await batched(path, proc, body, opts.signal)
+        : get
+        ? await fetchFn(`${base}/${path}?${HASH_PARAM}=${proc.hash}${encoded ? `&${INPUT_PARAM}=${encoded}` : ''}`, { method: 'GET', headers, signal: opts.signal })
+        : await fetchFn(`${base}/${path}`, { method: 'POST', body, headers, signal: opts.signal });
+      bytes = new Uint8Array(await res.arrayBuffer());
+    } catch (e) {
+      // an abort rejects with the signal's reason, as fetch does; the rest is the connection's
+      if (opts.signal?.aborted || e instanceof RpcError) throw e;
+      throw new RpcError('DISCONNECTED', `'${path}': ${e instanceof Error ? e.message : String(e)}`, undefined, { status: 0, cause: e });
+    }
 
     let result: unknown;
     let error: RpcError | undefined;
@@ -115,8 +131,9 @@ export function createClient<R>(options: ClientOptions<R>): Client<R> {
     } else if (proc.output) {
       try {
         const mode = modeOf(path, opts);
+        const check = verify ?? res.headers.get(SCHEMA_HEADER) !== proc.hash;
         // Rules are the server's to check on inputs; a response is only verified to be well formed.
-        result = mode === 'eager' ? proc.output.decode(bytes, { verify, rules: false, limits }) : proc.output.view(bytes, { verify, rules: false, limits });
+        result = mode === 'eager' ? proc.output.decode(bytes, { verify: check, rules: false, limits }) : proc.output.view(bytes, { verify: check, rules: false, limits });
       } catch (e) {
         if (!(e instanceof VerifyError)) throw e;
         error = new RpcError('BAD_RESPONSE', `invalid response: ${e.message}`, undefined, { status: res.status, cause: e });

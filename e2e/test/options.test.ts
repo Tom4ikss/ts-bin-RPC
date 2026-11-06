@@ -6,6 +6,7 @@ import { ABI, abi } from 'ts-bin-rpc/runtime';
 import { describe, expect, it, vi } from 'vitest';
 import { appRouter } from '../src/router.ts';
 import { procedures } from '../src/tbr.gen.ts';
+import { context } from '../src/app.ts';
 
 const via = (handler: (r: Request) => Promise<Response>) => (async (input: RequestInfo | URL, init?: RequestInit) => handler(new Request(input, init))) as typeof fetch;
 const client = (fetchFn: typeof fetch, debug = false) => createClient<typeof appRouter>({ url: 'http://test/rpc', procedures, fetch: fetchFn, debug });
@@ -13,19 +14,19 @@ const client = (fetchFn: typeof fetch, debug = false) => createClient<typeof app
 describe('createHandler', () => {
   it('refuses a router that does not match the generated code', () => {
     const { crash: _, ...fewer } = appRouter;
-    expect(() => createHandler(fewer, { procedures, prefix: '/rpc' })).toThrow("generated code has procedure 'crash' that the router does not; run tbr generate");
-    expect(() => createHandler({ ...appRouter, extra: async () => 1 }, { procedures, prefix: '/rpc' })).toThrow("procedure 'extra' is missing");
+    expect(() => createHandler(fewer, { context, procedures, prefix: '/rpc' })).toThrow("generated code has procedure 'crash' that the router does not; run tbr generate");
+    expect(() => createHandler({ ...appRouter, extra: async () => 1 }, { context, procedures, prefix: '/rpc' })).toThrow("procedure 'extra' is missing");
   });
 
   it('answers 409 SCHEMA_MISMATCH when asked to', async () => {
-    const handler = createHandler(appRouter, { procedures: { ...procedures, whoami: { ...procedures.whoami, hash: 'server' } }, prefix: '/rpc', schemaMismatch: 'error' });
+    const handler = createHandler(appRouter, { context, procedures: { ...procedures, whoami: { ...procedures.whoami, hash: 'server' } }, prefix: '/rpc', schemaMismatch: 'error' });
     await expect(client(via(handler)).whoami()).rejects.toMatchObject({ code: 'SCHEMA_MISMATCH', status: 409 });
   });
 
   it('answers 500 BAD_OUTPUT when a procedure breaks its own types, with the path for onError', async () => {
     const onError = vi.fn();
     const broken = { ...appRouter, user: { ...appRouter.user, list: async () => [{ ...(await appRouter.user.get({ id: 1 })), id: -5 }] } };
-    const handler = createHandler(broken, { procedures, prefix: '/rpc', onError });
+    const handler = createHandler(broken, { context, procedures, prefix: '/rpc', onError });
     const e = await client(via(handler)).user.list().catch((x: unknown) => x);
     expect(e).toMatchObject({ code: 'BAD_OUTPUT', status: 500, message: 'the procedure returned a value that does not match its declared type' });
     expect(onError.mock.calls[0][0]).toMatchObject({ name: 'EncodeError', path: '[0].id', message: 'at [0].id: expected u32, got -5' });
@@ -49,14 +50,14 @@ describe('createHandler', () => {
   });
 
   it('limits the request size', async () => {
-    const handler = createHandler(appRouter, { procedures, prefix: '/rpc', limits: { maxBytes: 64 } });
+    const handler = createHandler(appRouter, { context, procedures, prefix: '/rpc', limits: { maxBytes: 64 } });
     await expect(client(via(handler)).echo({ text: 'x'.repeat(100), bytes: new Uint8Array() })).rejects.toMatchObject({ code: 'PAYLOAD_TOO_LARGE', status: 413 });
   });
 });
 
 describe('createClient', () => {
   describe('decode', () => {
-    const handler = createHandler(appRouter, { procedures, prefix: '/rpc' });
+    const handler = createHandler(appRouter, { context, procedures, prefix: '/rpc' });
     const make = (decode?: ClientOptions<typeof appRouter>['decode']) =>
       createClient<typeof appRouter>({ url: 'http://test/rpc', procedures, fetch: via(handler), decode });
     const isPlain = (v: object) => Object.keys(v).length > 0;
@@ -107,7 +108,7 @@ describe('createClient', () => {
   });
 
   it('verifies responses unless NODE_ENV is production', async () => {
-    const handler = createHandler(appRouter, { procedures, prefix: '/rpc' });
+    const handler = createHandler(appRouter, { context, procedures, prefix: '/rpc' });
     const seen: unknown[] = [];
     const output = procedures['user.get'].output!;
     const spied = { ...procedures, 'user.get': { ...procedures['user.get'], output: { ...output, view: (b: Uint8Array, o?: { verify?: boolean }) => (seen.push(o?.verify), output.view(b, o)) } } };
@@ -135,7 +136,7 @@ describe('createClient', () => {
   });
 
   it('logs calls in debug mode', async () => {
-    const handler = createHandler(appRouter, { procedures, prefix: '/rpc' });
+    const handler = createHandler(appRouter, { context, procedures, prefix: '/rpc' });
     const group = vi.spyOn(console, 'groupCollapsed').mockImplementation(() => {});
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
     vi.spyOn(console, 'groupEnd').mockImplementation(() => {});
@@ -149,7 +150,7 @@ describe('createClient', () => {
   });
 
   it('does not treat `then` as a procedure', async () => {
-    const api = client(via(createHandler(appRouter, { procedures, prefix: '/rpc' })));
+    const api = client(via(createHandler(appRouter, { context, procedures, prefix: '/rpc' })));
     expect((await Promise.resolve(api.user)) === api.user).toBe(true);
   });
 });
@@ -162,7 +163,7 @@ describe('toNodeListener', () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => {});
     const server = http.createServer();
     const handled = new Promise<void>((resolve) => {
-      const listener = toNodeListener(createHandler(appRouter, { procedures, prefix: '/rpc' }));
+      const listener = toNodeListener(createHandler(appRouter, { context, procedures, prefix: '/rpc' }));
       server.on('request', (req, res) => void listener(req, res).then(resolve));
     });
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -182,7 +183,7 @@ describe('toNodeListener', () => {
 });
 
 describe('validation rules', () => {
-  const api = client(via(createHandler(appRouter, { procedures, prefix: '/rpc' })));
+  const api = client(via(createHandler(appRouter, { context, procedures, prefix: '/rpc' })));
 
   it('answer 400 BAD_INPUT with the field, the rule and the row', async () => {
     await expect(api.rename({ name: '', nick: [], age: 1 })).rejects.toMatchObject({

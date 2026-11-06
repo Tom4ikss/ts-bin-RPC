@@ -4,6 +4,7 @@ import { createHandler, query, stream } from 'ts-bin-rpc/server';
 import { describe, expect, it, vi } from 'vitest';
 import { appRouter } from '../src/router.ts';
 import { procedures } from '../src/tbr.gen.ts';
+import { context } from '../src/app.ts';
 
 const handler = createHandler(appRouter, { procedures, prefix: '/rpc', context: (r) => ({ user: r.headers.get('authorization')?.slice(7) ?? null }) });
 
@@ -83,14 +84,14 @@ describe('the server', () => {
   });
 
   it('compares the contract hash in the URL', async () => {
-    const strict = createHandler(appRouter, { procedures, prefix: '/rpc', schemaMismatch: 'error' });
+    const strict = createHandler(appRouter, { context, procedures, prefix: '/rpc', schemaMismatch: 'error' });
     const res = await strict(new Request('http://test/rpc/version?h=other'));
     expect([res.status, res.headers.get('cache-control')]).toEqual([409, 'no-store']);
   });
 
   it('refuses a router whose queries do not match the generated code', () => {
     const plain = { ...appRouter, version: async () => ({ version: '1.0' }) };
-    expect(() => createHandler(plain, { procedures, prefix: '/rpc' })).toThrow("generated code calls 'version' with GET, but the router does not mark it with query(); run tbr generate");
+    expect(() => createHandler(plain, { context, procedures, prefix: '/rpc' })).toThrow("generated code calls 'version' with GET, but the router does not mark it with query(); run tbr generate");
     const ticks = query(async (input: { n: number }) => stream<{ seq: number }>(() => {}));
     const streaming = { ...appRouter, stream: { ...appRouter.stream, ticks } };
     expect(() => createHandler(streaming as never, { procedures, prefix: '/rpc' })).toThrow("procedure 'stream.ticks' is a stream and cannot be a query");

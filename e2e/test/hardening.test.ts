@@ -10,6 +10,7 @@ import { createHandler, query, SOCKET_PROTOCOL } from 'ts-bin-rpc/server';
 import { afterEach, describe, expect, it } from 'vitest';
 import { appRouter } from '../src/router.ts';
 import { procedures } from '../src/tbr.gen.ts';
+import { context } from '../src/app.ts';
 import { encodeStart } from '../../packages/ts-bin-rpc/src/socket.ts';
 import { decodeError } from '../../packages/ts-bin-rpc/src/runtime.ts';
 
@@ -26,7 +27,7 @@ const listen = async (listener: http.RequestListener) => {
 
 describe('errors', () => {
   const router = { ...appRouter, crash: async (): Promise<string> => { throw new RpcError('LIMIT', 'over the limit', { max: 10n, at: [1n] }); } };
-  const handler = createHandler(router, { procedures, prefix: '/rpc', onError: () => {} });
+  const handler = createHandler(router, { context, procedures, prefix: '/rpc', onError: () => {} });
 
   it('send bigints in data as decimal strings, over HTTP, in batches and over a socket', async () => {
     const expected = { code: 'LIMIT', status: 400, data: { max: '10', at: ['1'] } };
@@ -45,12 +46,12 @@ describe('errors', () => {
 
   it('go out with an error status whatever the procedure set', async () => {
     const odd = { ...appRouter, crash: async (): Promise<string> => { throw new RpcError('ODD', 'odd', undefined, { status: 99 }); } };
-    const res = await createHandler(odd, { procedures, prefix: '/rpc' })(new Request('http://x/rpc/crash', { method: 'POST', headers: { 'content-type': 'application/vnd.tbr' } }));
+    const res = await createHandler(odd, { context, procedures, prefix: '/rpc' })(new Request('http://x/rpc/crash', { method: 'POST', headers: { 'content-type': 'application/vnd.tbr' } }));
     expect(res.status).toBe(500);
   });
 
   it('of GET requests are not cached', async () => {
-    const handler = createHandler(appRouter, { procedures, prefix: '/rpc' });
+    const handler = createHandler(appRouter, { context, procedures, prefix: '/rpc' });
     for (const url of ['http://x/rpc/nope', 'http://x/rpc/echo']) {
       const res = await handler(new Request(url));
       expect([res.status, res.headers.get('cache-control')]).toEqual([url.endsWith('nope') ? 404 : 405, 'no-store']);
@@ -80,7 +81,7 @@ describe('toNodeListener', () => {
   });
 
   it('answers a request for an unknown procedure without reading its body', async () => {
-    const port = await listen(toNodeListener(createHandler(appRouter, { procedures, prefix: '/rpc' })));
+    const port = await listen(toNodeListener(createHandler(appRouter, { context, procedures, prefix: '/rpc' })));
     const socket = net.connect(port, '127.0.0.1');
     // a body announced but never sent: the answer must not wait for it
     socket.write('POST /rpc/nope HTTP/1.1\r\nhost: x\r\ncontent-type: application/vnd.tbr\r\ncontent-length: 1000000\r\n\r\nTB');
@@ -90,9 +91,57 @@ describe('toNodeListener', () => {
   });
 
   it('refuses a body over the handler limit as it arrives', async () => {
-    const handler = createHandler(appRouter, { procedures, prefix: '/rpc', limits: { maxBytes: 1024 } });
+    const handler = createHandler(appRouter, { context, procedures, prefix: '/rpc', limits: { maxBytes: 1024 } });
     const port = await listen(toNodeListener(handler));
     const res = await fetch(`http://127.0.0.1:${port}/rpc/echo`, { method: 'POST', headers: { 'content-type': 'application/vnd.tbr' }, body: new Uint8Array(4096) });
     expect(res.status).toBe(413);
+  });
+});
+
+describe('transport errors', () => {
+  it('are RpcError DISCONNECTED; an abort keeps its reason, a failing headers function its error', async () => {
+    const down = (async () => { throw new TypeError('fetch failed'); }) as unknown as typeof fetch;
+    const api = createClient<typeof appRouter>({ url: 'http://test/rpc', procedures, fetch: down });
+    await expect(api.user.get({ id: 1 })).rejects.toMatchObject({ name: 'RpcError', code: 'DISCONNECTED', status: 0, cause: { message: 'fetch failed' } });
+    await expect(api.user.list()).rejects.toMatchObject({ code: 'DISCONNECTED' });
+
+    const reason = new Error('stop');
+    // as fetch: rejects with the reason, at once when the signal is already aborted
+    const hanging = ((_: unknown, init: RequestInit) => new Promise((_, reject) => {
+      if (init.signal!.aborted) reject(init.signal!.reason);
+      init.signal!.addEventListener('abort', () => reject(init.signal!.reason));
+    })) as unknown as typeof fetch;
+    const c = new AbortController();
+    const call = createClient<typeof appRouter>({ url: 'http://test/rpc', procedures, fetch: hanging }).user.get({ id: 1 }, { signal: c.signal });
+    c.abort(reason);
+    await expect(call).rejects.toBe(reason);
+
+    const own = new Error('no token');
+    const failing = createClient<typeof appRouter>({ url: 'http://test/rpc', procedures, fetch: down, headers: () => { throw own; } });
+    await expect(failing.user.get({ id: 1 })).rejects.toBe(own);
+  });
+});
+
+describe('verification in production', () => {
+  const env = process.env.NODE_ENV;
+  afterEach(() => void (process.env.NODE_ENV = env));
+
+  it('verifies the responses that do not show the server has the same version of the procedure', async () => {
+    process.env.NODE_ENV = 'production';
+    const handler = createHandler(appRouter, { context, procedures, prefix: '/rpc' });
+    const seen: (boolean | undefined)[] = [];
+    const codec = procedures['user.get'].output;
+    const spied = { ...procedures, 'user.get': { ...procedures['user.get'], output: { view: (b: Uint8Array, o?: { verify?: boolean }) => (seen.push(o?.verify), codec.view(b, o)) } } } as unknown as typeof procedures;
+    const hashed = (hash: string | null) => (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const res = await handler(new Request(input, init));
+      const headers = new Headers(res.headers);
+      if (hash === null) headers.delete('x-tbr-schema');
+      else headers.set('x-tbr-schema', hash);
+      return new Response(res.body, { status: res.status, headers });
+    }) as typeof fetch;
+    for (const hash of [procedures['user.get'].hash, 'another', null]) {
+      await createClient<typeof appRouter>({ url: 'http://test/rpc', procedures: spied, fetch: hashed(hash) }).user.get({ id: 1 });
+    }
+    expect(seen).toEqual([false, true, true]);
   });
 });

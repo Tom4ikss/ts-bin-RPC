@@ -636,7 +636,7 @@ for await (const tick of api.ticks.subscribe({ symbol: 'BTC' })) {} // Subscript
 
 ### Провод
 
-- Тот же `POST {prefix}/{procedure}`. Ответ — поток кадров с `Content-Type: application/vnd.tbr-stream`,
+- Тот же `POST {prefix}/{procedure}`. Ответ — поток кадров с `Content-Type: application/vnd.tbr.stream`,
   `cache-control: no-store, no-transform` и `x-accel-buffering: no`.
 - Кадр: заголовок 8 байт (`u32` длина полезной нагрузки, `u8` вид кадра, 3 байта резерва),
   полезная нагрузка дополнена до кратной 8, чтобы view строился без копирования. Виды: данные

@@ -24,28 +24,54 @@ export type CheckFn<T = any> = (value: T) => Verdict | Promise<Verdict>;
 /** A function or a Standard Schema. A schema's output value is not used: refinements do not transform. */
 export type Validator<T = any> = CheckFn<T> | StandardSchemaV1;
 
-/** A failed check or refinement; the server sends it as the data of `400 BAD_INPUT`. */
-export interface Failure {
-  /** Where the check is declared: `Signup.email`, `Signup.tags[]`, `input`; for a refinement, the type. */
-  field: string;
-  rule: 'check' | 'refine';
-  /** Name of the check, or of the refined type. */
-  name: string;
-  /** Path of the value in the input, `members[3].email`; `''` for the input itself. */
-  path: string;
-  message: string;
+/**
+ * What is wrong with an input: the `data` of a `400 BAD_INPUT` error, and an issue of `inputSchema`
+ * on the client, in the same shape.
+ */
+export interface InputIssue {
+  /** As said after the path: `is shorter than 3`, `is not a valid email`, `expected u8, got 300`. */
+  readonly message: string;
+  /**
+   * Path of the value in the input: `['guests', 1, 'email']`; empty for the input itself. The server
+   * knows it for checks and refinements; for a broken rule it gives `field` and `index` instead.
+   */
+  readonly path?: readonly PropertyKey[];
+  /** Where the rule is declared: `CreateUser.name`, `CreateUser.tags[]`; for a refinement, the type. */
+  readonly field?: string;
+  /**
+   * `'type'`: not a value of the type (the encoder would reject it, or the input is missing).
+   * `'format'`: the server could not read the message, which a ts-bin-rpc client does not send.
+   */
+  readonly rule: 'type' | 'format' | 'min' | 'max' | 'minLength' | 'maxLength' | 'pattern' | 'check' | 'refine';
+  /** Of a check or a refinement: the check, or the refined type. */
+  readonly name?: string;
+  /** Of a rule: its argument; a decimal string for `u64` and `i64`, the source of a `Pattern`. */
+  readonly limit?: number | string;
+  /** Of a rule broken on the server: the row of a column or element of an array. */
+  readonly index?: number;
+}
+
+/** `members[3].email` of `['members', 3, 'email']`; `''` for the input itself. */
+export function pathText(path: readonly PropertyKey[]): string {
+  let s = '';
+  for (const k of path) {
+    if (typeof k === 'number') s += `[${k}]`;
+    else if (typeof k === 'string' && /^[A-Za-z_$][\w$]*$/.test(k)) s += s ? `.${k}` : k;
+    else s += `[${typeof k === 'string' ? JSON.stringify(k) : String(k)}]`;
+  }
+  return s;
 }
 
 /** Runs the checks and refinements of one procedure's input; resolves with the first failure. */
-export type InputValidation = (input: unknown) => Promise<Failure | null>;
+export type InputValidation = (input: unknown) => Promise<InputIssue | null>;
 
 interface Task {
   run: Validator;
   value: unknown;
-  rule: Failure['rule'];
+  rule: 'check' | 'refine';
   name: string;
   field: string;
-  path: string;
+  path: PropertyKey[];
 }
 
 export class Validation {
@@ -94,20 +120,20 @@ export class Validation {
 
     return async (input) => {
       const tasks: Task[] = [];
-      const walk = (t: TypeDesc, v: unknown, field: string, path: string) => {
+      const walk = (t: TypeDesc, v: unknown, field: string, path: PropertyKey[]) => {
         if (t.kind === 'array' && Array.isArray(v) && needs(t.element, `${field}[]`)) {
-          for (let i = 0; i < v.length; i++) walk(t.element, v[i], `${field}[]`, `${path}[${i}]`);
+          for (let i = 0; i < v.length; i++) walk(t.element, v[i], `${field}[]`, [...path, i]);
         }
         if (t.kind === 'map' && (needs(t.key, `${field}[key]`) || needs(t.value, `${field}[value]`))) {
           const entries: Iterable<[unknown, unknown]> = v instanceof Map ? v : Object.entries(v as object);
           for (const [k, x] of entries) {
-            const at = `${path}[${typeof k === 'string' ? JSON.stringify(k) : String(k)}]`;
+            const at = [...path, typeof k === 'string' || typeof k === 'number' ? k : String(k)];
             walk(t.key, k, `${field}[key]`, at);
             walk(t.value, x, `${field}[value]`, at);
           }
         }
         if (t.kind === 'tuple' && Array.isArray(v)) {
-          t.elements.forEach((e, i) => v[i] != null && walk(e.type, v[i], `${field}[${i}]`, `${path}[${i}]`));
+          t.elements.forEach((e, i) => v[i] != null && walk(e.type, v[i], `${field}[${i}]`, [...path, i]));
         }
         let object = t.kind === 'object' ? t.name : undefined;
         if (t.kind === 'union') {
@@ -117,7 +143,7 @@ export class Validation {
         if (object !== undefined && named(object)) {
           for (const f of schema.objects[object]) {
             const fv = (v as Record<string, unknown>)[f.name];
-            if (fv != null) walk(f.type, fv, `${object}.${f.name}`, path ? `${path}.${f.name}` : f.name);
+            if (fv != null) walk(f.type, fv, `${object}.${f.name}`, [...path, f.name]);
           }
         }
         // a value's own checks and refinements run after those of its parts
@@ -126,7 +152,7 @@ export class Validation {
           if (name in this.#refine) tasks.push({ run: this.#refine[name], value: v, rule: 'refine', name, field: name, path });
         }
       };
-      walk(type, input, 'input', '');
+      walk(type, input, 'input', []);
       for (const task of tasks) {
         const failure = await run(task);
         if (failure) return failure;
@@ -141,19 +167,14 @@ export class Validation {
   }
 }
 
-async function run(task: Task): Promise<Failure | null> {
+async function run(task: Task): Promise<InputIssue | null> {
   const { run, rule, name, field, path } = task;
-  const fail = (message: string, at = path): Failure => ({ field, rule, name, path: at, message });
+  const fail = (message: string, at = path): InputIssue => ({ message, path: at, field, rule, name });
   if (typeof run !== 'function') {
     const result = await run['~standard'].validate(task.value);
     if (!result.issues) return null;
     const issue = result.issues[0];
-    let at = path;
-    for (const p of issue?.path ?? []) {
-      const key = typeof p === 'object' ? p.key : p;
-      at = typeof key === 'number' ? `${at}[${key}]` : at ? `${at}.${String(key)}` : String(key);
-    }
-    return fail(issue?.message ?? 'is invalid', at);
+    return fail(issue?.message ?? 'is invalid', [...path, ...(issue?.path ?? []).map((p) => (typeof p === 'object' ? p.key : p))]);
   }
   const verdict = await run(task.value);
   if (verdict === true || verdict === undefined) return null;

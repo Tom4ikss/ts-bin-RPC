@@ -2,7 +2,7 @@
 // `calls: true`, calls. Each request becomes a Response, so the code that reads HTTP responses and
 // streams reads these too. Live subscriptions survive a dropped socket: they start again on the next
 // one, and its first frame is a fresh snapshot.
-import { CONTENT_TYPE, type ClientEntry } from './rpc.ts';
+import { CONTENT_TYPE, RpcError, type ClientEntry } from './rpc.ts';
 import { encodeFrame, FRAME_ERROR, STREAM_CONTENT_TYPE } from './frames.ts';
 import { encodeStart, encodeStop, MSG_FRAMES, MSG_RESPONSE, SKIPPABLE, SOCKET_PROTOCOL } from './socket.ts';
 
@@ -148,7 +148,7 @@ export function webSocket(url: string, options: WebSocketOptions = {}): SocketTr
       }
       r.body!.enqueue(body);
     } else if (b[4] < SKIPPABLE) {
-      drop(id, new TypeError(`unknown WebSocket message type ${b[4]}: update ts-bin-rpc`));
+      drop(id, new RpcError('BAD_RESPONSE', `unknown WebSocket message type ${b[4]}: update ts-bin-rpc`, undefined, { status: 502 }));
     }
   };
 

@@ -1,9 +1,9 @@
 // createHandler: a Fetch API handler, `(Request) => Promise<Response>`, for Bun.serve, Deno.serve,
 // Cloudflare Workers, or Node through `ts-bin-rpc/node`.
-import { DEFAULT_LIMITS, EncodeError, encodeError, RuleError, VerifyError, type Limits } from './runtime.ts';
+import { DEFAULT_LIMITS, EncodeError, encodeError, RULE_TEXT, RuleError, VerifyError, type Limits } from './runtime.ts';
 import { CONTENT_TYPE, errorData, fromBase64Url, HASH_PARAM, INPUT_PARAM, RpcError, SCHEMA_HEADER, toBase64Url, wireStatus, type ServerEntry, type ServerProcedures } from './rpc.ts';
 import type { AnyProcedure, AnyRouter } from './router.ts';
-import { Validation, type InputValidation, type Validator } from './validate.ts';
+import { pathText, Validation, type InputIssue, type InputValidation, type Validator } from './validate.ts';
 import { STREAM_CONTENT_TYPE } from './frames.ts';
 import { SINKS, Sink, toSource, type DirectOut } from './stream-server.ts';
 import { encodeReply, MSG_FRAMES, MSG_RESPONSE, OP_START, OP_STOP, readRequest, SKIPPABLE, SOCKET_PROTOCOL, type SocketRequest } from './socket.ts';
@@ -13,8 +13,8 @@ import { compose, unwrap } from './middleware.ts';
 import { cacheControl, queryOptions } from './query.ts';
 import type { Encoder } from './runtime.ts';
 
-export { stream, channel, type Channel, type StreamOptions, type BatchOptions, type SubscriberOptions, type StreamControl, type StreamSetup } from './stream-server.ts';
-export { live, type Live, type LiveOptions } from './live-server.ts';
+export { stream, channel, type Channel, type StreamOptions, type RowBatchOptions, type SubscriberOptions, type StreamControl, type StreamSetup } from './stream-server.ts';
+export { live, type Live, type LiveStateOptions } from './live-server.ts';
 export type { Stream, LiveStream } from './router.ts';
 export { use, middleware, around, type Call, type Middleware, type Keep, type WithContext, type ContextMismatch } from './middleware.ts';
 export { query, type QueryOptions, type Queried } from './query.ts';
@@ -30,16 +30,21 @@ type Intersect<U> = (U extends unknown ? (x: U) => void : never) extends (x: inf
 /** What `context` has to produce: every `ctx` parameter in the router at once. */
 export type RouterContext<R> = [CtxUnion<R>] extends [never] ? undefined : Intersect<CtxUnion<R>>;
 
-export interface HandlerOptions<R> {
+/**
+ * Options of `createHandler`. `context` is required when a procedure of the router takes `ctx`:
+ * without it, `ctx` would be undefined.
+ */
+export type HandlerOptions<R> = BaseHandlerOptions &
+  ([RouterContext<R>] extends [undefined] ? { context?: ContextFn<R> } : { context: ContextFn<R> });
+
+/** Builds the second argument of procedures, once per request, only for procedures that take one. May throw RpcError. */
+export type ContextFn<R> = (request: Request) => RouterContext<R> | Promise<RouterContext<R>>;
+
+export interface BaseHandlerOptions {
   /** `serverProcedures` (or `procedures`) from generated code. */
   procedures: ServerProcedures;
   /** Path prefix of every procedure. Default: `/`. */
   prefix?: string;
-  /**
-   * Builds the second argument of procedures, once per request, only for procedures that take one.
-   * May throw RpcError.
-   */
-  context?: (request: Request) => RouterContext<R> | Promise<RouterContext<R>>;
   /**
    * The client was generated from another version of a procedure's contract. `warn` logs once per
    * procedure and serves the call: safe changes stay compatible. `error` answers 409 SCHEMA_MISMATCH.
@@ -158,14 +163,14 @@ export function createHandler<R extends AnyRouter>(router: R, options: HandlerOp
         try {
           input = proc.input.decode(bytes, { limits });
         } catch (e) {
-          if (e instanceof RuleError) throw new RpcError('BAD_INPUT', e.message, { field: e.field, rule: e.rule, limit: e.limit, ...(e.index !== undefined && { index: e.index }) });
-          if (e instanceof VerifyError) throw new RpcError('BAD_INPUT', e.message);
+          if (e instanceof RuleError) throw badInput(e.message, { message: RULE_TEXT[e.rule](e.limit), field: e.field, rule: e.rule, limit: e.limit, ...(e.index !== undefined && { index: e.index }) });
+          if (e instanceof VerifyError) throw badInput(e.message, { message: e.message, rule: 'format' });
           throw e;
         }
-      } else if (proc.input && !proc.inputOptional) throw new RpcError('BAD_INPUT', 'input is missing');
+      } else if (proc.input && !proc.inputOptional) throw badInput('input is missing', { message: 'is missing', path: [], rule: 'type' });
       if (route.validate && input !== undefined) {
         const f = await route.validate(input);
-        if (f) throw new RpcError('BAD_INPUT', `${f.path || 'input'}${f.message.startsWith('is ') ? ' ' : ': '}${f.message}`, { ...f });
+        if (f) throw badInput(`${pathText(f.path!) || 'input'}${f.message.startsWith('is ') ? ' ' : ': '}${f.message}`, f);
       }
 
       // Only procedures that take ctx (and their middleware) pay for building it.
@@ -473,6 +478,11 @@ function socketOut(ws: SocketLike, timers: Set<ReturnType<typeof setInterval>>, 
       timers.add(timer);
     },
   };
+}
+
+/** `400 BAD_INPUT`, its data in the shape of an issue of `inputSchema`. */
+function badInput(message: string, issue: InputIssue): RpcError<InputIssue> {
+  return new RpcError('BAD_INPUT', message, issue);
 }
 
 /** The upgrade request of a socket comes from the server's own origin, an allowed one, or not from a browser. */

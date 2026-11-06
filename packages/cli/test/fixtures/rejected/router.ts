@@ -56,6 +56,8 @@ export const appRouter = {
   nullInput: async (input: string | null) => {},
   badRules: async (input: BadRules) => {},
   version: 1,
+  then: async () => {},
+  user: { queryOptions: async () => {} },
 };
 
 export interface BadRules {
