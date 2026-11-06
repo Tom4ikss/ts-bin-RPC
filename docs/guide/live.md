@@ -126,6 +126,9 @@ view would keep the whole message alive.
 
 `options` takes `signal` and `headers`, like any call.
 
+Over a [WebSocket](websocket.md), a live subscription outlives a dropped connection: it starts
+again on a new socket, and its first frame there is a snapshot.
+
 ## Slow clients
 
 When a client reads slower than the deltas come, its queue grows. At `maxBuffered` (4 MB by

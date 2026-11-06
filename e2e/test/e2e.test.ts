@@ -5,7 +5,7 @@ import path from 'node:path';
 import { chromium } from 'playwright';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { handler } from '../src/app.ts';
-import { scenarios, type Report } from '../src/scenarios.ts';
+import { scenarios, socketScenarios, type Report } from '../src/scenarios.ts';
 
 const root = path.join(import.meta.dirname, '..');
 
@@ -25,9 +25,9 @@ const installed = (cmd: string) => {
 };
 const runtimes = all.filter((r) => required.includes(r.name) || installed(r.cmd));
 
-function expectClean(report: Report) {
+function expectClean(report: Report, min = 30) {
   expect(report.failures).toEqual([]);
-  expect(report.passed).toBeGreaterThanOrEqual(30);
+  expect(report.passed).toBeGreaterThanOrEqual(min);
 }
 
 /** Starts the fixture server; resolves with its origin once it prints `listening <port>`. */
@@ -73,6 +73,10 @@ describe.each(runtimes)('server on $name', ({ cmd, args }) => {
 
   it('passes the client scenarios over HTTP', async () => {
     expectClean(await scenarios(server.origin));
+  });
+
+  it('passes the client scenarios over a WebSocket', async () => {
+    expectClean(await socketScenarios(server.origin), 20);
   });
 });
 

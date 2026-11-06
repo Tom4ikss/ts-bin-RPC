@@ -6,6 +6,7 @@ import { procedures } from './tbr.gen.ts';
 export const handler = createHandler(appRouter, {
   procedures,
   prefix: '/rpc',
-  context: (request) => ({ user: request.headers.get('authorization')?.replace(/^Bearer /, '') ?? null }),
+  // A WebSocket cannot carry headers from browsers: its URL carries the token.
+  context: (request) => ({ user: request.headers.get('authorization')?.replace(/^Bearer /, '') ?? new URL(request.url).searchParams.get('token') }),
   onError: () => {}, // `crash` fails on purpose
 });

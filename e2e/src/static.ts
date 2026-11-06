@@ -19,8 +19,10 @@ const page = `<!doctype html>
 } }
 </script>
 <script type="module">
-  import { scenarios } from '/app/scenarios.ts';
-  window.result = scenarios(location.origin).catch((e) => ({ failures: [String(e && e.stack || e)], passed: 0 }));
+  import { scenarios, socketScenarios } from '/app/scenarios.ts';
+  const merge = (rs) => ({ passed: rs.reduce((n, r) => n + r.passed, 0), failures: rs.flatMap((r) => r.failures) });
+  // one after the other: both read counters of the same server
+  window.result = scenarios(location.origin).then(async (a) => merge([a, await socketScenarios(location.origin)])).catch((e) => ({ failures: [String(e && e.stack || e)], passed: 0 }));
 </script>`;
 
 export async function staticFiles(request: Request): Promise<Response> {

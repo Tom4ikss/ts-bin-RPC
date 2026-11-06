@@ -1,6 +1,6 @@
 // Client-side checks against a running fixture server; the same module runs in Node and in browsers.
 // Returns failures instead of throwing, so one run reports everything that broke.
-import { createClient } from 'ts-bin-rpc/client';
+import { createClient, webSocket } from 'ts-bin-rpc/client';
 import { CONTENT_TYPE, EncodeError, RpcError, toPlain } from 'ts-bin-rpc';
 import type { LiveChanges, u32 } from 'ts-bin-rpc';
 import { decodeError } from 'ts-bin-rpc/runtime';
@@ -230,6 +230,93 @@ export async function scenarios(origin: string, fetchFn: typeof fetch = globalTh
     same('live: a row removed', [live.state.has(id), changes.at(-1)?.removed], [false, [id]]);
     live.stop();
   }
+
+  return report;
+}
+
+/** The client over a WebSocket (DESIGN §19): calls, subscriptions and live state on one socket. */
+export async function socketScenarios(origin: string): Promise<Report> {
+  const url = `${origin}/rpc`;
+  const ws = `${origin.replace(/^http/, 'ws')}/rpc`;
+  const api = createClient<typeof appRouter>({ url, procedures, socket: webSocket(ws, { calls: true }) });
+  const signedIn = createClient<typeof appRouter>({ url, procedures, socket: webSocket(`${ws}?token=ann`, { calls: true }) });
+  const streamsOnly = createClient<typeof appRouter>({ url, procedures, socket: webSocket(ws) });
+  const report: Report = { passed: 0, failures: [] };
+  const check = (name: string, ok: unknown, got?: unknown) => {
+    if (ok) report.passed++;
+    else report.failures.push(got === undefined ? `socket: ${name}` : `socket: ${name}: got ${show(got)}`);
+  };
+  const same = (name: string, got: unknown, want: unknown) => check(name, show(got) === show(want), got);
+  const rejects = async (name: string, p: Promise<unknown>, test: (e: unknown) => boolean) => {
+    try {
+      await p;
+      check(`${name}: resolved`, false);
+    } catch (e) {
+      check(name, test(e), e instanceof Error ? `${e.name} ${(e as RpcError).code ?? ''} ${e.message}` : e);
+    }
+  };
+  const rpcError = (code: string, status: number) => (e: unknown) => e instanceof RpcError && e.code === code && e.status === status;
+
+  // Calls
+  same('call', (await api.user.get({ id: 2 })).name, 'Bob');
+  same('call without input', (await api.user.list()).length, 3);
+  same('typed arrays', (await api.series({ n: 4 })).t.length, 4);
+  await rejects('error with data', api.user.get({ id: 99 }), (e) => rpcError('NOT_FOUND', 404)(e) && show((e as RpcError).data) === show({ id: 99 }));
+  await rejects('internal errors stay on the server', api.crash(), (e) => rpcError('INTERNAL', 500)(e) && !(e as Error).message.includes('secret'));
+  await rejects('server-side rules', api.rename({ name: '', nick: [], age: 1 }), rpcError('BAD_INPUT', 400));
+  const aborted = new AbortController();
+  aborted.abort();
+  await rejects('abort signal', api.whoami({ signal: aborted.signal }), (e) => (e as Error).name === 'AbortError');
+  same('ctx from the socket URL', await signedIn.whoami(), { user: 'ann' });
+  await rejects('middleware refuses without it', api.account.me(), rpcError('UNAUTHORIZED', 401));
+  same('middleware passes with it', await signedIn.account.me(), { name: 'ann' });
+  same('queries keep GET over HTTP', await api.version(), { version: '1.0' });
+  same('calls at once', (await Promise.all([1, 2, 3, 1, 2, 3].map((id) => api.user.get({ id })))).map((u) => u.id), [1, 2, 3, 1, 2, 3]);
+
+  // Streams
+  const ticks = await new Promise<{ n: number; last?: number; error?: string }>((resolve) => {
+    let n = 0, last: number | undefined;
+    streamsOnly.stream.ticks.subscribe({ n: 300, burst: 5 }, { row: (t) => (n++, (last = t.seq)), end: () => resolve({ n, last }), error: (e) => resolve({ n, error: e.code }) });
+  });
+  same('stream to its end', ticks, { n: 300, last: 299 });
+  const left: number[] = [];
+  for await (const x of streamsOnly.stream.countdown.subscribe({ from: 3 })) left.push(x.left);
+  same('async generator', left, [3, 2, 1]);
+  same(
+    'stream error with data',
+    await new Promise((resolve) => streamsOnly.stream.failing.subscribe({ error: (e) => resolve([e.code, e.data]), end: () => resolve('ended') })),
+    ['UPSTREAM', { retryIn: 5 }],
+  );
+  same('error before the first frame', await new Promise((resolve) => streamsOnly.stream.ticks.subscribe({ n: 200_000 }, { error: (e) => resolve([e.code, e.status]), end: () => resolve('ended') })), ['BAD_INPUT', 400]);
+  same('stream behind middleware', await new Promise((resolve) => {
+    const seen: string[] = [];
+    signedIn.account.ticks.subscribe({ n: 2 }, { row: (t) => seen.push(`${t.venue}${t.seq}`), end: () => resolve(seen) });
+  }), ['ann0', 'ann1']);
+  const before = (await api.stream.stats()).cleaned;
+  let got = 0;
+  const forever = streamsOnly.stream.forever.subscribe(() => got++);
+  for (let i = 0; i < 200 && got < 3; i++) await sleep(10);
+  forever.stop();
+  let cleaned = before;
+  for (let i = 0; i < 200 && cleaned === before; i++) {
+    await sleep(10);
+    cleaned = (await api.stream.stats()).cleaned;
+  }
+  same('stop() reaches the server', cleaned, before + 1);
+
+  // Live state
+  const id = (2000 + Math.floor(Math.random() * 1e6)) as u32;
+  const changes: LiveChanges<u32>[] = [];
+  const live = streamsOnly.stream.units.subscribe((_, c) => changes.push(c));
+  for (let i = 0; i < 200 && !changes.length; i++) await sleep(10);
+  same('live: a snapshot first', changes[0]?.snapshot, true);
+  await api.stream.move({ id, x: 4, y: 5 });
+  for (let i = 0; i < 200 && live.state.get(id)?.x !== 4; i++) await sleep(10);
+  same('live: a change', live.state.get(id), { id, name: `u${id}`, x: 4, y: 5, hp: 100, kind: 'unit' });
+  await api.stream.kill({ id });
+  for (let i = 0; i < 200 && live.state.has(id); i++) await sleep(10);
+  same('live: a removal', live.state.has(id), false);
+  live.stop();
 
   return report;
 }

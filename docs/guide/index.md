@@ -52,6 +52,8 @@ chart.setData([m.t, m.cpu]); // typed arrays over the response bytes, nothing co
   at 20 000 rows/s. See [Streams](./streams.md).
 - **Live state.** Rows by key that every client keeps in sync: a snapshot, then only the fields
   that changed, encoded once for all subscribers. See [Live state](./live.md).
+- **WebSocket.** Subscriptions and calls over one socket, with live state that reconnects by
+  itself. See [WebSocket](./websocket.md).
 - **Small client.** About 10 KB gzip for a real app, of which the runtime is 4.2 KB. The client
   bundle holds only input encoders and output decoders.
 - **Any runtime.** The server is a Fetch API handler (Node, Bun, Deno, Workers). No `eval`, so
@@ -67,8 +69,9 @@ chart.setData([m.t, m.cpu]); // typed arrays over the response bytes, nothing co
 - **The payloads are small and mostly text.** Twenty users with names and emails are about the
   same size as JSON after gzip, sometimes a few percent larger. The gain grows with numbers, with
   many objects, and when you read only some fields.
-- **You need tRPC's ecosystem today:** WebSocket subscriptions, request batching. These are not
-  there yet. [TanStack Query](./tanstack-query.md) is. See the [FAQ](./faq.md).
+- **You need tRPC's ecosystem today:** request batching and adapters for many frameworks are not
+  there yet. [TanStack Query](./tanstack-query.md) and [WebSocket](./websocket.md) subscriptions
+  are. See the [FAQ](./faq.md).
 
 > [!WARNING]
 > ts-bin-rpc is an alpha: `npm install ts-bin-rpc`. The wire format may still change before 1.0; such changes bump the minor version, so `^0.2.0` stays compatible.

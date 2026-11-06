@@ -266,7 +266,7 @@ Runtime подрос на `Check.cols`: проверка каталога оку
 | 5.8 | Бенч на реальном транспорте: поток тиков через fetch против SSE и NDJSON, задержка и CPU | S |
 | 5.9 | Пример: котировки или телеметрия в `examples/` | S |
 
-После: WebSocket-транспорт, живое состояние (snapshot + delta, кольцевые буферы), WebTransport.
+После: ~~WebSocket-транспорт~~ (сделано, [руководство](guide/websocket.md)), ~~живое состояние~~ (сделано, [руководство](guide/live.md)), WebTransport.
 
 ## Дальше — порядок на ближайшее
 
@@ -351,7 +351,7 @@ JSDoc-тега, вход — бинарный base64url (читаемые пар
 
 Порядок определяет обратная связь. Кандидаты:
 1. ~~Адаптер TanStack Query~~ — сделано: `ts-bin-rpc/tanstack`, `queryOptions`/`mutationOptions`/`queryKey`/`pathKey` из клиента, в кэше обычные объекты (`decode: 'eager'`), view по `tbr: { decode: 'lazy' }` ([руководство](guide/tanstack-query.md)). Дальше по запросу: `infiniteQueryOptions`, стримы через `streamedQuery`.
-2. Стриминг — фаза 5 выше; после неё WebSocket и WebTransport. ~~Живое состояние~~ — сделано ([руководство](guide/live.md)).
+2. Стриминг — фаза 5 выше; после неё WebTransport. ~~Живое состояние~~ — сделано ([руководство](guide/live.md)). ~~WebSocket~~ — сделано: вызовы и подписки по одному сокету, live переподключается сам ([руководство](guide/websocket.md), [DESIGN §19](DESIGN.md#19-websocket)).
 3. ~~Мидлвары поверх `ctx`~~ — сделано: `use()`, `middleware()`, `around()` ([DESIGN §15](DESIGN.md#15-мидлвары)).
    Бизнес-валидация (бывший `extendValidation`) — сделана: правила в типах, `Check`, форматы и `refine`.
 4. ~~Vite-плагин~~ — сделано: `ts-bin-rpc/vite`, генерация перед `vite build` и watch в dev-сервере, ошибки в оверлее ([руководство](guide/cli.md#vite-plugin)). Отдача роутера из dev-сервера остаётся в примере: она зависит от сервера приложения.

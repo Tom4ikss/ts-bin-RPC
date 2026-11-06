@@ -3,6 +3,9 @@
 import { FLAG_ERROR, toPlain, VerifyError, type Limits } from './runtime.ts';
 import { CALL, codeForStatus, CONTENT_TYPE, devtoolsHook, HASH_PARAM, INPUT_PARAM, MAX_GET_INPUT, readError, RpcError, SCHEMA_HEADER, toBase64Url, type Callable, type ClientEntry, type ClientProcedures } from './rpc.ts';
 import type { StreamEnv } from './stream-client.ts';
+import type { SocketTransport } from './ws-client.ts';
+
+export { webSocket, type WebSocketOptions, type SocketTransport } from './ws-client.ts';
 import type { CallOptions, Client, DecodeMode, ProcedurePath } from './router.ts';
 
 export interface ClientOptions<R = unknown> {
@@ -28,6 +31,11 @@ export interface ClientOptions<R = unknown> {
   limits?: Partial<Limits>;
   /** Log every call to the console: procedure, time, size, result. */
   debug?: boolean;
+  /**
+   * `webSocket(url)`: subscriptions, and calls with `calls: true`, go over one WebSocket. Headers are
+   * not sent over it: the server gets the cookies and the URL of the socket.
+   */
+  socket?: SocketTransport;
 }
 
 
@@ -78,7 +86,10 @@ export function createClient<R>(options: ClientOptions<R>): Client<R> {
     const hook = devtoolsHook();
     const t0 = performance.now();
     const fetchFn = options.fetch ?? globalThis.fetch;
-    const res = get
+    const socket = !get && options.socket?.calls ? options.socket : undefined;
+    const res = socket
+      ? await socket.request(path, proc, body, opts.signal)
+      : get
       ? await fetchFn(`${base}/${path}?${HASH_PARAM}=${proc.hash}${encoded ? `&${INPUT_PARAM}=${encoded}` : ''}`, { method: 'GET', headers: await userHeaders(opts), signal: opts.signal })
       : await fetchFn(`${base}/${path}`, { method: 'POST', body, headers: await requestHeaders(proc, opts), signal: opts.signal });
     const bytes = new Uint8Array(await res.arrayBuffer());
@@ -151,6 +162,7 @@ export function createClient<R>(options: ClientOptions<R>): Client<R> {
     verify,
     limits,
     debug,
+    socket: options.socket,
   };
   return proxy('') as Client<R>;
 }

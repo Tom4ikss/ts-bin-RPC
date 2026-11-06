@@ -50,6 +50,13 @@ units.update(1, { x: 5 }); // subscribers get { id: 1, x: 5 }
 api.units.subscribe((state, { set, removed }) => redraw(state, set, removed));
 ```
 
+Subscriptions, and calls if you want, can share one WebSocket; live state reconnects by itself
+([guide](docs/guide/websocket.md)):
+
+```ts
+const api = createClient<AppRouter>({ url: '/rpc', procedures, socket: webSocket('wss://example.com/rpc') });
+```
+
 With TanStack Query, `ts-bin-rpc/tanstack` gives options for every procedure, with typed keys and
 invalidation by path ([guide](docs/guide/tanstack-query.md)):
 

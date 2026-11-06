@@ -4,6 +4,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { DEFAULT_LIMITS } from './runtime.ts';
 import { STREAM_CONTENT_TYPE } from './frames.ts';
 import { SINKS } from './stream-server.ts';
+import type { Handler } from './server.ts';
 
 export interface NodeListenerOptions {
   /** Requests with a larger body are answered 413 before the handler runs. Default: 64 MB. */
@@ -35,13 +36,8 @@ export function toNodeListener(
         at += c.length;
       }
 
-      const headers = new Headers();
-      for (const [k, v] of Object.entries(req.headers)) {
-        if (Array.isArray(v)) for (const x of v) headers.append(k, x);
-        else if (v !== undefined) headers.set(k, v);
-      }
+      const { url, headers } = head(req);
       const method = req.method ?? 'GET';
-      const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`);
       // request.signal aborts when the client goes away: streaming procedures stop their sources.
       const abort = new AbortController();
       res.once('close', () => abort.abort());
@@ -79,5 +75,41 @@ export function toNodeListener(
       if (!res.headersSent) res.writeHead(500);
       res.end();
     }
+  };
+}
+
+function head(req: IncomingMessage): { url: URL; headers: Headers } {
+  const headers = new Headers();
+  for (const [k, v] of Object.entries(req.headers)) {
+    if (Array.isArray(v)) for (const x of v) headers.append(k, x);
+    else if (v !== undefined) headers.set(k, v);
+  }
+  return { url: new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`), headers };
+}
+
+/** What `acceptWebSocket` needs of a socket of the `ws` package (or anything shaped like it). */
+export interface NodeWebSocket {
+  send(data: Uint8Array<ArrayBuffer>): void;
+  close(code?: number, reason?: string): void;
+  readonly bufferedAmount: number;
+  on(event: 'message', listener: (data: ArrayBuffer | ArrayBufferView | ArrayBufferView[], isBinary: boolean) => void): unknown;
+  on(event: 'close', listener: () => void): unknown;
+}
+
+/**
+ * Serves calls and subscriptions over WebSocket connections of the `ws` package:
+ * `new WebSocketServer({ server, path: '/rpc' }).on('connection', acceptWebSocket(handler))`.
+ * `context` gets the upgrade request, with its cookies and headers, for every call.
+ */
+export function acceptWebSocket(handler: Handler): (ws: NodeWebSocket, req: IncomingMessage) => void {
+  return (ws, req) => {
+    const { url, headers } = head(req);
+    const abort = new AbortController();
+    const conn = handler.socket(ws, new Request(url, { headers, signal: abort.signal }));
+    ws.on('message', (data, isBinary) => (isBinary ? conn.message(data) : ws.close(1003, 'ts-bin-rpc messages are binary')));
+    ws.on('close', () => {
+      abort.abort();
+      conn.close();
+    });
   };
 }

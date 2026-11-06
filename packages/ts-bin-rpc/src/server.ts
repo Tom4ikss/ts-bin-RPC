@@ -5,7 +5,8 @@ import { CONTENT_TYPE, fromBase64Url, HASH_PARAM, INPUT_PARAM, RpcError, SCHEMA_
 import type { AnyProcedure, AnyRouter } from './router.ts';
 import { Validation, type InputValidation, type Validator } from './validate.ts';
 import { STREAM_CONTENT_TYPE } from './frames.ts';
-import { SINKS, Sink, toSource } from './stream-server.ts';
+import { SINKS, Sink, toSource, type DirectOut } from './stream-server.ts';
+import { encodeReply, MSG_FRAMES, MSG_RESPONSE, OP_STOP, readRequest } from './socket.ts';
 import { LiveSource } from './live-server.ts';
 import { compose, unwrap } from './middleware.ts';
 import { cacheControl, queryOptions } from './query.ts';
@@ -76,7 +77,7 @@ interface Route {
 
 const encoder = new TextEncoder();
 
-export function createHandler<R extends AnyRouter>(router: R, options: HandlerOptions<R>): (request: Request) => Promise<Response> {
+export function createHandler<R extends AnyRouter>(router: R, options: HandlerOptions<R>): Handler {
   const { procedures, context, schemaMismatch = 'warn', onError = defaultOnError } = options;
   const limits = { ...DEFAULT_LIMITS, ...options.limits };
   let prefix = options.prefix ?? '/';
@@ -108,51 +109,22 @@ export function createHandler<R extends AnyRouter>(router: R, options: HandlerOp
   if (unused.length) throw new Error(`refine names ${unused.map((n) => `'${n}'`).join(', ')}, which no procedure input contains`);
 
   const warned = new Set<string>();
+  /** A client of another version of the contract: logged once, or the error to answer with. */
+  const mismatch = (path: string, proc: ServerEntry, clientHash: string | null): RpcError | undefined => {
+    if (clientHash === null || clientHash === proc.hash || schemaMismatch === 'ignore') return undefined;
+    const message = `'${path}': the client was generated from another version of this procedure`;
+    if (schemaMismatch === 'error') return new RpcError('SCHEMA_MISMATCH', message);
+    if (!warned.has(path)) {
+      warned.add(path);
+      console.warn(`ts-bin-rpc: ${message} (client ${clientHash}, server ${proc.hash})`);
+    }
+    return undefined;
+  };
 
-  return async (request) => {
-    const url = new URL(request.url);
-    const pathname = url.pathname;
-    const path = pathname.startsWith(prefix) ? pathname.slice(prefix.length) : '';
-    const route = routes.get(path);
-    if (!route) return fail(new RpcError('NOT_FOUND', `unknown procedure '${path || pathname}'`));
-    const get = request.method === 'GET';
-    if (get ? !route.cache : request.method !== 'POST') {
-      const allow = route.cache ? 'GET, POST' : 'POST';
-      return fail(new RpcError('METHOD_NOT_ALLOWED', route.cache ? 'queries are called with GET or POST' : 'procedures are called with POST'), { allow });
-    }
-    // Requiring our content type also keeps cross-site HTML forms and simple requests out: browsers send
-    // a CORS preflight for anything else. A GET has no body; only queries, free of side effects, take it.
-    if (!get && request.headers.get('content-type')?.split(';')[0].trim() !== CONTENT_TYPE) {
-      return fail(new RpcError('UNSUPPORTED_MEDIA_TYPE', `expected content-type ${CONTENT_TYPE}`));
-    }
+  /** Decodes the input, runs the procedure and encodes its result: everything but HTTP. */
+  const execute = async (route: Route, path: string, bytes: Uint8Array, request: Request): Promise<Outcome> => {
     const { proc } = route;
-    // Errors of a GET must not be cached: the next call should reach the procedure again.
-    const noStore: Record<string, string> = get ? { 'cache-control': 'no-store' } : {};
-    const clientHash = get ? url.searchParams.get(HASH_PARAM) : request.headers.get(SCHEMA_HEADER);
-    if (clientHash !== null && clientHash !== proc.hash && schemaMismatch !== 'ignore') {
-      const message = `'${path}': the client was generated from another version of this procedure`;
-      if (schemaMismatch === 'error') return fail(new RpcError('SCHEMA_MISMATCH', message), noStore, proc);
-      if (!warned.has(path)) {
-        warned.add(path);
-        console.warn(`ts-bin-rpc: ${message} (client ${clientHash}, server ${proc.hash})`);
-      }
-    }
-
     try {
-      let bytes: Uint8Array;
-      if (get) {
-        const text = url.searchParams.get(INPUT_PARAM) ?? '';
-        if (text.length > Math.ceil((limits.maxBytes * 4) / 3)) throw new RpcError('PAYLOAD_TOO_LARGE', `request is larger than ${limits.maxBytes} bytes`);
-        const decoded = fromBase64Url(text);
-        if (!decoded) throw new RpcError('BAD_INPUT', `'${INPUT_PARAM}' is not base64url`);
-        bytes = decoded;
-      } else {
-        const declared = Number(request.headers.get('content-length') ?? 0);
-        if (declared > limits.maxBytes) throw new RpcError('PAYLOAD_TOO_LARGE', `request is larger than ${limits.maxBytes} bytes`);
-        bytes = new Uint8Array(await request.arrayBuffer());
-        if (bytes.length > limits.maxBytes) throw new RpcError('PAYLOAD_TOO_LARGE', `request is larger than ${limits.maxBytes} bytes`);
-      }
-
       let input: unknown;
       if (proc.input && bytes.length > 0) {
         try {
@@ -177,44 +149,200 @@ export function createHandler<R extends AnyRouter>(router: R, options: HandlerOp
           const expected = proc.live ? 'live().by().subscribe()' : 'stream(), channel().subscribe() or an async iterable';
           const got = source instanceof LiveSource ? 'live state' : result === null ? 'null' : typeof result;
           onError(new TypeError(`${proc.live ? 'live' : 'streaming'} procedure returned ${got}, not ${expected}`), { path, request });
-          return fail(new RpcError('BAD_OUTPUT', 'the procedure returned a value that does not match its declared type'), {}, proc);
+          return { error: new RpcError('BAD_OUTPUT', 'the procedure returned a value that does not match its declared type') };
         }
-        const sink = new Sink(request.signal);
-        source.start({ encoder: proc.output as Encoder<unknown[]>, delta: proc.delta, sink, report: (e) => onError(e, { path, request }) });
-        // no-transform and X-Accel-Buffering keep proxies (nginx, CDNs) from buffering the frames.
-        const response = new Response(sink.readable, {
-          status: 200,
-          headers: headers(proc, { 'content-type': STREAM_CONTENT_TYPE, 'cache-control': 'no-store, no-transform', 'x-accel-buffering': 'no' }),
-        });
-        SINKS.set(response, sink);
-        return response;
+        return {
+          start: (sink) => source.start({ encoder: proc.output as Encoder<unknown[]>, delta: proc.delta, sink, report: (e) => onError(e, { path, request }) }),
+        };
       }
-      let body = new Uint8Array(0);
-      if (proc.output) {
-        try {
-          body = proc.output.encode(result);
-        } catch (e) {
-          if (!(e instanceof EncodeError)) throw e;
-          // The procedure broke its own contract (TS lets `300` into a u8): a server bug, so 5xx, but
-          // a code of its own so that monitoring tells it apart from crashes.
-          onError(e, { path, request });
-          return fail(new RpcError('BAD_OUTPUT', 'the procedure returned a value that does not match its declared type'), noStore, proc);
-        }
+      if (!proc.output) return { body: new Uint8Array(0) };
+      try {
+        return { body: proc.output.encode(result) };
+      } catch (e) {
+        if (!(e instanceof EncodeError)) throw e;
+        // The procedure broke its own contract (TS lets `300` into a u8): a server bug, so 5xx, but
+        // a code of its own so that monitoring tells it apart from crashes.
+        onError(e, { path, request });
+        return { error: new RpcError('BAD_OUTPUT', 'the procedure returned a value that does not match its declared type') };
       }
+    } catch (e) {
+      if (e instanceof RpcError) return { error: e };
+      onError(e, { path, request });
+      return { error: new RpcError('INTERNAL', 'internal error') };
+    }
+  };
+
+  const handler = async (request: Request): Promise<Response> => {
+    const url = new URL(request.url);
+    const pathname = url.pathname;
+    const path = pathname.startsWith(prefix) ? pathname.slice(prefix.length) : '';
+    const route = routes.get(path);
+    if (!route) return fail(new RpcError('NOT_FOUND', `unknown procedure '${path || pathname}'`));
+    const get = request.method === 'GET';
+    if (get ? !route.cache : request.method !== 'POST') {
+      const allow = route.cache ? 'GET, POST' : 'POST';
+      return fail(new RpcError('METHOD_NOT_ALLOWED', route.cache ? 'queries are called with GET or POST' : 'procedures are called with POST'), { allow });
+    }
+    // Requiring our content type also keeps cross-site HTML forms and simple requests out: browsers send
+    // a CORS preflight for anything else. A GET has no body; only queries, free of side effects, take it.
+    if (!get && request.headers.get('content-type')?.split(';')[0].trim() !== CONTENT_TYPE) {
+      return fail(new RpcError('UNSUPPORTED_MEDIA_TYPE', `expected content-type ${CONTENT_TYPE}`));
+    }
+    const { proc } = route;
+    // Errors of a GET must not be cached: the next call should reach the procedure again.
+    const noStore: Record<string, string> = get ? { 'cache-control': 'no-store' } : {};
+    const wrong = mismatch(path, proc, get ? url.searchParams.get(HASH_PARAM) : request.headers.get(SCHEMA_HEADER));
+    if (wrong) return fail(wrong, noStore, proc);
+
+    let bytes: Uint8Array;
+    try {
       if (get) {
-        // The cache revalidates with If-None-Match; an unchanged response goes back without a body.
-        const etag = entityTag(body);
-        const cached = { 'cache-control': route.cache!, etag };
-        if (matches(request.headers.get('if-none-match'), etag)) return new Response(null, { status: 304, headers: { [SCHEMA_HEADER]: proc.hash, ...cached } });
-        return new Response(body, { status: 200, headers: headers(proc, cached) });
+        const text = url.searchParams.get(INPUT_PARAM) ?? '';
+        if (text.length > Math.ceil((limits.maxBytes * 4) / 3)) throw new RpcError('PAYLOAD_TOO_LARGE', `request is larger than ${limits.maxBytes} bytes`);
+        const decoded = fromBase64Url(text);
+        if (!decoded) throw new RpcError('BAD_INPUT', `'${INPUT_PARAM}' is not base64url`);
+        bytes = decoded;
+      } else {
+        const declared = Number(request.headers.get('content-length') ?? 0);
+        if (declared > limits.maxBytes) throw new RpcError('PAYLOAD_TOO_LARGE', `request is larger than ${limits.maxBytes} bytes`);
+        bytes = new Uint8Array(await request.arrayBuffer());
+        if (bytes.length > limits.maxBytes) throw new RpcError('PAYLOAD_TOO_LARGE', `request is larger than ${limits.maxBytes} bytes`);
       }
-      return new Response(body, { status: 200, headers: headers(proc) });
     } catch (e) {
       if (e instanceof RpcError) return fail(e, noStore, proc);
       onError(e, { path, request });
       return fail(new RpcError('INTERNAL', 'internal error'), noStore, proc);
     }
+
+    const out = await execute(route, path, bytes, request);
+    if ('error' in out) return fail(out.error, noStore, proc);
+    if ('start' in out) {
+      const sink = new Sink(request.signal);
+      out.start(sink);
+      // no-transform and X-Accel-Buffering keep proxies (nginx, CDNs) from buffering the frames.
+      const response = new Response(sink.readable, {
+        status: 200,
+        headers: headers(proc, { 'content-type': STREAM_CONTENT_TYPE, 'cache-control': 'no-store, no-transform', 'x-accel-buffering': 'no' }),
+      });
+      SINKS.set(response, sink);
+      return response;
+    }
+    const body = out.body;
+    if (get) {
+      // The cache revalidates with If-None-Match; an unchanged response goes back without a body.
+      const etag = entityTag(body);
+      const cached = { 'cache-control': route.cache!, etag };
+      if (matches(request.headers.get('if-none-match'), etag)) return new Response(null, { status: 304, headers: { [SCHEMA_HEADER]: proc.hash, ...cached } });
+      return new Response(body, { status: 200, headers: headers(proc, cached) });
+    }
+    return new Response(body, { status: 200, headers: headers(proc) });
   };
+
+  // One WebSocket connection (FORMAT §13): calls and subscriptions by ID. `request` is the upgrade
+  // request: `context` gets it for every call, as it gets the request of an HTTP call.
+  const socket = (ws: SocketLike, request: Request): SocketConnection => {
+    const subs = new Map<number, AbortController>();
+    let closed = false;
+    const reply = (id: number, type: number, status: number, body: Uint8Array) => {
+      if (!closed) ws.send(encodeReply(id, type, status, body));
+    };
+    const start = async (id: number, path: string, hash: string, bytes: Uint8Array) => {
+      const route = routes.get(path);
+      const respond = (e: RpcError) => reply(id, MSG_RESPONSE, e.status, errorBody(e));
+      if (!route) return respond(new RpcError('NOT_FOUND', `unknown procedure '${path}'`));
+      const wrong = mismatch(path, route.proc, hash || null);
+      if (wrong) return respond(wrong);
+      if (bytes.length > limits.maxBytes) return respond(new RpcError('PAYLOAD_TOO_LARGE', `request is larger than ${limits.maxBytes} bytes`));
+      const abort = new AbortController();
+      if (route.proc.stream) subs.set(id, abort);
+      // a view over a message needs it 8-aligned; WebSocket servers may hand out slices of a pool
+      const out = await execute(route, path, bytes.byteOffset % 8 ? bytes.slice() : bytes, request);
+      if (closed || abort.signal.aborted) return;
+      if ('error' in out) {
+        subs.delete(id);
+        return respond(out.error);
+      }
+      if ('body' in out) return reply(id, MSG_RESPONSE, 200, out.body);
+      const sink = new Sink(abort.signal);
+      out.start(sink);
+      sink.direct(socketOut(ws, (chunk) => reply(id, MSG_FRAMES, 0, chunk), () => subs.get(id) === abort && subs.delete(id)));
+    };
+    return {
+      message(data) {
+        if (closed) return;
+        if (typeof data === 'string') return ws.close(1003, 'ts-bin-rpc messages are binary');
+        const req = readRequest(toBytes(data));
+        if (!req) return ws.close(1002, 'malformed ts-bin-rpc message');
+        if (req.op === OP_STOP) {
+          subs.get(req.id)?.abort();
+          subs.delete(req.id);
+          return;
+        }
+        void start(req.id, req.path, req.hash, req.input);
+      },
+      close() {
+        closed = true;
+        for (const a of subs.values()) a.abort();
+        subs.clear();
+      },
+    };
+  };
+
+  return Object.assign(handler, { socket });
+}
+
+type Outcome = { error: RpcError } | { body: Uint8Array<ArrayBuffer> } | { start: (sink: Sink) => void };
+
+/** What `handler.socket()` needs of a WebSocket: `ws` in Node, Bun's and Deno's sockets, browsers'. */
+export interface SocketLike {
+  send(data: Uint8Array<ArrayBuffer>): void;
+  close(code?: number, reason?: string): void;
+  /** Bytes queued to send. Without it, subscriptions do not wait for a slow client. */
+  readonly bufferedAmount?: number;
+}
+
+/** A connection to a WebSocket: hand it every message, and tell it when the socket closed. */
+export interface SocketConnection {
+  message(data: ArrayBuffer | ArrayBufferView | ArrayBufferView[] | string): void;
+  close(): void;
+}
+
+/** A Fetch handler that also takes WebSocket connections: `handler.socket(ws, upgradeRequest)`. */
+export type Handler = ((request: Request) => Promise<Response>) & { socket(ws: SocketLike, request: Request): SocketConnection };
+
+/** Above this many bytes queued on the socket, subscriptions queue frames in their sinks (maxBuffered). */
+const SOCKET_HIGH_WATER = 1 << 20;
+
+/** A sink's output over a socket shared by subscriptions; 'drain' is polled, as sockets do not tell. */
+function socketOut(ws: SocketLike, send: (chunk: Uint8Array) => void, end: () => void): DirectOut {
+  return {
+    write(chunk) {
+      send(chunk);
+      return (ws.bufferedAmount ?? 0) < SOCKET_HIGH_WATER;
+    },
+    end,
+    once(_event, listener) {
+      const timer = setInterval(() => {
+        if ((ws.bufferedAmount ?? 0) >= SOCKET_HIGH_WATER / 2) return;
+        clearInterval(timer);
+        listener();
+      }, 5);
+    },
+  };
+}
+
+function toBytes(data: ArrayBuffer | ArrayBufferView | ArrayBufferView[]): Uint8Array {
+  if (data instanceof ArrayBuffer) return new Uint8Array(data);
+  if (!Array.isArray(data)) return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+  // `ws` hands a fragmented message over as its fragments
+  const n = data.reduce((s, d) => s + d.byteLength, 0);
+  const out = new Uint8Array(n);
+  let at = 0;
+  for (const d of data) {
+    out.set(new Uint8Array(d.buffer, d.byteOffset, d.byteLength), at);
+    at += d.byteLength;
+  }
+  return out;
 }
 
 /**
@@ -266,9 +394,13 @@ function headers(proc?: ServerEntry, extra: Record<string, string> = {}): Record
   return { 'content-type': CONTENT_TYPE, ...(proc ? { [SCHEMA_HEADER]: proc.hash } : {}), ...extra };
 }
 
-function fail(e: RpcError, extra: Record<string, string> = {}, proc?: ServerEntry): Response {
+function errorBody(e: RpcError): Uint8Array<ArrayBuffer> {
   const data = e.data === undefined ? undefined : encoder.encode(JSON.stringify(e.data));
-  return new Response(encodeError({ code: e.code, message: e.message, data }), { status: e.status, headers: headers(proc, extra) });
+  return encodeError({ code: e.code, message: e.message, data }) as Uint8Array<ArrayBuffer>;
+}
+
+function fail(e: RpcError, extra: Record<string, string> = {}, proc?: ServerEntry): Response {
+  return new Response(errorBody(e), { status: e.status, headers: headers(proc, extra) });
 }
 
 function defaultOnError(error: unknown, info: { path: string }) {

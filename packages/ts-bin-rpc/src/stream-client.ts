@@ -5,6 +5,7 @@ import { columnsOf, toPlain, VerifyError, type Limits } from './runtime.ts';
 import { CONTENT_TYPE, codeForStatus, devtoolsHook, readError, RpcError, type ClientEntry, type DevtoolsTap } from './rpc.ts';
 import { FrameReader, FRAME_DATA, FRAME_END, FRAME_ERROR, FRAME_HEARTBEAT, STREAM_CONTENT_TYPE } from './frames.ts';
 import type { CallOptions, DecodeMode, StreamHandler, Subscription } from './router.ts';
+import type { SocketTransport } from './ws-client.ts';
 
 export interface StreamEnv {
   url: string;
@@ -14,6 +15,7 @@ export interface StreamEnv {
   verify: boolean;
   limits?: Partial<Limits>;
   debug: boolean;
+  socket?: SocketTransport;
 }
 
 interface Queue {
@@ -134,7 +136,9 @@ export async function pump(
   const t0 = env.debug ? performance.now() : 0;
   try {
     const body = proc.input && !(input === undefined && proc.inputOptional) ? proc.input.encode(input) : new Uint8Array(0);
-    const res = await env.fetch(`${env.url}/${path}`, { method: 'POST', body, headers: await env.headers(proc, opts), signal: abort.signal });
+    const res = env.socket
+      ? await env.socket.request(path, proc, body, abort.signal)
+      : await env.fetch(`${env.url}/${path}`, { method: 'POST', body, headers: await env.headers(proc, opts), signal: abort.signal });
     const type = res.headers.get('content-type')?.split(';')[0].trim();
     if (type !== STREAM_CONTENT_TYPE || !res.ok || !res.body) {
       const b = new Uint8Array(await res.arrayBuffer());
