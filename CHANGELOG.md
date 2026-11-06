@@ -10,6 +10,94 @@ From 0.2.0, a change to the wire format or another breaking change bumps the min
 0.3), and patch versions stay compatible: `^0.2.0` never picks up a new format. Versions before
 0.2.0 were prereleases under the `alpha` dist-tag.
 
+## 0.6.0
+
+Not compatible with 0.5: messages are format 2, which 0.5 rejects with a `VerifyError` and 0.6
+takes alone, and the generated code, the lockfile and the WebSocket protocol change too. These are
+the fixes of an audit before the beta, all breaking changes in one release. To upgrade:
+
+1. Update `ts-bin-rpc` on servers and clients together.
+2. Run `tbr generate --allow-breaking` once and commit the lockfile: anonymous types are named after
+   their place now, so their entries move, and the lockfile becomes format 1.
+3. On Bun and Deno, accept the WebSocket subprotocol in the upgrade
+   ([guide](https://tom4ikss.github.io/ts-bin-RPC/guide/websocket/#server)); `ws` on Node does it
+   by itself.
+4. If you set `context` nowhere while a procedure takes `ctx`, the types now ask for it.
+
+Format 2 ([FORMAT.md](docs/FORMAT.md)):
+
+- A union body carries its number of variants. With 0.5, a variant added to an input made an old
+  server misread vectors of that union without an error.
+- The width of an enum's indexes is fixed in the lockfile. With 0.5, the 257th value widened them
+  from 1 byte to 2 and old peers misread every value; now that change is breaking.
+- Header flags: bits 2–4 must be understood by a reader, bits 5–7 may be ignored. Column flags are
+  checked strictly; a string in a column cannot start or end inside a surrogate pair; an empty
+  typed list may have no child; a byte array counts as one element.
+- A message gets at most `4096 + 8 × its length` elements: 84 bytes could claim 16M objects before.
+
+Generated code and the lockfile:
+
+- An anonymous type is named after its place in the contract (`user.list:input`), and a
+  generic alias keeps its arguments (`Page<User>`): a procedure added or moved no longer renames
+  types, and `Page<A>` and `Page<B>` no longer collide.
+- `@renamedFrom` fails when the old field is still declared, claimed twice or does not exist. A
+  field whose type changes gets a new ID, the old one is retired: an old peer sees the field missing
+  instead of reading the new type's bytes as the old type.
+- Classes (whose private fields went out with the rest) and TypeScript enums are rejected, and so
+  are procedures and namespaces named `then` or after a method of `ts-bin-rpc/tanstack`.
+- Lockfile format 1 records `query()`, so removing one is breaking. It keeps top-level keys it does
+  not know, and explains merge conflict markers and lockfiles of a newer `tbr`. Format 0 is read and
+  rewritten.
+- The contract hash covers the contract, not the text of the lockfile.
+- `tbr check --base <ref|file>` compares with the lockfile of another commit, which catches a
+  breaking change committed with its lockfile; `--json` prints the result; exit code 3 means
+  breaking. A lockfile with CRLF line ends is read as it is. `--lock` and `--out` are relative to the
+  tsconfig, as documented.
+- Generated code checks at import that the runtime is the one it was generated for, and says to run
+  `tbr generate` if not. The shims for code of 0.1 and 0.2 are gone.
+- `typescript` is a peer `>=7.1.0-beta <7.2.0`; with another version `tbr` says which it needs.
+- `Contract` no longer reports a fresh file as stale for `x: T | undefined` and readonly arrays.
+
+Protocol and security:
+
+- WebSocket: subprotocol `tbr.2`; sockets only from the server's own origin or
+  `socket.allowedOrigins`, since browsers send cookies with sockets from any site; at most
+  `socket.maxSubscriptions` (256) subscriptions and `socket.maxCalls` (64) calls per socket; ID 0
+  or an ID in use closes the socket, which a repeated ID used to leave running after close; an
+  unknown operation gets an error reply.
+- The server's `limits.maxBytes` defaults to 1 MB (64 MB before), and a body is read only for a known
+  procedure, against that limit as it arrives. `toNodeListener` streams the body into the request,
+  keeps every `Set-Cookie` of a response (it kept the last one) and fails the body of an upload the
+  client dropped.
+- A bigint in `RpcError.data` no longer crashes the server: it goes out as a decimal string.
+- New codes: `SLOW_CONSUMER` 429, `UNAVAILABLE` 503, `TIMEOUT` 504. A status outside 400–599 goes out
+  as 500. 404 and 405 answers to GET are `no-store`. A query marked `public` that takes `ctx` fails
+  `createHandler`: a shared cache would hand one user's response to another.
+- Stream frames of kinds 128 and up may be skipped by clients that do not know them; kind 7 is
+  reserved for a server going away. Live state has to start with a snapshot. An iterator that falls
+  behind stops reading the response. The WebSocket backoff starts over only after a socket stayed
+  open for 5 s.
+- A batch with a repeated call ID is refused; a call of a batch that throws gets `500 INTERNAL`
+  instead of breaking the batch.
+
+API:
+
+- Everything a call rejects with is an `RpcError`: a failed `fetch`, a closed socket or a broken
+  batch response is `DISCONNECTED` or `BAD_RESPONSE`, where it was a `TypeError`. An abort rejects
+  with the signal's reason.
+- `BAD_INPUT` data and the issues of `inputSchema` share one shape, `InputIssue` (the type
+  `Failure` is gone), with `path` as an array: `['guests', 1, 'email']`.
+- Production clients verify every response that does not show the server has the same contract:
+  another `x-tbr-schema`, or none, as over a WebSocket or in a batch.
+- Renamed: `LiveOptions` of `ts-bin-rpc/server` → `LiveStateOptions`, `BatchOptions` of
+  `ts-bin-rpc/server` → `RowBatchOptions`, `TbrOptions` of `ts-bin-rpc/vite` → `TbrPluginOptions`.
+  `Live.subscribers` is a method, as `Channel.subscribers(topic)`.
+- The stream content type is `application/vnd.tbr.stream` (was `vnd.tbr-stream`).
+  `STREAM_CONTENT_TYPE` and `BATCH_CONTENT_TYPE` are exported from `ts-bin-rpc`, as are the types
+  `Codec`, `Encoder`, `Decoder` and `Limits`. `ts-bin-rpc/runtime` is internal.
+- `hashKey` tells maps, sets and typed arrays apart by their contents, so their query keys change.
+- DevTools extension for Firefox.
+
 ## 0.5.1
 
 Compatible with 0.5.0: the wire format and the generated code are unchanged.
