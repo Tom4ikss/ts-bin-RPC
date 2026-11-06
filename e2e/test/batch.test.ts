@@ -69,8 +69,9 @@ describe('batches', () => {
       const api = createClient<typeof appRouter>({ url: `http://127.0.0.1:${(server.address() as AddressInfo).port}/rpc`, procedures, batch: batch() });
       const at: Record<number, number> = {};
       await Promise.all([1, 2, 3].map((id) => api.user.get({ id }).then(() => (at[id] = performance.now()))));
-      // the fast calls are not held until the slow one ends, 50 ms later
-      expect(at[1] - Math.max(at[2], at[3])).toBeGreaterThan(30);
+      // the fast calls are not held until the slow one ends, 50 ms later: held, they would come in one
+      // chunk with it. The margin is loose, a busy runner has shown 27 ms.
+      expect(at[1] - Math.max(at[2], at[3])).toBeGreaterThan(10);
     } finally {
       server.close();
     }
