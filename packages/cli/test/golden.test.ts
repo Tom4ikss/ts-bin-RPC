@@ -63,6 +63,33 @@ describe('lockfile evolution', () => {
     expect(stringifyLock(again.lock)).toBe(stringifyLock(locks[3]));
   });
 
+  it('pins the width of enum indexes and limits enums and unions', () => {
+    const { schema } = buildSchema(sources.find((s) => (s as unknown as { evolution?: boolean }).evolution)!, fixture('evolution', 'v1.ts'), 'appRouter');
+    const many = (n: number) => Array.from({ length: n }, (_, i) => `v${i}`);
+    const withRole = (values: string[]) => ({ ...schema, enums: { ...schema.enums, Role: { name: 'Role', values } } });
+    const messages = (r: { changes: Change[] }, severity: string) => r.changes.filter((c) => c.severity === severity && c.path === 'Role').map((c) => c.message);
+
+    const fresh = updateLock(emptyLock(), withRole(many(300)));
+    expect(fresh.lock.enums.Role.wide).toBe(true);
+    expect(fresh.changes).toEqual([]);
+    expect(updateLock(emptyLock(), withRole(many(256))).lock.enums.Role.wide).toBeUndefined();
+
+    const grown = updateLock(locks[1], withRole([...schema.enums.Role.values, ...many(300)]));
+    expect(messages(grown, 'breaking')).toContain('past 256 values: indexes go from 1 byte to 2, old clients misread them');
+    expect(grown.lock.enums.Role.wide).toBe(true);
+    // already wide, or wide by length in a lockfile before 0.6: no change of width
+    expect(messages(updateLock(grown.lock, withRole([...schema.enums.Role.values, ...many(301)])), 'breaking').filter((m) => m.startsWith('past'))).toEqual([]);
+    const old = structuredClone(grown.lock);
+    delete old.enums.Role.wide;
+    expect(messages(updateLock(old, withRole([...schema.enums.Role.values, ...many(301)])), 'breaking').filter((m) => m.startsWith('past'))).toEqual([]);
+
+    expect(messages(updateLock(emptyLock(), withRole(many(0x10001))), 'error')).toEqual(['more than 65536 values']);
+    const shape = schema.unions.Shape;
+    const variants = Array.from({ length: 257 }, (_, i) => ({ tag: `t${i}`, object: shape.variants[0].object }));
+    const wideUnion = updateLock(emptyLock(), { ...schema, unions: { ...schema.unions, Shape: { ...shape, variants } } });
+    expect(wideUnion.changes.filter((c) => c.severity === 'error').map((c) => c.message)).toEqual(['more than 256 variants']);
+  });
+
   it('refuses a corrupted lockfile with duplicate IDs', () => {
     const lock = structuredClone(locks[1]);
     lock.objects.User.fields.name.id = lock.objects.User.fields.id.id;

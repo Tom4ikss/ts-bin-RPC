@@ -16,6 +16,8 @@ export interface LockObject {
 export interface LockEnum {
   values: string[]; // index = wire value
   retired?: string[];
+  /** Indexes take 2 bytes: past 256 values. Fixed here, so that both sides of a call agree on it. */
+  wide?: true;
 }
 
 export interface LockUnion {
@@ -218,7 +220,8 @@ export function updateLock(prev: Lock, schema: Schema): { lock: Lock; changes: C
     const now = schema.enums[name].values;
     const old = prev.enums[name];
     if (!old) {
-      next.enums[name] = { values: [...now] };
+      if (now.length > 0x10000) add('error', name, 'more than 65536 values');
+      next.enums[name] = now.length > 256 ? { values: [...now], wide: true } : { values: [...now] };
       continue;
     }
     const values = [...old.values];
@@ -237,7 +240,11 @@ export function updateLock(prev: Lock, schema: Schema): { lock: Lock; changes: C
         add(input.has(name) ? 'breaking' : 'safe', name, `value '${v}' removed${input.has(name) ? `; old clients may still send it in ${dir(name)}` : ''}`);
       }
     }
-    next.enums[name] = retired.size ? { values, retired: values.filter((v) => retired.has(v)) } : { values };
+    // lockfiles before 0.6 kept no width: it was 2 bytes past 256 values then too
+    const wasWide = old.wide || old.values.length > 256;
+    if (!wasWide && values.length > 256) add('breaking', name, 'past 256 values: indexes go from 1 byte to 2, old clients misread them');
+    if (values.length > 0x10000) add('error', name, 'more than 65536 values, removed ones included');
+    next.enums[name] = { values, ...(retired.size ? { retired: values.filter((v) => retired.has(v)) } : {}), ...(wasWide || values.length > 256 ? { wide: true as const } : {}) };
   }
   for (const [name, old] of Object.entries(prev.enums)) if (!next.enums[name]) next.enums[name] = old;
 
@@ -246,6 +253,7 @@ export function updateLock(prev: Lock, schema: Schema): { lock: Lock; changes: C
     const u = schema.unions[name];
     const old = prev.unions[name];
     if (!old) {
+      if (u.variants.length > 256) add('error', name, 'more than 256 variants');
       next.unions[name] = { discriminant: u.discriminant, variants: u.variants.map((v) => ({ ...v })) };
       continue;
     }
@@ -273,12 +281,13 @@ export function updateLock(prev: Lock, schema: Schema): { lock: Lock; changes: C
         add(input.has(name) ? 'breaking' : 'safe', name, `variant '${v.tag}' removed${input.has(name) ? `; old clients may still send it in ${dir(name)}` : ''}`);
       }
     }
+    if (variants.length > 256) add('error', name, 'more than 256 variants, removed ones included');
     next.unions[name] = { discriminant: u.discriminant, variants };
   }
   for (const [name, old] of Object.entries(prev.unions)) if (!next.unions[name]) next.unions[name] = old;
 
   const fresh = !Object.keys(prev.procedures).length && !Object.keys(prev.objects).length;
-  return { lock: next, changes: fresh ? [] : changes };
+  return { lock: next, changes: fresh ? changes.filter((c) => c.severity === 'error') : changes };
 }
 
 // `void` -> `T?` and `T` -> `T?` accept every old call.

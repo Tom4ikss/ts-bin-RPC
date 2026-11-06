@@ -169,7 +169,7 @@ Phase 0 measured layout variants before any code generation
 - **Memoized strings and views**: repeated reads and sorting stay ahead of JSON.
 
 Design notes, the wire format and the roadmap are in Russian: [design](docs/DESIGN.md),
-[wire format v0](docs/FORMAT.md), [roadmap](docs/ROADMAP.md),
+[wire format](docs/FORMAT.md), [roadmap](docs/ROADMAP.md),
 [landscape research](reports/Обзор%20TS%20RPC%20и%20бинарных%20форматов.md),
 [string and verification optimizations](reports/Оптимизации%20строк%20и%20верификации.md).
 

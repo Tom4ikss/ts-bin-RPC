@@ -389,7 +389,7 @@ class Emitter {
   }
 
   private enumWidth(name: string): number {
-    return this.lock.enums[name].values.length > 256 ? 2 : 1;
+    return this.lock.enums[name].wide ? 2 : 1;
   }
 
   /** Fixed-width column element: scalars and enums. */
@@ -619,13 +619,13 @@ class Emitter {
     const disc = def.discriminant;
     const lockVariants = this.lock.unions[name].variants;
     const nv = lockVariants.length;
-    const nv4 = 4 * nv;
     const current = lockVariants
       .map((lv, tag) => ({ tag, value: lv.tag, object: def.variants.find((v) => v.tag === lv.tag)?.object }))
       .filter((v): v is { tag: number; value: string; object: string } => v.object !== undefined);
     const T = `T_${u}`;
     const o = (v: { object: string }) => this.obj(v.object);
-    const tagsAt = 'b + ' + nv4;
+    // the writer's own tags and indexes; a reader takes the count of variants from the message
+    const tagsAt = `b + ${4 + 4 * nv}`;
     const idxAt = `${tagsAt} + ((n + 3) & ~3)`;
     this.out.push([
       `export type ${T} = ${current.map((v) => `T_${o(v)}`).join(' | ')};`,
@@ -659,9 +659,10 @@ class Emitter {
       '  }',
       '}',
       '',
-      `// Union body: u32 variant vector[${nv}], u8 tag[n], u32 index[n] into the variant's vector.`,
+      `// Union body: u32 nv = ${nv}, u32 variant vector[nv], u8 tag[n], u32 index[n] into the variant's vector.`,
       `function eB_${u}(w: Writer, a: ArrayLike<${T} | null | undefined>, n: number, loose: boolean): number {`,
-      `  const b = w.alloc(${nv4} + ((n + 3) & ~3) + 4 * n, 4);`,
+      `  const b = w.alloc(${4 + 4 * nv} + ((n + 3) & ~3) + 4 * n, 4);`,
+      `  w.ru32(b, ${nv});`,
       ...current.map((v) => `  const g${v.tag}: T_${o(v)}[] = [];`),
       '  for (let i = 0; i < n; i++) {',
       '    const v = a[i];',
@@ -671,7 +672,7 @@ class Emitter {
       `      default: bad(${lit(`${name} variant`)}, ${acc(`(v as { ${prop(disc)}: unknown })`, disc)});`,
       '    }',
       '  }',
-      ...current.map((v) => `  if (g${v.tag}.length) w.ru32(b + ${4 * v.tag}, eV_${o(v)}(w, g${v.tag}));`), // empty: null pointer, stops recursion
+      ...current.map((v) => `  if (g${v.tag}.length) w.ru32(b + ${4 + 4 * v.tag}, eV_${o(v)}(w, g${v.tag}));`), // empty: null pointer, stops recursion
       '  return b;',
       '}',
       '',
@@ -688,28 +689,32 @@ class Emitter {
       '    this.#b = b;',
       '    this.#tags = r.bytes;',
       '    this.#idx = r.whole(4);',
-      `    this.#t0 = ${tagsAt};`,
-      `    this.#i0 = (${idxAt}) >>> 2;`,
+      '    this.#t0 = b + 4 + 4 * r.dv.getUint32(b, true);',
+      '    this.#i0 = (this.#t0 + ((n + 3) & ~3)) >>> 2;',
       '  }',
       `  get(i: number): ${T} {`,
       '    const k = this.#idx[this.#i0 + i];',
       '    switch (this.#tags[this.#t0 + i]) {',
-      ...current.map((v) => `      case ${v.tag}: return (this.#v${v.tag} ??= new C_${o(v)}(this.#r, this.#r.dv.getUint32(this.#b + ${4 * v.tag}, true))).row(k);`),
+      ...current.map((v) => `      case ${v.tag}: return (this.#v${v.tag} ??= new C_${o(v)}(this.#r, this.#r.dv.getUint32(this.#b + ${4 + 4 * v.tag}, true))).row(k);`),
       `      default: throw new VerifyError(${lit(`unknown ${name} variant`)});`,
       '    }',
       '  }',
       '}',
       '',
       `function vB_${u}(c: Check, b: number, n: number, d: number, pres: number, nul: number): void {`,
-      `  c.need(b, ${nv4} + ((n + 3) & ~3) + 4 * n);`,
+      // a newer writer may know more variants: their rows fail below, as unknown tags
+      '  const mv = c.u32(b);',
+      `  if (mv > 256) c.fail(${lit(`${name}: more than 256 variants`)});`,
+      '  const t0 = b + 4 + 4 * mv, i0 = t0 + ((n + 3) & ~3);',
+      '  c.need(b, i0 - b + 4 * n);',
       `  const counts = [${lockVariants.map((_, tag) => {
         const v = current.find((x) => x.tag === tag);
-        return v ? `c.u32(b + ${4 * tag}) === 0 ? 0 : vV_${o(v)}(c, c.u32(b + ${4 * tag}), d + 1)` : '-1';
+        return v ? `${tag} >= mv || c.u32(b + ${4 + 4 * tag}) === 0 ? 0 : vV_${o(v)}(c, c.u32(b + ${4 + 4 * tag}), d + 1)` : '-1';
       }).join(', ')}];`,
       '  for (let i = 0; i < n; i++) {',
       '    if (!c.has(pres, nul, i)) continue;',
-      `    const t = c.bytes[${tagsAt} + i];`,
-      `    if (t >= ${nv} || counts[t] < 0 || c.dv.getUint32(${idxAt} + 4 * i, true) >= counts[t]) c.fail(${lit(`invalid ${name} entry`)});`,
+      '    const t = c.bytes[t0 + i];',
+      `    if (t >= ${Math.min(nv, 256)} || t >= mv || counts[t] < 0 || c.dv.getUint32(i0 + 4 * i, true) >= counts[t]) c.fail(${lit(`invalid ${name} entry`)});`,
       '  }',
       '}',
       '',

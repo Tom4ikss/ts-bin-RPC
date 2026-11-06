@@ -12,6 +12,14 @@ const codec = () => g.mod.procedures.rows.output!;
 const input = () => g.mod.procedures.rows.input!;
 const full = (id: number) => ({ id, x: id / 4, hp: id % 7 ? id : null, at: new Date(1e12 + id), ok: id % 4 ? true : null, big: BigInt(-id), side: id % 2 ? 'buy' : 'sell', level: 10 + id, name: `n${id}`, tag: id % 5 ? `t${id % 3}` : null });
 const rows = (n: number, every: number) => Array.from({ length: n }, (_, i) => (i % every === 0 ? full(i) : { id: i }));
+/** Column flags of the root vector, all ORed together. */
+const colFlags = (bytes: Uint8Array) => {
+  const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength), vec = dv.getUint32(dv.getUint32(4, true), true);
+  let fl = 0;
+  for (let j = 0; j < dv.getUint16(vec + 4, true); j++) fl |= dv.getUint16(vec + 10 + 8 * j, true);
+  return fl;
+};
+const PACKED = 4, DELTA = 8;
 
 describe('packed columns', () => {
   it('hold only the rows with a value when that halves them', () => {
@@ -22,11 +30,10 @@ describe('packed columns', () => {
       expect(codec().decode(bytes, { verify: false })).toEqual(value);
       expect(toPlain(codec().view(bytes))).toEqual(value);
     }
-    // version 1 only for messages with packed columns
-    expect(codec().encode(sparse)[2]).toBe(1);
-    expect(codec().encode(rows(40, 2))[2]).toBe(1);
-    expect(codec().encode(dense)[2]).toBe(0);
-    expect(codec().encode(mostly)[2]).toBe(0);
+    expect(colFlags(codec().encode(sparse)) & PACKED).toBe(PACKED);
+    expect(colFlags(codec().encode(rows(40, 2))) & PACKED).toBe(PACKED);
+    expect(colFlags(codec().encode(dense)) & PACKED).toBe(0);
+    expect(colFlags(codec().encode(mostly)) & PACKED).toBe(0);
     // a row with values costs its x, at, big (8 B), level (4 B), hp, ok, side (1 B), the refs of name and tag (4 B) and the text
     const len = (v: unknown[]) => codec().encode(v).length;
     expect(len(rows(40, 8)) - len(rows(40, 40))).toBeGreaterThanOrEqual(4 * 39);
@@ -35,7 +42,7 @@ describe('packed columns', () => {
   it('keep nulls apart from absent rows', () => {
     const value = [{ id: 1, hp: null, ok: null }, { id: 2 }, { id: 3 }, { id: 4 }, { id: 5, hp: 7, ok: true }];
     const bytes = codec().encode(value);
-    expect(bytes[2]).toBe(1);
+    expect(colFlags(bytes) & PACKED).toBe(PACKED);
     expect(codec().decode(bytes)).toEqual(value);
     const view = codec().view(bytes);
     expect([view[0].hp, view[1].hp, view[4].hp, view[4].ok, view[2].ok]).toEqual([null, undefined, 7, true, undefined]);
@@ -77,7 +84,7 @@ describe('delta columns', () => {
   it('send the first value and the differences when they are narrower', () => {
     const value = Array.from({ length: 64 }, (_, i) => tick(i));
     const bytes = ticks().encode(value);
-    expect(bytes[2]).toBe(1);
+    expect(colFlags(bytes) & DELTA).toBe(DELTA);
     expect(plain(ticks().decode(bytes))).toEqual(plain(value));
     expect(plain(ticks().decode(bytes, { verify: false }))).toEqual(plain(value));
     expect(plain(toPlain(ticks().view(bytes)))).toEqual(plain(value));
@@ -85,6 +92,21 @@ describe('delta columns', () => {
     const wide = value.map((r, i) => ({ ...r, seq: i * 100_000, t: new Date(1.7e12 + i * 3e9), price: i * 300, size: (i * 997) % 65536 }));
     expect(plain(ticks().decode(ticks().encode(wide)))).toEqual(plain(wide));
     expect(ticks().encode(wide).length - bytes.length).toBeGreaterThanOrEqual(63 * (16 - 5) - 16);
+  });
+
+  it('refuse column flags that do not go together', () => {
+    const bytes = ticks().encode(Array.from({ length: 64 }, (_, i) => tick(i)));
+    const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength), vec = dv.getUint32(dv.getUint32(4, true), true);
+    const entries = Array.from({ length: dv.getUint16(vec + 4, true) }, (_, j) => vec + 10 + 8 * j);
+    const delta = entries.find((e) => dv.getUint16(e, true) & DELTA)!, plainCol = entries.find((e) => !(dv.getUint16(e, true) & 0x3c))!;
+    const set = (e: number, f: (fl: number) => number) => {
+      const bad = bytes.slice();
+      new DataView(bad.buffer).setUint16(e, f(dv.getUint16(e, true)), true);
+      return bad;
+    };
+    // width bits without DELTA, width 3, DELTA with PACKED
+    for (const bad of [set(plainCol, (fl) => fl | 0x10), set(delta, (fl) => fl | 0x30)]) expect(() => ticks().view(bad)).toThrow(/unknown column flags/);
+    expect(() => ticks().view(set(delta, (fl) => fl | PACKED))).toThrow(VerifyError);
   });
 
   it('fall back to plain columns when the differences are not narrower', () => {

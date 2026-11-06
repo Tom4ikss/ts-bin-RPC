@@ -1,15 +1,17 @@
-// Runtime of generated codecs, wire format v0 (docs/FORMAT.md): message writer, lazy reader, column
+// Runtime of generated codecs, wire format 2 (docs/FORMAT.md): message writer, lazy reader, column
 // accessors and the verifier. Generated code calls into this module; nothing here knows user types.
 
 if (new Uint8Array(new Uint16Array([1]).buffer)[0] !== 1) throw new Error('ts-bin-rpc needs a little-endian platform');
 
 /**
- * Format version a writer puts in the header: 0, or 1 when the message has packed columns, which a
- * reader of version 0 would misread. Readers take both.
+ * Format version in the header of every message. Readers take only this one: messages of 0.5 and
+ * earlier (versions 0 and 1) lay unions out differently.
  */
-export const VERSION = 1;
+export const VERSION = 2;
 export const FLAG_STRINGS = 1;
 export const FLAG_ERROR = 2;
+/** Header flags a reader must understand: bits 2–4, none defined yet. Bits 5–7 a reader ignores. */
+const FLAGS_MUST = 0x1c;
 export const COL_OPTIONAL = 1;
 export const COL_NULLABLE = 2;
 /** Column data holds only the rows with a value, one after another (FORMAT §6). */
@@ -28,6 +30,14 @@ export interface Limits {
 }
 
 export const DEFAULT_LIMITS: Limits = { maxBytes: 64 * 1024 * 1024, maxDepth: 64, maxNodes: 16 * 1024 * 1024 };
+
+const SPLIT = 'string splits a surrogate pair';
+
+function versionError(v: number): string {
+  return v < VERSION
+    ? `message of format ${v}, from ts-bin-rpc 0.5 or earlier: this side reads format ${VERSION}; update both sides`
+    : `message of format ${v}: this side reads format ${VERSION}, update ts-bin-rpc`;
+}
 
 export class EncodeError extends TypeError {
   override name = 'EncodeError';
@@ -274,8 +284,6 @@ export class Writer {
   #utf16: string[] = [];
   #utf16Len = 0;
   #vtables = new Map<number, number>();
-  /** Raised to 1 by the first packed column. */
-  version = 0;
 
   constructor(strings: boolean, capacity = 256) {
     this.buf = new Uint8Array(capacity);
@@ -438,6 +446,11 @@ export class Writer {
       total += (v as TypedArray).length;
     }
     this.dv.setUint32(p + 4 + 4 * n, total, true);
+    // child 0: no child vector (FORMAT §6)
+    if (total === 0) {
+      this.dv.setUint32(p, 0, true);
+      return p;
+    }
     const size = ctor.BYTES_PER_ELEMENT;
     const c = this.alloc(4, 4);
     this.dv.setUint32(c, total, true);
@@ -475,7 +488,7 @@ export class Writer {
     }
     this.buf[0] = 0x54;
     this.buf[1] = 0x42;
-    this.buf[2] = this.version;
+    this.buf[2] = VERSION;
     this.buf[3] = flags;
     this.dv.setUint32(4, root, true);
     return this.buf.subarray(0, this.pos);
@@ -493,7 +506,6 @@ export function packCol(w: Writer, t: TypedArray, d: number, m: number, n: numbe
   if (m === n) return 0;
   if (2 * m <= n) {
     w.pos = d + m * t.BYTES_PER_ELEMENT; // the rest was never written: still zero for the next alloc
-    w.version = 1;
     return COL_PACKED;
   }
   const b = w.buf, a = t as unknown as unknown[], zero = t instanceof BigInt64Array || t instanceof BigUint64Array ? 0n : 0;
@@ -529,7 +541,6 @@ export function deltaCol(w: Writer, t: TypedArray, d: number, m: number, n: numb
   }
   w.buf.fill(0, at, d + m * size); // the next alloc takes zeroed bytes
   w.pos = at;
-  w.version = 1;
   return COL_DELTA | (code << 4);
 }
 
@@ -542,7 +553,6 @@ export function strsCol(w: Writer, vals: string[], n: number, pres: number, nul:
   if (m === n) return w.strCol(vals, n), 0;
   if (2 * m <= n) {
     w.strCol(vals, m);
-    w.version = 1;
     return COL_PACKED;
   }
   const col = new Array<string>(n), b = w.buf;
@@ -572,8 +582,9 @@ export class Reader {
     this.bytes = bytes;
     this.dv = dv ?? new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     if (bytes.length < 8 || bytes[0] !== 0x54 || bytes[1] !== 0x42) throw new VerifyError('not a ts-bin-rpc message');
-    if (bytes[2] > VERSION) throw new VerifyError(`unsupported format version ${bytes[2]}`);
+    if (bytes[2] !== VERSION) throw new VerifyError(versionError(bytes[2]));
     this.flags = bytes[3];
+    if (this.flags & FLAGS_MUST) throw new VerifyError('message needs a newer ts-bin-rpc: unknown header flags');
     this.root = this.dv.getUint32(4, true);
     if (this.flags & FLAG_STRINGS) {
       this.#aOff = this.dv.getUint32(8, true);
@@ -911,9 +922,9 @@ export class Check {
     this.#nodes = limits.maxNodes ?? DEFAULT_LIMITS.maxNodes;
     if (this.len > maxBytes) this.fail(`message is larger than ${maxBytes} bytes`);
     if (this.len < 8 || bytes[0] !== 0x54 || bytes[1] !== 0x42) this.fail('not a ts-bin-rpc message');
-    if (bytes[2] > VERSION) this.fail(`unsupported format version ${bytes[2]}`);
+    if (bytes[2] !== VERSION) this.fail(versionError(bytes[2]));
     this.flags = bytes[3];
-    if (this.flags & ~(FLAG_STRINGS | FLAG_ERROR)) this.fail('reserved flags are set');
+    if (this.flags & FLAGS_MUST) this.fail('message needs a newer ts-bin-rpc: unknown header flags');
     this.root = this.dv.getUint32(4, true);
     let utf16: string | undefined;
     if (this.flags & FLAG_STRINGS) {
@@ -1013,6 +1024,13 @@ export class Check {
   str(at: number) {
     const start = this.dv.getUint32(at, true), lb = this.dv.getUint32(at + 4, true);
     if (start + (lb >>> 1) > (lb & 1 ? this.utf16Len : this.asciiLen)) this.fail('string lies outside its block');
+    if (lb & 1 && (this.#cuts(start) || this.#cuts(start + (lb >>> 1)))) this.fail(SPLIT);
+  }
+
+  /** The UTF-16 block, well-formed as a whole, splits a surrogate pair at `at`. */
+  #cuts(at: number): boolean {
+    const s = this.#utf16 ?? '';
+    return at > 0 && at < s.length && (s.charCodeAt(at - 1) & 0xfc00) === 0xd800 && (s.charCodeAt(at) & 0xfc00) === 0xdc00;
   }
 
   strCol(b: number, n: number) {
@@ -1024,8 +1042,11 @@ export class Check {
       if (ref & 1) {
         const j = ref >>> 1;
         if (j >= i || dv.getUint32(b + 8 + 4 * j, true) & 1) this.fail('string back-reference is invalid');
-      } else if (ref & 2) u += ref >>> 2;
-      else a += ref >>> 2;
+      } else if (ref & 2) {
+        if (this.#cuts(u)) this.fail(SPLIT);
+        u += ref >>> 2;
+        if (this.#cuts(u)) this.fail(SPLIT);
+      } else a += ref >>> 2;
     }
     if (a > this.asciiLen || u > this.utf16Len) this.fail('string column lies outside its block');
   }
@@ -1050,9 +1071,15 @@ export class Check {
     for (let i = 0; i < n; i++) if (this.has(pres, nul, i)) this.enumIndex(b + i * width, width, valid);
   }
 
-  /** Typed array vector: returns the element count. */
+  /**
+   * Typed array vector: returns the element count. One node, whatever its length: its bytes are
+   * bounded by the message, and readers do not copy them element by element.
+   */
   typed(vec: number, size: number, d: number): number {
-    const n = this.vec(vec, d);
+    this.depth(d);
+    this.target(vec);
+    const n = this.u32(vec);
+    this.nodes(1);
     this.need(align(vec + 4, size), n * size);
     return n;
   }
@@ -1071,8 +1098,9 @@ export class Check {
 
   typedList(b: number, n: number, size: number, d: number) {
     this.need(b, 4);
-    const cn = this.typed(this.dv.getUint32(b, true), size, d);
-    this.offsets(b + 4, n, cn);
+    const child = this.dv.getUint32(b, true);
+    // 0: an empty child vector (FORMAT §6), every row empty
+    this.offsets(b + 4, n, child === 0 ? 0 : this.typed(child, size, d));
   }
 
   has(pres: number, nul: number, i: number): boolean {
@@ -1106,7 +1134,8 @@ export class Check {
     const seen = new Uint8Array(names.length);
     for (let j = 0; j < nc; j++) {
       const e = off + 8 + 8 * j, id = dv.getUint16(e, true), fl = dv.getUint16(e + 2, true), o0 = dv.getUint32(e + 4, true);
-      if (fl & ~0x3f || (fl & 0x30) === 0x30) this.fail(`${type}: unknown column flags`);
+      // width bits only with DELTA, and not 3; DELTA holds its values packed, so not with PACKED
+      if (fl & ~0x3f || (fl & 0x30 && (fl & (COL_DELTA | COL_PACKED)) !== COL_DELTA) || (fl & 0x30) === 0x30) this.fail(`${type}: unknown column flags`);
       let o = o0;
       const pres = fl & 1 ? o : -1;
       if (fl & 1) o += nb;
@@ -1123,7 +1152,10 @@ export class Check {
       if (fl & (COL_PACKED | COL_DELTA) & ~allow) this.fail(`${type}.${names[k]}: ${STALE}`);
       const b = align(o, spec[3 * k + 1]), m = fl & (COL_PACKED | COL_DELTA) ? this.count(pres, nul, n) : n;
       // a delta column: the first value, then m - 1 differences; any bits are a value of these types
-      if (fl & COL_DELTA) this.need(b, m && spec[3 * k + 1] + (m - 1) * (1 << ((fl >>> 4) & 3)));
+      if (fl & COL_DELTA) {
+        if (m < 2) this.fail(`${type}.${names[k]}: delta column of fewer than 2 values`);
+        this.need(b, spec[3 * k + 1] + (m - 1) * (1 << ((fl >>> 4) & 3)));
+      }
       else body(k, b, n, pres, nul, m);
     }
     for (let k = 0; k < names.length; k++) if (!seen[k] && !(spec[3 * k + 2] & 1)) this.fail(`${type}.${names[k]}: column is missing`);

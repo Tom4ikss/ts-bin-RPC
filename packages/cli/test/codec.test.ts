@@ -1,11 +1,12 @@
 import { execFileSync } from 'node:child_process';
+import fs from 'node:fs';
 import path from 'node:path';
 import fc from 'fast-check';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { signature, type IRType } from '../src/ir.ts';
 import { arbitraries } from './arbitrary.ts';
 import { generate, type Generated } from './codegen.ts';
-import { asciiOnly, EncodeError, VerifyError } from 'ts-bin-rpc/runtime';
+import { asciiOnly, EncodeError, toPlain, VerifyError } from 'ts-bin-rpc/runtime';
 
 const fixtures = ['codec', 'supported'];
 const gen: Record<string, Generated> = {};
@@ -185,6 +186,46 @@ describe('limits and encoder checks', () => {
     }
   });
 
+  it('reads only format 2 and refuses header flags it must understand', () => {
+    const bytes = nodeCodec().encode(chain(1));
+    const at = (i: number, v: number) => {
+      const b = bytes.slice();
+      b[i] = v;
+      return b;
+    };
+    for (const verify of [true, false]) {
+      expect(() => nodeCodec().decode(at(2, 1), { verify })).toThrow(/format 1, from ts-bin-rpc 0\.5 or earlier/);
+      expect(() => nodeCodec().decode(at(2, 3), { verify })).toThrow(/format 3: this side reads format 2/);
+      for (const bit of [2, 3, 4]) expect(() => nodeCodec().decode(at(3, bytes[3] | (1 << bit)), { verify })).toThrow(/unknown header flags/);
+      for (const bit of [5, 6, 7]) expect(nodeCodec().decode(at(3, bytes[3] | (1 << bit)), { verify })).toEqual(chain(1));
+    }
+  });
+
+  it('rejects a UTF-16 string that starts or ends inside a surrogate pair', () => {
+    const value = { name: 'a\u{1f600}', children: [{ name: '\u{1f600}b', children: [] }] };
+    const bytes = nodeCodec().encode(value);
+    expect(nodeCodec().decode(bytes)).toEqual(value);
+    const dv = new DataView(bytes.buffer, bytes.byteOffset);
+    const find = (a: number, b: number) => {
+      for (let i = 24; i + 8 <= bytes.length; i += 4) if (dv.getUint32(i, true) === a && dv.getUint32(i + 4, true) === b) return i;
+      throw new Error(`no ${a} ${b}`);
+    };
+    // the root name in a slot (u32 start, u32 length << 1 | 1), the child's in a string column (u32 ASCII
+    // start, u32 UTF-16 start, then u32 length << 2 | 2 per row)
+    const slot = find(0, 7), col = find(3, 14);
+    for (const [at, v] of [[slot + 4, 2 << 1 | 1], [col, 2], [col + 4, 1 << 2 | 2]]) {
+      const bad = bytes.slice();
+      new DataView(bad.buffer).setUint32(at, v, true);
+      expect(() => nodeCodec().view(bad)).toThrow('string splits a surrogate pair');
+    }
+  });
+
+  it('charges a typed array one node, whatever its length', () => {
+    const series = gen.supported.mod.procedures['series'].output!;
+    const value = { ts: new Float64Array(10_000), values: new Float32Array(10_000) };
+    expect(() => series.view(series.encode(value), { limits: { maxNodes: 100 } })).not.toThrow();
+  });
+
   it('rejects offsets into the header', () => {
     const bytes = nodeCodec().encode(chain(1));
     const dv = new DataView(bytes.buffer, bytes.byteOffset);
@@ -243,6 +284,29 @@ describe('schema evolution on the wire', () => {
     // but a new client that omits it must not talk to an old server.
     const input = v2.mod.codecs['NewUser'].encode({ name: 'Bob', email: 'b@x.io' });
     expect(() => v1.mod.codecs['NewUser'].decode(input)).toThrow('NewUser.invite is missing');
+  });
+
+  it('enum indexes take the width the lockfile pins', async () => {
+    const v1 = await generate('evolution', 'v1.ts', undefined, 'evolution-e1');
+    const lock = structuredClone(v1.lock);
+    lock.enums.Role.wide = true;
+    const wide = await generate('evolution', 'v1.ts', lock, 'evolution-e2');
+    expect(wide.lock.enums.Role.wide).toBe(true);
+    const user = { id: 7, name: 'Ann', age: 30, role: 'user', mail: 'a@x.io', nick: 'annie' };
+    expect(wide.mod.codecs['User'].decode(wide.mod.codecs['User'].encode(user))).toEqual(user);
+    expect(fs.readFileSync(wide.file, 'utf8')).not.toBe(fs.readFileSync(v1.file, 'utf8'));
+  });
+
+  it('unions read across versions with a different number of variants', async () => {
+    const v2 = await generate('evolution', 'v2.ts', undefined, 'evolution-u2');
+    const v3 = await generate('evolution', 'v3.ts', v2.lock, 'evolution-u3');
+    const [older, newer] = [v2.mod.procedures['shapes'].output!, v3.mod.procedures['shapes'].output!];
+    const shapes = [{ kind: 'square', side: 2 }, { kind: 'circle', r: 1 }, { kind: 'square', side: 3 }];
+    expect(newer.decode(older.encode(shapes))).toEqual(shapes);
+    expect(older.decode(newer.encode(shapes))).toEqual(shapes);
+    expect(toPlain(older.view(newer.encode(shapes)))).toEqual(shapes);
+    // a variant the old reader does not know is refused, not misread
+    expect(() => older.decode(newer.encode([...shapes, { kind: 'dot' }]))).toThrow(VerifyError);
   });
 });
 
