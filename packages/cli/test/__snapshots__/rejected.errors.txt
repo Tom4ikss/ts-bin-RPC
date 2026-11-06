@@ -18,27 +18,30 @@ router.ts:25:3  Bad.p[value]: 'string | null': null/undefined are only allowed o
 router.ts:26:3  Bad.q: optional and rest elements are not supported ('[string, ...u32[]]'); use an object or an array
 router.ts:27:3  Bad.r: an empty tuple is not serializable
 router.ts:28:3  Bad.s[1][]: 'Nested' contains itself through a map or a tuple; put an object in between
+router.ts:29:3  Bad.t: classes are not serializable: private fields and methods would go on the wire; declare an interface with the fields to send
+router.ts:30:3  Bad.u: TypeScript enums are not supported: Node's type stripping cannot run them; use a string literal union ('red' | 'green')
+router.ts:31:3  Bad.v: TypeScript enums are not supported: Node's type stripping cannot run them; use a string literal union ('red' | 'green')
 other.ts:1:1  collide:input.b: two different types are named 'Item' (other one at router.ts:4); rename one of them
-router.ts:40:3  overloaded: overloaded procedures are not supported
-router.ts:41:3  tooMany: a procedure takes at most (input, ctx)
-router.ts:42:3  maybe: a procedure result cannot be null or undefined; wrap it in an object with an optional field
-router.ts:43:3  nullInput: a procedure input cannot be null
-router.ts:49:3  BadRules.a: Min applies to numbers and bigints
-router.ts:50:3  BadRules.b: MinLength applies to strings, arrays and typed arrays
-router.ts:51:3  BadRules.c: Pattern applies to strings
-router.ts:52:3  BadRules.d: Pattern is not a valid regular expression: Invalid regular expression: /(/: Unterminated group
-router.ts:53:3  BadRules.e: Min is greater than Max
-router.ts:54:3  BadRules.f: MinLength is greater than MaxLength
-router.ts:55:3  BadRules.g: Min needs a literal argument
-router.ts:56:3  BadRules.h: MinLength takes a non-negative integer
-router.ts:57:3  BadRules.i: MaxLength applies to strings, arrays and typed arrays
-router.ts:58:3  BadRules.j: rules and checks do not apply to 'boolean & Max<1>'; TypeScript splits it into a union
-router.ts:59:3  BadRules.k: Min on a 64-bit integer takes an integer
-router.ts:60:3  BadRules.l: Check needs a string literal argument
-router.ts:61:3  BadRules.m: Check name 'not-a-name' must be an identifier
-router.ts:62:3  BadRules.n: Scale goes with an integer brand of 8 to 32 bits: i32 & Scale<100>
-router.ts:63:3  BadRules.o: Scale takes a positive integer
-router.ts:64:3  BadRules.p: Delta applies to integer brands of 8 to 32 bits and Date: differences of floats are not exact
-router.ts:65:3  BadRules.q: Delta does not go with Min or Max yet
-router.ts:66:3  BadRules.r: Scale needs a literal argument
-router.ts:45:3  version: router property must be a function or a namespace object, got 'number'
+router.ts:53:3  overloaded: overloaded procedures are not supported
+router.ts:54:3  tooMany: a procedure takes at most (input, ctx)
+router.ts:55:3  maybe: a procedure result cannot be null or undefined; wrap it in an object with an optional field
+router.ts:56:3  nullInput: a procedure input cannot be null
+router.ts:62:3  BadRules.a: Min applies to numbers and bigints
+router.ts:63:3  BadRules.b: MinLength applies to strings, arrays and typed arrays
+router.ts:64:3  BadRules.c: Pattern applies to strings
+router.ts:65:3  BadRules.d: Pattern is not a valid regular expression: Invalid regular expression: /(/: Unterminated group
+router.ts:66:3  BadRules.e: Min is greater than Max
+router.ts:67:3  BadRules.f: MinLength is greater than MaxLength
+router.ts:68:3  BadRules.g: Min needs a literal argument
+router.ts:69:3  BadRules.h: MinLength takes a non-negative integer
+router.ts:70:3  BadRules.i: MaxLength applies to strings, arrays and typed arrays
+router.ts:71:3  BadRules.j: rules and checks do not apply to 'boolean & Max<1>'; TypeScript splits it into a union
+router.ts:72:3  BadRules.k: Min on a 64-bit integer takes an integer
+router.ts:73:3  BadRules.l: Check needs a string literal argument
+router.ts:74:3  BadRules.m: Check name 'not-a-name' must be an identifier
+router.ts:75:3  BadRules.n: Scale goes with an integer brand of 8 to 32 bits: i32 & Scale<100>
+router.ts:76:3  BadRules.o: Scale takes a positive integer
+router.ts:77:3  BadRules.p: Delta applies to integer brands of 8 to 32 bits and Date: differences of floats are not exact
+router.ts:78:3  BadRules.q: Delta does not go with Min or Max yet
+router.ts:79:3  BadRules.r: Scale needs a literal argument
+router.ts:58:3  version: router property must be a function or a namespace object, got 'number'

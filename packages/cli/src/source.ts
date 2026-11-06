@@ -33,7 +33,9 @@ type DescKind =
   | { k: 'literal'; value: string | number | boolean }
   | { k: 'brand'; base: 'number' | 'bigint'; tag: string }
   | { k: 'union'; members: TypeRef[]; alias?: string }
-  | { k: 'array'; element: TypeRef }
+  | { k: 'array'; element: TypeRef; readonly: boolean }
+  | { k: 'tsEnum' }
+  | { k: 'class' }
   /** `variable`: an optional or rest element, `[a?: T]`, `[...T[]]`. */
   | { k: 'tuple'; elements: TypeRef[]; readonly: boolean; variable: boolean }
   | { k: 'builtin'; name: string; args: TypeRef[] } // Date, typed arrays, Map<K, V>, Set, Promise, ...
@@ -218,6 +220,7 @@ export class Ts71Source implements TypeSource {
     if (f & TypeFlags.BigInt) return { k: 'bigint' };
     if (f & (TypeFlags.ESSymbol | TypeFlags.UniqueESSymbol)) return { k: 'symbol' };
     if (f & TypeFlags.NonPrimitive) return { k: 'nonPrimitive' };
+    if (f & TypeFlags.EnumLike || (t.isUnionType() && t.getTypes().every((m) => m.flags & TypeFlags.EnumLiteral))) return { k: 'tsEnum' };
     if (t.isStringLiteralType() || t.isNumberLiteralType()) return { k: 'literal', value: t.value as string | number };
     if (t.isBooleanLiteralType()) return { k: 'literal', value: t.value };
 
@@ -237,7 +240,7 @@ export class Ts71Source implements TypeSource {
     }
     if (t.isUnionType()) {
       const members = (ref as TsRef).members ?? t.getTypes();
-      return { k: 'union', members: members.map((m) => new TsRef(m)), alias: t.getAliasSymbol()?.name };
+      return { k: 'union', members: members.map((m) => new TsRef(m)), alias: this.aliasName(t) };
     }
     if (t.isTupleType()) {
       const target = t.getTarget();
@@ -247,12 +250,13 @@ export class Ts71Source implements TypeSource {
     if (t.isTypeReference()) {
       const name = t.getSymbol()?.name;
       if (name === 'Array' || name === 'ReadonlyArray') {
-        return { k: 'array', element: new TsRef(this.checker.getTypeArguments(t)[0]) };
+        return { k: 'array', element: new TsRef(this.checker.getTypeArguments(t)[0]), readonly: name === 'ReadonlyArray' };
       }
     }
     const symName = t.getSymbol()?.name;
     if (symName && BUILTINS.has(symName)) return { k: 'builtin', name: symName, args: t.isTypeReference() ? this.checker.getTypeArguments(t).map((a) => new TsRef(a)) : [] };
     if (t.getCallSignatures().length || t.getConstructSignatures().length) return { k: 'function' };
+    if ((t.getSymbol()?.flags ?? 0) & SymbolFlags.Class) return { k: 'class' };
     if (t.isObjectType() || t.isIntersectionType()) return this.describeObject(t);
     return { k: 'other', text: this.checker.typeToString(t) };
   }
@@ -298,7 +302,7 @@ export class Ts71Source implements TypeSource {
     const alias = t.getAliasSymbol();
     let name: string | undefined;
     if (t.isTypeReference() && this.checker.getTypeArguments(t).length) name = this.checker.typeToString(t);
-    else if (alias) name = alias.name;
+    else if (alias) name = this.aliasName(t);
     else if (sym && sym.name !== '__type' && sym.name !== '__object') name = sym.name;
     if (t.isIntersectionType() && !alias) name = undefined;
 
@@ -319,6 +323,13 @@ export class Ts71Source implements TypeSource {
     const key = (k: Type) => (k.flags & TypeFlags.String ? 'string' : k.flags & TypeFlags.Number ? 'number' : 'other') as IndexDesc['key'];
     const index = info && { key: key(info.keyType), value: new TsRef(info.valueType), several: infos.length > 1 };
     return { k: 'object', name, props, ...(index && { index }), location: sym ? this.locate(sym) : undefined };
+  }
+
+  /** `Page<User>` for an instance of a generic alias, so that `Page<User>` and `Page<Post>` are two types. */
+  private aliasName(t: Type): string | undefined {
+    const alias = t.getAliasSymbol();
+    if (!alias) return undefined;
+    return t.getAliasTypeArguments()?.length ? this.checker.typeToString(t) : alias.name;
   }
 
   // `role?: Role` has type `"admin" | "user" | undefined`: a fresh union that lost the alias. Regroup its

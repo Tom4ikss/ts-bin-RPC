@@ -38,7 +38,7 @@ export type IRType =
   | { kind: 'typedArray'; array: TypedArrayKind; rules?: Rules } // zero-copy column
   | { kind: 'const'; value: string | number | boolean } // single-literal field, not on the wire
   | { kind: 'enum'; name: string; rules?: Rules } //             string literal union, values in Schema.enums
-  | { kind: 'array'; element: IRType; rules?: Rules }
+  | { kind: 'array'; element: IRType; readonly?: true; rules?: Rules }
   | { kind: 'object'; name: string; rules?: Rules } //           Schema.objects
   | { kind: 'union'; name: string; rules?: Rules } //            discriminated union, Schema.unions
   // On the wire, maps and tuples are the synthetic object `object`: `{ keys: K[]; values: V[] }` and
@@ -56,6 +56,8 @@ export interface Field {
   name: string;
   type: IRType;
   optional: boolean; // `x?: T` or `T | undefined`
+  /** `x: T | undefined`: optional on the wire, but the key is required in TypeScript. */
+  keyRequired?: true;
   nullable: boolean; // `T | null`
   renamedFrom?: string; // JSDoc `@renamedFrom oldName`
   location?: Location;

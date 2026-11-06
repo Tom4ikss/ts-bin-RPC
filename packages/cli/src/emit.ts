@@ -89,7 +89,7 @@ const desc = (v: unknown) =>
     if (k === 'rules') return undefined;
     if (typeof x !== 'object' || x === null || Array.isArray(x) || !('kind' in x)) return x;
     // the wire object and readonly are of no use to the runtime
-    if (x.kind === 'map' || x.kind === 'tuple') {
+    if (x.kind === 'map' || x.kind === 'tuple' || x.kind === 'array') {
       const { object: _o, readonly: _r, ...rest } = x as { object?: string; readonly?: true };
       x = rest;
     }
@@ -356,7 +356,7 @@ class Emitter {
       case 'enum': return `E_${this.enm(t.name)}`;
       case 'array': {
         const e = this.ts(t.element);
-        return e.startsWith('readonly ') ? `(${e})[]` : `${e}[]`;
+        return `${t.readonly ? 'readonly ' : ''}${e.startsWith('readonly ') ? `(${e})` : e}[]`;
       }
       case 'object': return `T_${this.obj(t.name)}`;
       case 'union': return `T_${this.uni(t.name)}`;
@@ -734,7 +734,7 @@ class Emitter {
 
     // Interface
     L.push(`export interface ${T} {`);
-    for (const f of def.fields) L.push(`  ${prop(f.name)}${f.optional ? '?' : ''}: ${this.ts(f.type)}${f.nullable ? ' | null' : ''};`);
+    for (const f of def.fields) L.push(`  ${prop(f.name)}${f.optional && !f.keyRequired ? '?' : ''}: ${this.ts(f.type)}${f.nullable ? ' | null' : ''}${f.keyRequired ? ' | undefined' : ''};`);
     L.push('}', '');
 
     // vtable
@@ -833,6 +833,8 @@ class Emitter {
     const required = def.fields.filter((f) => !f.optional);
     L.push(`function p_${x}(v: ${T}): ${T} {`, `  const o: ${T} = {`);
     for (const f of required) L.push(`    ${prop(f.name)}: ${this.plainField(f, acc('v', f.name))},`);
+    // `x: T | undefined`: the key is there, set below when there is a value
+    for (const f of def.fields) if (f.keyRequired) L.push(`    ${prop(f.name)}: undefined,`);
     L.push('  };');
     def.fields.filter((f) => f.optional).forEach((f, i) => {
       L.push(`  const x${i} = ${acc('v', f.name)};`, `  if (x${i} !== undefined) ${acc('o', f.name)} = ${this.plainField(f, `x${i}`)};`);
@@ -1017,6 +1019,7 @@ class Emitter {
       else q.push(`    ${prop(f.name)}: ${v},`);
     }
     L.push(`  toJSON(): ${T} { return p_${x}(this); }`, `  [PLAIN](): ${T} { return p_${x}(this); }`, `  [INSPECT](): ${T} { return p_${x}(this); }`, '}', '');
+    for (const wf of all) if (wf.f.keyRequired) q.push(`    ${prop(wf.f.name)}: undefined,`);
     L.push(`function q_${x}(c: C_${x}, i: number): ${T} {`, `  const o: ${T} = {`, ...q, '  };', ...qOpt, '  return o;', '}', '');
 
     // Verifier: the catalog is checked by the runtime, bodies here.

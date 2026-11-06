@@ -140,6 +140,8 @@ export function updateLock(prev: Lock, schema: Schema): { lock: Lock; changes: C
     const oldFields = { ...old.fields };
     const claimed = new Set<string>();
     const added: { name: string; sig: string; optional: boolean; location?: Location }[] = [];
+    const declared = new Set(def.fields.map((f) => f.name));
+    const renames = new Map<string, string>();
 
     for (const f of def.fields) {
       const sig = fieldSignature(f);
@@ -147,11 +149,16 @@ export function updateLock(prev: Lock, schema: Schema): { lock: Lock; changes: C
       let entry = oldFields[f.name];
       if (!entry && f.renamedFrom) {
         const from = oldFields[f.renamedFrom];
-        if (from && !from.retired) {
+        // two live fields on one ID would read each other's bytes
+        if (declared.has(f.renamedFrom)) add('error', path, `@renamedFrom ${f.renamedFrom}: '${f.renamedFrom}' is still declared; remove it, or drop the tag to add a new field`, f.location);
+        else if (renames.has(f.renamedFrom)) add('error', path, `@renamedFrom ${f.renamedFrom}: '${renames.get(f.renamedFrom)}' is renamed from it too`, f.location);
+        else if (!from) add('error', path, `@renamedFrom ${f.renamedFrom}: ${name} has no field '${f.renamedFrom}' in the lockfile`, f.location);
+        else if (!from.retired) {
           entry = from;
           claimed.add(f.renamedFrom);
           add('safe', path, `renamed from '${f.renamedFrom}', keeps id ${from.id}`, f.location);
         }
+        renames.set(f.renamedFrom, f.name);
       }
       if (!entry) {
         fields[f.name] = { id: nextId++, type: sig };
@@ -175,7 +182,13 @@ export function updateLock(prev: Lock, schema: Schema): { lock: Lock; changes: C
           const why = nowOptional ? `; old clients expect it in ${dir(name)}` : `; old clients may omit it in ${dir(name)}`;
           add(breaks ? 'breaking' : 'safe', path, `became ${nowOptional ? 'optional' : 'required'}${breaks ? why : ''}`, f.location);
         } else {
-          add('breaking', path, `type changed: ${entry.type} -> ${sig}`, f.location);
+          // A new ID: an old peer then sees the field missing instead of reading its bytes as the old
+          // type. The old ID stays reserved under `name@id`.
+          const id = nextId++;
+          add('breaking', path, `type changed: ${entry.type} -> ${sig}; new id ${id}, old peers see the field missing`, f.location);
+          fields[`${f.name}@${entry.id}`] = { ...entry, retired: true };
+          fields[f.name] = { id, type: sig };
+          continue;
         }
       }
       fields[f.name] = { id: entry.id, type: sig };

@@ -2,7 +2,7 @@ import path from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { buildSchema } from '../src/build.ts';
 import { emptyLock, stringifyLock, updateLock, type Change, type Lock } from '../src/lock.ts';
-import { formatLocation } from '../src/ir.ts';
+import { formatLocation, type Schema } from '../src/ir.ts';
 import { printErrors, printSchema } from '../src/print.ts';
 import { Ts71Source } from '../src/source.ts';
 
@@ -32,6 +32,19 @@ describe('schema', () => {
   it('rejects unsupported constructs, all at once, with locations', async () => {
     const { errors } = buildSchema(open('rejected'), fixture('rejected', 'router.ts'), 'appRouter');
     await expect(printErrors(errors)).toMatchFileSnapshot(snapshot('rejected.errors.txt'));
+  });
+});
+
+describe('type names', () => {
+  it('come from the place in the contract and the arguments of generic aliases, not from the order of procedures', () => {
+    const src = open('naming');
+    const v1 = buildSchema(src, fixture('naming', 'v1.ts'), 'appRouter');
+    const v2 = buildSchema(src, fixture('naming', 'v2.ts'), 'appRouter');
+    expect(printErrors([...v1.errors, ...v2.errors])).toBe('\n');
+    expect(Object.keys(v1.schema.objects).sort()).toEqual(['Page<Post>', 'Page<User>', 'Partial<Post>', 'Partial<User>', 'Post', 'Tick', 'Tick.at', 'User']);
+    const { changes } = updateLock(updateLock(emptyLock(), v1.schema).lock, v2.schema);
+    expect(changes.filter((c) => c.severity !== 'safe')).toEqual([]);
+    expect(changes.map((c) => c.path).sort()).toEqual(['aPick', 'aPick:input', 'aPick:input.at']);
   });
 });
 
@@ -88,6 +101,31 @@ describe('lockfile evolution', () => {
     const variants = Array.from({ length: 257 }, (_, i) => ({ tag: `t${i}`, object: shape.variants[0].object }));
     const wideUnion = updateLock(emptyLock(), { ...schema, unions: { ...schema.unions, Shape: { ...shape, variants } } });
     expect(wideUnion.changes.filter((c) => c.severity === 'error').map((c) => c.message)).toEqual(['more than 256 variants']);
+  });
+
+  it('refuses a @renamedFrom that would put two fields on one ID', () => {
+    const { schema } = buildSchema(sources.find((s) => (s as unknown as { evolution?: boolean }).evolution)!, fixture('evolution', 'v1.ts'), 'appRouter');
+    const withUser = (patch: (fields: Schema['objects'][string]['fields']) => Schema['objects'][string]['fields']) => ({
+      ...schema,
+      objects: { ...schema.objects, User: { ...schema.objects.User, fields: patch(schema.objects.User.fields) } },
+    });
+    const name = schema.objects.User.fields.find((f) => f.name === 'name')!;
+    const errors = (s: Schema) => updateLock(locks[1], s).changes.filter((c) => c.severity === 'error').map((c) => `${c.path}: ${c.message}`);
+    expect(errors(withUser((fs) => [...fs, { ...name, name: 'fullName', renamedFrom: 'name' }]))).toEqual([
+      "User.fullName: @renamedFrom name: 'name' is still declared; remove it, or drop the tag to add a new field",
+    ]);
+    expect(errors(withUser((fs) => [...fs.filter((f) => f !== name), { ...name, name: 'a', renamedFrom: 'name' }, { ...name, name: 'b', renamedFrom: 'name' }]))).toEqual([
+      "User.b: @renamedFrom name: 'a' is renamed from it too",
+    ]);
+    expect(errors(withUser((fs) => [...fs.filter((f) => f !== name), { ...name, name: 'fullName', renamedFrom: 'nmae' }]))).toEqual([
+      "User.fullName: @renamedFrom nmae: User has no field 'nmae' in the lockfile",
+    ]);
+  });
+
+  it('gives a field whose type changed a new ID', () => {
+    const user = results[2].lock.objects.User.fields;
+    expect(user.age).toEqual({ id: 9, type: 'u16' });
+    expect(user['age@3']).toEqual({ id: 3, type: 'u8', retired: true });
   });
 
   it('refuses a corrupted lockfile with duplicate IDs', () => {

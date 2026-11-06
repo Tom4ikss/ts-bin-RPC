@@ -26,6 +26,19 @@ interface Bad {
   q: [string, ...u32[]];
   r: [];
   s: Nested;
+  t: Account;
+  u: Color;
+  v?: Color;
+}
+
+class Account {
+  name = '';
+  private passwordHash = '';
+}
+
+enum Color {
+  Red = 'red',
+  Green = 'green',
 }
 
 type Nested = [string, Nested[]];

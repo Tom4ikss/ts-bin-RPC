@@ -2,8 +2,8 @@ safe     signUp: procedure added  (v3.ts:31:3)
 breaking create: procedure removed
 breaking NewUser.password: required field added to a type used in input; old clients do not send it  (v3.ts:23:3)
 safe     Shape#dot: type added  (v3.ts:6:81)
-breaking User.age: type changed: u8 -> u16  (v3.ts:13:3)
-breaking User.prefs: type changed: Map<string, string> | undefined -> Map<string, u32> | undefined  (v3.ts:16:3)
+breaking User.age: type changed: u8 -> u16; new id 9, old peers see the field missing  (v3.ts:13:3)
+breaking User.prefs: type changed: Map<string, string> | undefined -> Map<string, u32> | undefined; new id 10, old peers see the field missing  (v3.ts:16:3)
 breaking User.fullName: 'name' removed and 'fullName' added with the same type; if this is a rename, add /** @renamedFrom name */ to keep id 1  (v3.ts:10:3)
 breaking Role: value 'guest' added; old clients cannot read it in output
 breaking Shape: variant 'dot' added; old clients cannot read it in output
@@ -53,12 +53,14 @@ breaking Shape: variant 'dot' added; old clients cannot read it in output
         "id": { "id": 0, "type": "u32" },
         "name": { "id": 1, "type": "string", "retired": true },
         "email": { "id": 2, "type": "string" },
-        "age": { "id": 3, "type": "u16" },
+        "age@3": { "id": 3, "type": "u8", "retired": true },
         "role": { "id": 4, "type": "enum Role" },
         "nick": { "id": 5, "type": "string | undefined", "retired": true },
-        "prefs": { "id": 6, "type": "Map<string, u32> | undefined" },
+        "prefs@6": { "id": 6, "type": "Map<string, string> | undefined", "retired": true },
         "bio": { "id": 7, "type": "string | undefined" },
-        "fullName": { "id": 8, "type": "string" }
+        "fullName": { "id": 8, "type": "string" },
+        "age": { "id": 9, "type": "u16" },
+        "prefs": { "id": 10, "type": "Map<string, u32> | undefined" }
       }
     },
     "get:input": {

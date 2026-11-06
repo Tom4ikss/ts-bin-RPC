@@ -8,7 +8,7 @@ import { arbitraries } from './arbitrary.ts';
 import { generate, type Generated } from './codegen.ts';
 import { asciiOnly, EncodeError, toPlain, VerifyError } from 'ts-bin-rpc/runtime';
 
-const fixtures = ['codec', 'supported'];
+const fixtures = ['codec', 'supported', 'contract'];
 const gen: Record<string, Generated> = {};
 
 beforeAll(async () => {

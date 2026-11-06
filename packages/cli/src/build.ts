@@ -22,6 +22,8 @@ const UNSUPPORTED: Partial<Record<Desc['k'], string>> = {
   undefined: "'undefined' alone is not serializable",
   null: "'null' alone is not serializable",
   function: 'functions and methods are not serializable',
+  tsEnum: "TypeScript enums are not supported: Node's type stripping cannot run them; use a string literal union ('red' | 'green')",
+  class: 'classes are not serializable: private fields and methods would go on the wire; declare an interface with the fields to send',
 };
 
 interface Ctx {
@@ -33,10 +35,15 @@ interface Ctx {
 class Builder {
   schema: Schema = { procedures: [], objects: {}, enums: {}, unions: {} };
   errors: SchemaError[] = [];
-  private memo = new Map<number, IRType>();
+  /**
+   * Types built so far. A named type is one entry wherever it is used. An anonymous one is an entry
+   * per place, named after the place: TypeScript gives equal literal unions one identity, and naming
+   * them after whichever place came first would rename them when procedures are added or reordered.
+   */
+  private memo = new Map<number | string, IRType>();
   /** Maps and tuples being built: a type that contains itself through them has no name to refer back by. */
   private building = new Set<number>();
-  private owners = new Map<string, { id: number; location?: Location }>();
+  private owners = new Map<string, { id: number | string; location?: Location }>();
 
   private src: TypeSource;
   constructor(src: TypeSource) { this.src = src; }
@@ -152,7 +159,7 @@ class Builder {
       }
       case 'array': {
         const element = this.type(d.element, { ...ctx, path: `${ctx.path}[]`, anon: `${ctx.anon}[]` });
-        return element && { kind: 'array', element };
+        return element && { kind: 'array', element, ...(d.readonly && { readonly: true as const }) };
       }
       case 'tuple': return this.tuple(ref, d, ctx);
       case 'builtin': {
@@ -236,19 +243,21 @@ class Builder {
 
   // Unions without null/undefined: booleans, string literal enums, discriminated unions of objects.
   private multi(whole: TypeRef, members: TypeRef[], alias: string | undefined, ctx: Ctx): IRType | undefined {
-    const known = this.memo.get(whole.id);
+    const key = alias ? whole.id : `${whole.id} ${ctx.anon}`;
+    const known = this.memo.get(key);
     if (known) return known;
     const ds = members.map((m) => this.src.describe(m));
     // `boolean & Max<1>` reaches here as `(false & Max<1>) | (true & Max<1>)`
+    if (ds.some((d) => d.k === 'tsEnum')) { this.fail(ctx, UNSUPPORTED.tsEnum!); return undefined; }
     if (ds.some((d) => d.rules || d.checks)) { this.fail(ctx, `rules and checks do not apply to '${this.src.text(whole)}'; TypeScript splits it into a union`); return undefined; }
     if (ds.every((d) => d.k === 'literal' && typeof d.value === 'boolean')) return { kind: 'scalar', scalar: 'bool' };
 
     if (ds.every((d) => d.k === 'literal' && typeof d.value === 'string')) {
-      const name = this.claim(alias ?? ctx.anon, whole.id, ctx);
+      const name = this.claim(alias ?? ctx.anon, key, ctx);
       const values = ds.map((d) => (d as { value: string }).value).sort();
       this.schema.enums[name] = { name, values };
       const t: IRType = { kind: 'enum', name };
-      this.memo.set(whole.id, t);
+      this.memo.set(key, t);
       return t;
     }
 
@@ -259,9 +268,9 @@ class Builder {
         this.fail(ctx, `union of objects needs a discriminant: a field present in every variant with distinct string literal values ('${this.src.text(whole)}')`);
         return undefined;
       }
-      const name = this.claim(alias ?? ctx.anon, whole.id, ctx);
+      const name = this.claim(alias ?? ctx.anon, key, ctx);
       const t: IRType = { kind: 'union', name };
-      this.memo.set(whole.id, t);
+      this.memo.set(key, t);
       const variants = members.map((m, i) => {
         const tag = disc.tags[i];
         const obj = this.type(m, { path: `${ctx.path} (${tag})`, anon: `${name}#${tag}`, location: ctx.location });
@@ -280,7 +289,8 @@ class Builder {
   }
 
   private object(ref: TypeRef, d: Extract<Desc, { k: 'object' }>, ctx: Ctx): IRType | undefined {
-    const known = this.memo.get(ref.id);
+    const key = d.name ? ref.id : `${ref.id} ${ctx.anon}`;
+    const known = this.memo.get(key);
     if (known) return known;
     if (d.index) {
       const text = this.src.text(ref);
@@ -289,9 +299,9 @@ class Builder {
       else return this.map(ref, undefined, d.index.value, true, false, ctx);
       return undefined;
     }
-    const name = this.claim(d.name ?? ctx.anon, ref.id, ctx, d.location);
+    const name = this.claim(d.name ?? ctx.anon, key, ctx, d.location);
     const t: IRType = { kind: 'object', name };
-    this.memo.set(ref.id, t); // before the fields: recursive types refer back by name
+    this.memo.set(key, t); // before the fields: recursive types refer back by name
     const def: ObjectDef = { name, fields: [], location: d.location };
     this.schema.objects[name] = def;
     for (const p of d.props) {
@@ -357,11 +367,11 @@ class Builder {
     if (p.name.startsWith('__@')) { this.fail(ctx, 'symbol-keyed properties are not serializable'); return undefined; }
     const r = this.slot(p.type, ctx);
     if (!r) return undefined;
-    return { name: p.name, type: r.type, optional: r.optional || p.optional, nullable: r.nullable, renamedFrom: p.renamedFrom, location: p.location };
+    return { name: p.name, type: r.type, optional: r.optional || p.optional, ...(r.optional && !p.optional && { keyRequired: true as const }), nullable: r.nullable, renamedFrom: p.renamedFrom, location: p.location };
   }
 
   // Names are the identity of types in the lockfile: two different types may not share one.
-  private claim(name: string, id: number, ctx: Ctx, location = ctx.location): string {
+  private claim(name: string, id: number | string, ctx: Ctx, location = ctx.location): string {
     const prev = this.owners.get(name);
     if (prev && prev.id !== id) {
       const where = prev.location ? ` (other one at ${prev.location.file}:${prev.location.line})` : '';
