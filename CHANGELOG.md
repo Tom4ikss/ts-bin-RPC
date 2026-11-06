@@ -10,6 +10,20 @@ From 0.2.0, a change to the wire format or another breaking change bumps the min
 0.3), and patch versions stay compatible: `^0.2.0` never picks up a new format. Versions before
 0.2.0 were prereleases under the `alpha` dist-tag.
 
+## 0.5.1
+
+Compatible with 0.5.0: the wire format and the generated code are unchanged.
+
+- `ts-bin-rpc/tanstack`: `infiniteQueryOptions` for procedures whose input has a `cursor`, for
+  `useInfiniteQuery`; the page param goes into `cursor`
+  ([guide](https://tom4ikss.github.io/ts-bin-RPC/guide/tanstack-query/#infinite-queries)).
+- Streams and live state as queries: `useQuery(rq.ticks.queryOptions(input))` gathers the rows as
+  batches arrive, or folds them with `reducer`; live state gives its rows, kept up to date. Pass
+  TanStack's `streamedQuery` once: `createQueryOptions(api, { streamedQuery: experimental_streamedQuery })`.
+  Leaving the query stops the stream.
+- `infiniteQueryOptions` and `infiniteQueryKey` join the names of `rq` methods: a procedure with one
+  of these names is reachable only on the client.
+
 ## 0.5.0
 
 Not compatible with 0.4: messages with packed or delta columns carry format version 1, which
