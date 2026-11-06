@@ -4,8 +4,10 @@ import { FLAG_ERROR, toPlain, VerifyError, type Limits } from './runtime.ts';
 import { CALL, codeForStatus, CONTENT_TYPE, devtoolsHook, HASH_PARAM, INPUT_PARAM, MAX_GET_INPUT, readError, RpcError, SCHEMA_HEADER, toBase64Url, type Callable, type ClientEntry, type ClientProcedures } from './rpc.ts';
 import type { StreamEnv } from './stream-client.ts';
 import type { SocketTransport } from './ws-client.ts';
+import type { BatchLink } from './batch-client.ts';
 
 export { webSocket, type WebSocketOptions, type SocketTransport } from './ws-client.ts';
+export { batch, type BatchOptions, type BatchLink } from './batch-client.ts';
 import type { CallOptions, Client, DecodeMode, ProcedurePath } from './router.ts';
 
 export interface ClientOptions<R = unknown> {
@@ -36,6 +38,12 @@ export interface ClientOptions<R = unknown> {
    * not sent over it: the server gets the cookies and the URL of the socket.
    */
   socket?: SocketTransport;
+  /**
+   * `batch()`: calls made in the same task go in one request, and each comes back as the server
+   * answers it. Queries keep GET, for HTTP caches; calls with `headers` of their own go alone. The
+   * `headers` function is called once per request, so once per batch.
+   */
+  batch?: BatchLink;
 }
 
 
@@ -70,6 +78,8 @@ export function createClient<R>(options: ClientOptions<R>): Client<R> {
     return headers;
   }
 
+  const batched = options.batch?.({ url: base, fetch: (input, init) => (options.fetch ?? globalThis.fetch)(input, init), headers: userHeaders });
+
   async function call(path: string, args: unknown[]): Promise<unknown> {
     const proc = procedures[path];
     if (!proc) throw new RpcError('NOT_FOUND', `procedure '${path}' is not in the generated code; run tbr generate`);
@@ -89,6 +99,8 @@ export function createClient<R>(options: ClientOptions<R>): Client<R> {
     const socket = !get && options.socket?.calls ? options.socket : undefined;
     const res = socket
       ? await socket.request(path, proc, body, opts.signal)
+      : batched && !get && !opts.headers
+      ? await batched(path, proc, body, opts.signal)
       : get
       ? await fetchFn(`${base}/${path}?${HASH_PARAM}=${proc.hash}${encoded ? `&${INPUT_PARAM}=${encoded}` : ''}`, { method: 'GET', headers: await userHeaders(opts), signal: opts.signal })
       : await fetchFn(`${base}/${path}`, { method: 'POST', body, headers: await requestHeaders(proc, opts), signal: opts.signal });

@@ -14,7 +14,7 @@ for small text-heavy responses JSON is as compact as this format.
 ts-bin-rpc is for apps where the payloads hurt: dashboards, tables of thousands of rows, telemetry,
 maps, anything with numbers in bulk. There it reads several times faster, hands typed arrays to
 your charts without copying, and checks schema evolution, which JSON APIs usually leave to luck.
-What it lacks today: request batching and client-to-server streams. Server-to-client streams are there, over HTTP or a [WebSocket](./websocket.md), see [Streams](./streams.md), and so are [TanStack Query](./tanstack-query.md) options.
+What it lacks today: client-to-server streams. Server-to-client streams are there, over HTTP or a [WebSocket](./websocket.md), see [Streams](./streams.md), and so are [batching](./batching.md) and [TanStack Query](./tanstack-query.md) options.
 
 ## Why not protobuf, Connect or gRPC-web?
 

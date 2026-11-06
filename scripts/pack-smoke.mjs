@@ -44,7 +44,7 @@ export const appRouter = {
 import http from 'node:http';
 import { createHandler } from 'ts-bin-rpc/server';
 import { toNodeListener } from 'ts-bin-rpc/node';
-import { createClient } from 'ts-bin-rpc/client';
+import { batch, createClient } from 'ts-bin-rpc/client';
 import { toPlain } from 'ts-bin-rpc';
 import { inputSchema } from 'ts-bin-rpc/validate';
 import { appRouter, seen } from './router.ts';
@@ -57,6 +57,8 @@ const api = createClient<typeof appRouter>({ url: \`http://localhost:\${port}/rp
 const user = await api.user.get({ id: 1 });
 const { t, v } = await api.series();
 const error = await api.user.get({ id: 2 }).catch((e: { code: string }) => e.code);
+const batched = createClient<typeof appRouter>({ url: \`http://localhost:\${port}/rpc\`, procedures: clientProcedures, batch: batch() });
+const pair = await Promise.all([batched.user.get({ id: 1 }), batched.user.get({ id: 2 }).catch((e: { code: string }) => e.code)]);
 const counted: number[] = [];
 let column = false;
 await new Promise<void>((end, error) =>
@@ -72,7 +74,7 @@ await new Promise<void>((end, error) =>
 server.close();
 fs.writeFileSync('user.bin', procedures['user.get'].output!.encode(toPlain(user)));
 const issues = (inputSchema(inputRules['user.get'])['~standard'].validate({ id: -1 }) as { issues: readonly { message: string }[] }).issues.map((i) => i.message);
-console.log(JSON.stringify({ user: toPlain(user), t: t instanceof Float64Array, v: Array.from(v), error, counted, column, seen, issues }));
+console.log(JSON.stringify({ user: toPlain(user), t: t instanceof Float64Array, v: Array.from(v), error, counted, column, seen, issues, pair: [pair[0] && typeof pair[0] === 'object' ? pair[0].name : pair[0], pair[1]] }));
 `,
   'src/web.ts': `import { createClient } from 'ts-bin-rpc/client';
 import type { appRouter } from './router.ts';
@@ -95,7 +97,7 @@ run('npx', ['tbr', 'generate']);
 run('npx', ['tbr', 'check']);
 run('npx', ['tsc', '-p', '.']);
 const result = JSON.parse(run('node', ['--experimental-strip-types', '--no-warnings', 'src/main.ts']));
-const expected = { user: { id: 1, name: 'Ада', role: 'admin', createdAt: '1970-01-01T00:00:00.000Z', tags: ['founder'] }, t: true, v: [0.5, 1.5], error: 'NOT_FOUND', counted: [0, 1, 2, 3, 4], column: true, seen: ['user.get', 'user.get'], issues: ['expected u32, got -1'] };
+const expected = { user: { id: 1, name: 'Ада', role: 'admin', createdAt: '1970-01-01T00:00:00.000Z', tags: ['founder'] }, t: true, v: [0.5, 1.5], error: 'NOT_FOUND', counted: [0, 1, 2, 3, 4], column: true, seen: ['user.get', 'user.get', 'user.get', 'user.get'], issues: ['expected u32, got -1'], pair: ['Ада', 'NOT_FOUND'] };
 if (JSON.stringify(result) !== JSON.stringify(expected)) throw new Error(`unexpected result: ${JSON.stringify(result)}`);
 const decoded = JSON.parse(run('npx', ['tbr', 'decode', 'user.bin', '--proc', 'user.get']));
 if (decoded.name !== 'Ада') throw new Error(`tbr decode printed ${JSON.stringify(decoded)}`);

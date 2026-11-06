@@ -6,7 +6,8 @@ import type { AnyProcedure, AnyRouter } from './router.ts';
 import { Validation, type InputValidation, type Validator } from './validate.ts';
 import { STREAM_CONTENT_TYPE } from './frames.ts';
 import { SINKS, Sink, toSource, type DirectOut } from './stream-server.ts';
-import { encodeReply, MSG_FRAMES, MSG_RESPONSE, OP_STOP, readRequest } from './socket.ts';
+import { encodeReply, MSG_FRAMES, MSG_RESPONSE, OP_START, OP_STOP, readRequest, type SocketRequest } from './socket.ts';
+import { BATCH_CONTENT_TYPE, batchFrame, readBatch } from './batch.ts';
 import { LiveSource } from './live-server.ts';
 import { compose, unwrap } from './middleware.ts';
 import { cacheControl, queryOptions } from './query.ts';
@@ -63,6 +64,11 @@ export interface HandlerOptions<R> {
    * They run on every value of the type in an input, after the checks of its fields. Same results as `checks`.
    */
   refine?: Record<string, Validator>;
+  /**
+   * Batches: several calls in one request, sent by clients with `batch()` (FORMAT §14). `maxCalls`
+   * caps the calls in one batch; `false` refuses batches. Default: `{ maxCalls: 64 }`.
+   */
+  batch?: { maxCalls?: number } | false;
 }
 
 interface Route {
@@ -122,7 +128,7 @@ export function createHandler<R extends AnyRouter>(router: R, options: HandlerOp
   };
 
   /** Decodes the input, runs the procedure and encodes its result: everything but HTTP. */
-  const execute = async (route: Route, path: string, bytes: Uint8Array, request: Request): Promise<Outcome> => {
+  const execute = async (route: Route, path: string, bytes: Uint8Array, request: Request, ctxOf: () => unknown = () => context!(request)): Promise<Outcome> => {
     const { proc } = route;
     try {
       let input: unknown;
@@ -141,7 +147,7 @@ export function createHandler<R extends AnyRouter>(router: R, options: HandlerOp
       }
 
       // Only procedures that take ctx (and their middleware) pay for building it.
-      const ctx = context && proc.ctx !== false ? await context(request) : undefined;
+      const ctx = context && proc.ctx !== false ? await ctxOf() : undefined;
       const result = await route.fn.call(route.self, input, ctx);
       if (proc.stream) {
         const source = toSource(result);
@@ -172,10 +178,68 @@ export function createHandler<R extends AnyRouter>(router: R, options: HandlerOp
     }
   };
 
+  /** The body of a POST, within `limits.maxBytes`. */
+  const readBody = async (request: Request): Promise<Uint8Array> => {
+    const declared = Number(request.headers.get('content-length') ?? 0);
+    if (declared > limits.maxBytes) throw new RpcError('PAYLOAD_TOO_LARGE', `request is larger than ${limits.maxBytes} bytes`);
+    const bytes = new Uint8Array(await request.arrayBuffer());
+    if (bytes.length > limits.maxBytes) throw new RpcError('PAYLOAD_TOO_LARGE', `request is larger than ${limits.maxBytes} bytes`);
+    return bytes;
+  };
+
+  const maxCalls = options.batch === false ? 0 : (options.batch?.maxCalls ?? 64);
+  // A batch (FORMAT §14): the calls run at once, each answered as it ends. `context` runs once for
+  // all of them, as for any one request.
+  const batch = async (request: Request): Promise<Response> => {
+    if (!maxCalls) return fail(new RpcError('NOT_FOUND', 'this server takes no batches'));
+    let calls: Uint8Array[] | undefined;
+    try {
+      calls = readBatch(await readBody(request));
+    } catch (e) {
+      if (e instanceof RpcError) return fail(e);
+      throw e;
+    }
+    const starts = calls?.map(readRequest);
+    if (!starts || starts.some((r) => r?.op !== OP_START)) return fail(new RpcError('BAD_INPUT', 'malformed batch'));
+    if (starts.length > maxCalls) return fail(new RpcError('PAYLOAD_TOO_LARGE', `a batch takes at most ${maxCalls} calls`));
+    let ctx: Promise<unknown> | undefined;
+    const ctxOf = () => (ctx ??= Promise.resolve().then(() => context!(request)));
+    const answer = async ({ id, path, hash, input }: SocketRequest): Promise<Uint8Array> => {
+      const route = routes.get(path);
+      let out: Outcome;
+      if (!route) out = { error: new RpcError('NOT_FOUND', `unknown procedure '${path}'`) };
+      else if (route.proc.stream) out = { error: new RpcError('BAD_INPUT', `'${path}' is a stream; streams are not batched`) };
+      else {
+        const wrong = mismatch(path, route.proc, hash || null);
+        out = wrong ? { error: wrong } : await execute(route, path, input, request, ctxOf);
+      }
+      if ('error' in out) return batchFrame(encodeReply(id, MSG_RESPONSE, out.error.status, errorBody(out.error)));
+      return batchFrame(encodeReply(id, MSG_RESPONSE, 200, 'body' in out ? out.body : new Uint8Array(0)));
+    };
+    let left = starts.length;
+    const readable = new ReadableStream<Uint8Array>({
+      start(c) {
+        if (!left) return c.close();
+        for (const s of starts as SocketRequest[]) {
+          void answer(s).then((frame) => {
+            try {
+              c.enqueue(frame);
+              if (--left === 0) c.close();
+            } catch {
+              // the client went away
+            }
+          });
+        }
+      },
+    });
+    return new Response(readable, { status: 200, headers: { 'content-type': BATCH_CONTENT_TYPE, 'cache-control': 'no-store, no-transform', 'x-accel-buffering': 'no' } });
+  };
+
   const handler = async (request: Request): Promise<Response> => {
     const url = new URL(request.url);
     const pathname = url.pathname;
     const path = pathname.startsWith(prefix) ? pathname.slice(prefix.length) : '';
+    if (path === '' && request.method === 'POST' && request.headers.get('content-type')?.split(';')[0].trim() === BATCH_CONTENT_TYPE) return batch(request);
     const route = routes.get(path);
     if (!route) return fail(new RpcError('NOT_FOUND', `unknown procedure '${path || pathname}'`));
     const get = request.method === 'GET';
@@ -202,12 +266,7 @@ export function createHandler<R extends AnyRouter>(router: R, options: HandlerOp
         const decoded = fromBase64Url(text);
         if (!decoded) throw new RpcError('BAD_INPUT', `'${INPUT_PARAM}' is not base64url`);
         bytes = decoded;
-      } else {
-        const declared = Number(request.headers.get('content-length') ?? 0);
-        if (declared > limits.maxBytes) throw new RpcError('PAYLOAD_TOO_LARGE', `request is larger than ${limits.maxBytes} bytes`);
-        bytes = new Uint8Array(await request.arrayBuffer());
-        if (bytes.length > limits.maxBytes) throw new RpcError('PAYLOAD_TOO_LARGE', `request is larger than ${limits.maxBytes} bytes`);
-      }
+      } else bytes = await readBody(request);
     } catch (e) {
       if (e instanceof RpcError) return fail(e, noStore, proc);
       onError(e, { path, request });

@@ -356,8 +356,11 @@ JSDoc-тега, вход — бинарный base64url (читаемые пар
 2. ~~**Валидатор входа на клиенте**~~ (M) — **сделано, 2026-11-06:** `inputSchema(inputRules.x)` из
    `ts-bin-rpc/validate`, Standard Schema, все проблемы сразу с текстами сервера; без импорта — ни
    байта ([руководство](guide/validation.md#on-the-client), [DESIGN §20](DESIGN.md#20-валидатор-входа-на-клиенте)).
-3. **Батчинг** (S–M). WebTransport — сначала короткий спайк: что есть в рантаймах и браузерах и
-   что он даёт против WebSocket; если брать, то позже и как unstable.
+3. ~~**Батчинг**~~ (S–M) — **сделано, 2026-11-06:** `batch()` на клиенте, ответы потоком по мере
+   готовности, `context` раз на батч; 50 вызовов по HTTP/1.1 — 9.3 → 1.2 мс
+   ([руководство](guide/batching.md), [DESIGN §21](DESIGN.md#21-батчинг)). WebTransport — сначала
+   короткий спайк: что есть в рантаймах и браузерах и что он даёт против WebSocket; если брать, то
+   позже и как unstable.
 4. **Пул** как оптимизации: квантование, словари строк, дельты колонок, разреженные колонки патча.
 5. **TanStack Query**: `infiniteQueryOptions`, стримы через `streamedQuery`.
 6. **Расширение DevTools для Firefox.**
@@ -375,4 +378,4 @@ JSDoc-тега, вход — бинарный base64url (читаемые пар
 6. ~~Валидатор входа на клиенте~~ — сделано: `inputSchema()` из `ts-bin-rpc/validate` ([руководство](guide/validation.md#on-the-client)).
 7. Эксперимент с адаптерами к tRPC и oRPC.
 8. Бенчи против Arrow JS / Flechette и Colyseus, импорт и экспорт Arrow IPC.
-9. Батчинг, WebTransport. ~~GET-кэширование~~ — сделано в 0.2.0: `query()` ([DESIGN §16](DESIGN.md#16-запросы-и-http-кэш)).
+9. ~~Батчинг~~ — сделано: `batch()` ([руководство](guide/batching.md)). WebTransport. ~~GET-кэширование~~ — сделано в 0.2.0: `query()` ([DESIGN §16](DESIGN.md#16-запросы-и-http-кэш)).

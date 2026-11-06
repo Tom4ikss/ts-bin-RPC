@@ -3,6 +3,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { DEFAULT_LIMITS } from './runtime.ts';
 import { STREAM_CONTENT_TYPE } from './frames.ts';
+import { BATCH_CONTENT_TYPE } from './batch.ts';
 import { SINKS } from './stream-server.ts';
 import type { Handler } from './server.ts';
 
@@ -45,7 +46,9 @@ export function toNodeListener(
 
       res.statusCode = response.status;
       response.headers.forEach((v, k) => res.setHeader(k, v));
-      if (!response.body || response.headers.get('content-type') !== STREAM_CONTENT_TYPE) {
+      const type = response.headers.get('content-type');
+      // streams and batches go out as they come: a batch answers each call as it ends
+      if (!response.body || (type !== STREAM_CONTENT_TYPE && type !== BATCH_CONTENT_TYPE)) {
         res.end(new Uint8Array(await response.arrayBuffer()));
         return;
       }
@@ -81,10 +84,14 @@ export function toNodeListener(
 function head(req: IncomingMessage): { url: URL; headers: Headers } {
   const headers = new Headers();
   for (const [k, v] of Object.entries(req.headers)) {
+    // HTTP/2 pseudo-headers (`:path`, `:authority`…) are not headers to Fetch
+    if (k.startsWith(':')) continue;
     if (Array.isArray(v)) for (const x of v) headers.append(k, x);
     else if (v !== undefined) headers.set(k, v);
   }
-  return { url: new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`), headers };
+  const host = req.headers.host ?? (req.headers[':authority'] as string | undefined) ?? 'localhost';
+  const scheme = (req.headers[':scheme'] as string | undefined) ?? 'http';
+  return { url: new URL(req.url ?? '/', `${scheme}://${host}`), headers };
 }
 
 /** What `acceptWebSocket` needs of a socket of the `ws` package (or anything shaped like it). */

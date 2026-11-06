@@ -86,6 +86,8 @@ export const api = createClient<AppRouter>({
 | `verify` | `true`, `false` in production | verify responses before reading them; production means `process.env.NODE_ENV === 'production'` |
 | `limits` | as on the server | limits for verifying responses |
 | `debug` | `false` | log every call to the console |
+| `batch` | — | `batch()`: calls of one task in one request ([batching](./batching.md)) |
+| `socket` | — | `webSocket(url)`: subscriptions, and calls if asked, over one socket ([WebSocket](./websocket.md)) |
 
 Every procedure takes the input, if it has one, and then call options:
 

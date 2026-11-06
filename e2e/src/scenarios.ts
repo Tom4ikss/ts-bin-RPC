@@ -1,6 +1,6 @@
 // Client-side checks against a running fixture server; the same module runs in Node and in browsers.
 // Returns failures instead of throwing, so one run reports everything that broke.
-import { createClient, webSocket } from 'ts-bin-rpc/client';
+import { batch, createClient, webSocket } from 'ts-bin-rpc/client';
 import { CONTENT_TYPE, EncodeError, RpcError, toPlain } from 'ts-bin-rpc';
 import type { LiveChanges, u32 } from 'ts-bin-rpc';
 import { decodeError } from 'ts-bin-rpc/runtime';
@@ -229,6 +229,16 @@ export async function scenarios(origin: string, fetchFn: typeof fetch = globalTh
     await wait(() => !live.state.has(id));
     same('live: a row removed', [live.state.has(id), changes.at(-1)?.removed], [false, [id]]);
     live.stop();
+  }
+
+  // Batches: one request, answers as they end
+  {
+    const batched = createClient<typeof appRouter>({ url, procedures, fetch: fetchFn, batch: batch() });
+    const signed = createClient<typeof appRouter>({ url, procedures, fetch: fetchFn, batch: batch(), headers: () => ({ authorization: 'Bearer ann' }) });
+    const got = await Promise.all([batched.user.get({ id: 1 }), batched.user.get({ id: 3 }), batched.user.list(), batched.user.get({ id: 99 }).catch((e: RpcError) => [e.code, e.status, e.data])]);
+    same('batch', [got[0].name, got[1].name, got[2].length, got[3]], ['Ада', 'Chloé', 3, ['NOT_FOUND', 404, { id: 99 }]]);
+    same('batch: ctx from the request', await Promise.all([signed.whoami(), signed.account.me(), batched.whoami()]), [{ user: 'ann' }, { name: 'ann' }, { user: null }]);
+    same('batch: typed arrays', (await Promise.all([batched.series({ n: 3 }), batched.series({ n: 5 })])).map((r) => r.v.length), [3, 5]);
   }
 
   return report;
