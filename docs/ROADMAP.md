@@ -371,7 +371,10 @@ JSDoc-тега, вход — бинарный base64url (читаемые пар
    под Firefox 128+, zip на сайте доков, установка временным аддоном; e2e в Firefox через WebDriver
    BiDi ([руководство](guide/devtools.md#install), [DESIGN §12](DESIGN.md#12-отладка)). На Firefox
    Add-ons и в Chrome Web Store — когда автор опубликует.
-7. **Эксперимент с адаптерами tRPC и oRPC; бенчи против Arrow JS / Flechette и Colyseus, Arrow IPC.**
+7. **Эксперимент с адаптерами tRPC и oRPC; Arrow IPC.** ~~Бенчи против Arrow JS / Flechette и
+   Colyseus~~ — **сделано, 2026-11-07:** набор `libs` ([результаты](../bench/results/libs.md),
+   [руководство](guide/performance.md#against-other-binary-formats)). Проигрыш один: маленькие патчи
+   live по байтам (232 против 75 у Colyseus) — писатель перечисляет отсутствующие колонки.
 8. ~~**Аудит перед бетой**~~ — **сделано, 2026-11-07 (0.6.0):** формат 2, устойчивые имена типов,
    lockfile format 1, `tbr check --base`, версия ABI, subprotocol и Origin у WebSocket, лимиты, ошибки
    транспорта как `RpcError` ([отчёт](../reports/Аудит%20перед%20бетой.md), [CHANGELOG](../CHANGELOG.md)).
@@ -389,5 +392,5 @@ JSDoc-тега, вход — бинарный base64url (читаемые пар
 5. ~~`Map`, `Record`, кортежи~~ — сделано: синтетические tables `{ keys, values }` и `{ 0, 1 }` ([руководство](guide/types.md#maps-records-and-tuples)). Дальше: struct-раскладка, квантование (`f32` → `i16` с масштабом).
 6. ~~Валидатор входа на клиенте~~ — сделано: `inputSchema()` из `ts-bin-rpc/validate` ([руководство](guide/validation.md#on-the-client)).
 7. Эксперимент с адаптерами к tRPC и oRPC.
-8. Бенчи против Arrow JS / Flechette и Colyseus, импорт и экспорт Arrow IPC.
+8. ~~Бенчи против Arrow JS / Flechette и Colyseus~~ — сделано ([результаты](../bench/results/libs.md)). Импорт и экспорт Arrow IPC.
 9. ~~Батчинг~~ — сделано: `batch()` ([руководство](guide/batching.md)). ~~GET-кэширование~~ — сделано в 0.2.0: `query()` ([DESIGN §16](DESIGN.md#16-запросы-и-http-кэш)).

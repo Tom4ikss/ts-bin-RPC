@@ -85,6 +85,22 @@ Without compression the binary format is 1.5–2.6× smaller in the dashboard ex
 - **Decompression time is not measured.** Binary messages are often smaller, so there is less to
   decompress, but this has not been checked.
 
+## Against other binary formats
+
+The [`libs` suite](https://github.com/Tom4ikss/ts-bin-RPC/blob/main/bench/results/libs.md) puts
+ts-bin-rpc next to Apache Arrow JS and Flechette for tables and series, and Colyseus schema for game
+state, on one Linux server in Node, Chromium, Firefox and WebKit:
+
+- **1000 users, every field read:** 3–5× faster than JSON; Arrow and Flechette are slower than JSON
+  here (0.35–0.86×), since they decode every string of a column.
+- **Numbers of 1000 users, and 100k-point series:** 1.3–3× faster to decode than Arrow and
+  Flechette, with the same bytes for the series.
+- **Full state of 100 and 1000 entities:** 11–17× faster than Colyseus, and a quarter to a third
+  smaller.
+- **Small patches** (5 of 100 entities move): as fast as Colyseus or a little faster, but 232 bytes
+  against its 75, since every message carries a header and a column catalog. Larger patches (50 of
+  1000) are about 4× faster and 896 bytes against 750.
+
 ## Bundle size
 
 Client bundles, minified and gzipped with esbuild
@@ -116,4 +132,5 @@ the fixture past 12.5 KB.
 pnpm --filter @tbr/bench gen && node bench/run.mjs generated   # Node, Chromium, Firefox, WebKit
 node bench/node/generated-size.mjs                             # sizes; needs the zstd CLI
 node bench/size.mjs
+node bench/gen/libs.mjs && node bench/run.mjs libs             # against Arrow, Flechette, Colyseus
 ```

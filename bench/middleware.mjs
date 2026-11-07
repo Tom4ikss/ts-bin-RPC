@@ -47,7 +47,8 @@ async function measure(fn) {
 }
 
 const ctx = { user: 'ann' };
-const procedures = { p: { input: null, inputOptional: false, output: null, hash: 'h' } };
+// as generated code marks a procedure that takes ctx: without it the handler does not call context
+const procedures = { p: { input: null, inputOptional: false, output: null, ctx: true, hash: 'h' } };
 const ns = (x) => (x >= 1000 ? `${(x / 1000).toFixed(2)} µs` : `${x.toFixed(0)} ns`);
 
 const rows = [];
