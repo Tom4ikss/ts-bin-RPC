@@ -97,9 +97,9 @@ state, on one Linux server in Node, Chromium, Firefox and WebKit:
   Flechette, with the same bytes for the series.
 - **Full state of 100 and 1000 entities:** 11–17× faster than Colyseus, and a quarter to a third
   smaller.
-- **Small patches** (5 of 100 entities move): as fast as Colyseus or a little faster, but 232 bytes
-  against its 75, since every message carries a header and a column catalog. Larger patches (50 of
-  1000) are about 4× faster and 896 bytes against 750.
+- **Small patches** (5 of 100 entities move): 1.4–2× faster than Colyseus, but 180 bytes against its
+  75, since every message carries a header, a row table and a column catalog. Larger patches (50 of
+  1000) are 6–7× faster, 824 bytes against 750, and the same after gzip.
 
 ## Bundle size
 

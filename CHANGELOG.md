@@ -14,8 +14,8 @@ From 0.2.0, a change to the wire format or another breaking change bumps the min
 
 - Smaller messages of objects with optional fields: an optional field that no element of a vector
   has leaves no column, where it used to cost a catalog entry, bitmaps and room for every element.
-  A patch of 5 entities of live state that move went from 232 to 180 bytes, a patch of one from 164
-  to 80. The format allowed it from the start (FORMAT §6), so 0.6.0 reads these messages.
+  A patch of 5 entities of live state that move went from 232 to 180 bytes and is encoded, decoded
+  and applied 30–45% faster; a patch of one went from 164 to 80 bytes. The format allowed it from the start (FORMAT §6), so 0.6.0 reads these messages.
 
 ## 0.6.0
 
