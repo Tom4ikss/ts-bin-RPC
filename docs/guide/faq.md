@@ -104,8 +104,8 @@ every call with its input and output as plain objects, or save a body and run
 
 ## Is the format stable?
 
-Not yet. 0.6 brought format 2, and it is meant to be the last breaking change before the first
-beta. From the beta on, a change to the wire format, the generated code or the public API is a new
-major version. Messages carry the format version, generated code the version of the runtime it was
+Yes, from 1.0.0-beta.0: a change to the wire format, the generated code or the public API is a new
+major version. The [changelog](https://github.com/Tom4ikss/ts-bin-RPC/blob/main/CHANGELOG.md) says
+what the promise covers. Messages carry the format version, generated code the version of the runtime it was
 generated for, and sockets a subprotocol: a client and a server of incompatible versions refuse each
 other with an error that says so, instead of misreading each other.

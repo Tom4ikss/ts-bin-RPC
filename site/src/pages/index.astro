@@ -2,7 +2,9 @@
 import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
 import Flow from '../components/landing/Flow.astro';
 import Bench from '../components/landing/Bench.astro';
+import Libs from '../components/landing/Libs.astro';
 import { GITHUB, href } from '../lib/guide.mjs';
+import { BUNDLE } from '../data/bench';
 import '../styles/landing.css';
 
 const features = [
@@ -39,8 +41,26 @@ const features = [
 	{
 		glyph: 'fetch',
 		title: 'Small, and runs anywhere',
-		text: 'A Fetch API handler for Node, Bun, Deno and Workers. A 4.0 KB client runtime, no eval, so strict CSP works.',
+		text: `A Fetch API handler for Node, Bun, Deno and Workers. A ${BUNDLE.runtime} client runtime, no eval, so strict CSP works.`,
 		href: href('/guide/server-client/'),
+	},
+	{
+		glyph: '~>',
+		title: 'Streams and live state',
+		text: 'Return a stream and rows arrive in batched frames. live() keeps rows by key and sends a snapshot, then only what changed, over HTTP or one WebSocket.',
+		href: href('/guide/live/'),
+	},
+	{
+		glyph: '≥18',
+		title: 'Validation in the types',
+		text: 'u8 & Min<18>, string & Email: rules sit next to the types. The server checks every input, and inputSchema() checks forms on the client.',
+		href: href('/guide/validation/'),
+	},
+	{
+		glyph: '+',
+		title: 'Fits the rest of your stack',
+		text: 'TanStack Query options, a Vite plugin, middleware, request batching, cached GET queries and a DevTools panel for Chrome and Firefox.',
+		href: href('/guide/tanstack-query/'),
 	},
 ];
 
@@ -52,10 +72,10 @@ const useIt = [
 ];
 const skipIt = [
 	{ b: 'Public APIs and other languages.', t: 'Use JSON, OpenAPI or protobuf; this is for one TypeScript app talking to its own backend.' },
-	{ b: 'Small, text-heavy responses.', t: '20 users come out 9–13% larger than JSON after compression; long product descriptions come out 0–9% smaller.' },
-	{ b: 'Debugging with curl | jq.', t: 'Bodies are binary. debug: true and tbr decode help, but the Network tab shows bytes.' },
-	{ b: 'You need the tRPC ecosystem today.', t: 'WebSocket subscriptions and request batching are not there yet.' },
-	{ b: 'You need a stable release.', t: 'This is an alpha, and the wire format may change before 1.0.' },
+	{ b: 'Small, text-heavy responses.', t: '20 users come out 10–13% larger than JSON after compression; long product descriptions come out 0–9% smaller.' },
+	{ b: 'Debugging with curl | jq.', t: 'Bodies are binary. The DevTools panel, debug: true and tbr decode decode them, but curl shows bytes.' },
+	{ b: 'You need the tRPC ecosystem.', t: 'tRPC links, adapters and plugins do not work here; ts-bin-rpc has its own client and integrations.' },
+	{ b: 'You need a release proven in production.', t: 'The beta fixes the wire format and the API, but few apps run it yet.' },
 ];
 ---
 
@@ -96,6 +116,8 @@ const skipIt = [
 		</section>
 
 		<Bench />
+
+		<Libs />
 
 		<section class="fit" aria-labelledby="fit-title">
 			<header class="section-head">

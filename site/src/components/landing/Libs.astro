@@ -1,0 +1,161 @@
+---
+// ts-bin-rpc against the binary formats people would pick instead: Apache Arrow JS and Flechette
+// for tables and series, Colyseus schema for game state. Numbers come from bench/results/libs.md
+// through src/data/bench.ts; a row where ts-bin-rpc loses is shaded, as in the compression table.
+import { LIBS, LIBS_MACHINE, LIBS_RUNTIMES, RUNTIMES } from '../../data/bench';
+import { GITHUB_BLOB } from '../../lib/guide.mjs';
+
+const [cpu, commit] = LIBS_MACHINE;
+const runtimes = LIBS_RUNTIMES.map((id) => RUNTIMES.find((r) => r.id === id)?.label ?? id).join(', ');
+const x = (v: number) => (v >= 10 ? v.toFixed(0) : v.toFixed(1));
+const speed = (min: number, max: number) => `${x(min)}–${x(max)}×`;
+const toBytes = (s: string) => {
+	const [n, unit] = s.split(' ');
+	return Number(n) * (unit === 'KB' ? 1024 : unit === 'MB' ? 1024 * 1024 : 1);
+};
+const rows = LIBS.flatMap((w) =>
+	w.vs.map((v, i) => ({
+		...v,
+		first: i === 0,
+		span: w.vs.length,
+		label: w.label,
+		caption: w.caption,
+		ours: w.bytes,
+		slower: v.min < 1,
+		larger: toBytes(w.bytes.raw) > toBytes(v.bytes.raw),
+	})),
+);
+---
+
+<section class="libs not-content" id="formats" aria-labelledby="libs-title">
+	<header class="section-head">
+		<p class="kicker">Against other binary formats</p>
+		<h2 id="libs-title">Arrow, Flechette and Colyseus, on the same machine.</h2>
+		<p class="sub">
+			How many times faster ts-bin-rpc is, the lowest and highest of {runtimes}, and the
+			bytes of each message. Shaded cells: the other library wins.
+		</p>
+	</header>
+
+	<div class="libs-card">
+		<div class="table-scroll">
+			<table>
+				<thead>
+					<tr>
+						<th scope="col">Workload</th>
+						<th scope="col">Against</th>
+						<th scope="col">ts-bin-rpc is</th>
+						<th scope="col">Bytes, ts-bin-rpc</th>
+						<th scope="col">Bytes, theirs</th>
+					</tr>
+				</thead>
+				<tbody>
+					{rows.map((r) => (
+						<tr class={r.first ? 'group' : undefined}>
+							{r.first && (
+								<th scope="row" rowspan={r.span}>
+									{r.label}
+									<span class="caption">{r.caption}</span>
+								</th>
+							)}
+							<td class="lib">{r.name}</td>
+							<td class={r.slower ? 'worse' : undefined}>{speed(r.min, r.max)} faster</td>
+							<td class={r.larger ? 'worse' : undefined}>{r.ours.raw} <span class="gz">{r.ours.gzip} gz</span></td>
+							<td>{r.bytes.raw} <span class="gz">{r.bytes.gzip} gz</span></td>
+						</tr>
+					))}
+				</tbody>
+			</table>
+		</div>
+		<p class="fine">
+			{cpu}, Node and headless Chromium, Firefox and WebKit, commit {commit}. Median of 5 runs per runtime.
+			Arrow and Flechette read whole columns, their fastest way; ts-bin-rpc reads rows. A patch of ts-bin-rpc
+			is its live-state frame; Colyseus finds changes in its setters, so its time includes that.
+			Source: <a href={`${GITHUB_BLOB}/bench/results/libs.md`}>libs.md</a>.
+		</p>
+	</div>
+</section>
+
+<style>
+	/* a grid item of the landing: without this the table's width would widen every section */
+	.libs {
+		min-width: 0;
+	}
+	.libs-card {
+		margin-top: 2.5rem;
+		border: 1px solid var(--tbr-border);
+		border-radius: var(--tbr-radius-lg);
+		background: var(--tbr-surface);
+		padding: 0.5rem 1.25rem 1rem;
+	}
+	.table-scroll {
+		overflow-x: auto;
+	}
+	table {
+		width: 100%;
+		border-collapse: collapse;
+		font-size: 0.8125rem;
+		font-variant-numeric: tabular-nums;
+	}
+	th,
+	td {
+		padding: 0.55rem 0.6rem;
+		border-bottom: 1px solid var(--sl-color-hairline);
+		text-align: right;
+		white-space: nowrap;
+	}
+	th:first-child,
+	td.lib {
+		text-align: left;
+	}
+	thead th {
+		font-weight: 500;
+		color: var(--sl-color-gray-3);
+	}
+	tbody th {
+		font-weight: 500;
+		color: var(--sl-color-white);
+		vertical-align: top;
+		white-space: normal;
+		min-width: 11rem;
+	}
+	.caption {
+		display: block;
+		margin-top: 0.15rem;
+		font-weight: 400;
+		font-size: 0.75rem;
+		color: var(--sl-color-gray-3);
+	}
+	td {
+		color: var(--sl-color-gray-1);
+		font-family: var(--__sl-font-mono);
+		font-size: 0.75rem;
+	}
+	td.lib {
+		font-family: inherit;
+		font-size: 0.8125rem;
+		color: var(--sl-color-gray-2);
+	}
+	td.worse {
+		background: color-mix(in oklch, var(--sl-color-gray-4) 18%, transparent);
+		color: var(--sl-color-white);
+	}
+	.gz {
+		color: var(--sl-color-gray-4);
+	}
+	.fine {
+		margin-top: 1rem;
+		font-size: 0.75rem;
+		line-height: 1.55;
+		color: var(--sl-color-gray-4);
+	}
+	.fine a {
+		color: var(--sl-color-gray-3);
+		text-underline-offset: 0.2em;
+	}
+	@media (max-width: 30rem) {
+		.libs-card {
+			padding: 0.25rem 0.875rem 1rem;
+		}
+	}
+</style>

@@ -108,5 +108,5 @@ so that the lookup runs for the procedures that need a user and nowhere else.
   before the first row. Do per-row work in the stream's source.
 - **Direct calls.** Calling a function of a `use()` router yourself, in a test say, runs its chain
   too, with paths from the outermost `use()`.
-- **Validation** of field formats and ranges is planned as part of the generated decoder, not as
-  middleware, so that it costs no extra pass over the input.
+- **Validation** of field formats and ranges is not middleware: it is part of the generated
+  decoder, so that it costs no extra pass over the input ([Validation](./validation.md)).
