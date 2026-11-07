@@ -6,8 +6,9 @@ views over the response bytes, and numeric arrays arrive as `TypedArray` columns
 
 **Docs:** https://tom4ikss.github.io/ts-bin-RPC/ (sources in [docs/guide](docs/guide/index.md)).
 
-**Status:** alpha. The wire format may change before 1.0, see the [changelog](CHANGELOG.md) and
-the [security notes](SECURITY.md).
+**Status:** beta. The wire format, the generated code and the public API are stable: a change to
+them is a new major version, see the [changelog](CHANGELOG.md) and the
+[security notes](SECURITY.md).
 
 ```sh
 npm install ts-bin-rpc

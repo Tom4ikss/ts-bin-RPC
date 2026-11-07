@@ -2,9 +2,10 @@ name: release
 
 # Publishes ts-bin-rpc to npm with provenance when a tag v<version> is pushed, for example
 # v0.1.0-alpha.1. The package must carry that version. Prereleases go to the dist-tag
-# named by their first identifier (alpha, beta, rc), releases to latest. Until there is a release
-# without a prerelease identifier, latest follows the newest prerelease too, so that a plain
-# `npm install ts-bin-rpc` gets it.
+# named by their first identifier (alpha, beta, rc), releases to latest. latest follows a prerelease
+# too, so that a plain `npm install ts-bin-rpc` gets it, while there is no release without a
+# prerelease identifier, and a beta or rc also when it is above every such release (1.0.0-beta.0
+# after 0.6.0).
 #
 # Run by hand (workflow_dispatch) it only moves a dist-tag: `alpha=0.2.0` points alpha at 0.2.0,
 # `alpha=` removes it. It lives here because npm trusts this workflow file and nothing else, and it
@@ -79,8 +80,14 @@ jobs:
             [ -n "$(npm view "$spec" version 2>/dev/null)" ] && break
             sleep 20
           done
-          stable=$(npm view ts-bin-rpc versions --json | node -p "[].concat(JSON.parse(require('fs').readFileSync(0, 'utf8'))).filter((v) => !v.includes('-')).length")
-          if [ "$stable" = 0 ]; then npm dist-tag add "$spec" latest; else echo "latest stays on the stable release"; fi
+          follow=$(npm view ts-bin-rpc versions --json | TAG="${{ steps.version.outputs.tag }}" VERSION="${{ steps.version.outputs.version }}" node -e '
+            const base = (v) => v.split("-")[0].split(".").map(Number);
+            const above = (a, b) => { for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return a[i] > b[i]; return false; };
+            const stable = [].concat(JSON.parse(require("fs").readFileSync(0, "utf8"))).filter((v) => !v.includes("-"));
+            const late = ["beta", "rc"].includes(process.env.TAG) && stable.every((v) => above(base(process.env.VERSION), base(v)));
+            console.log(stable.length === 0 || late ? "yes" : "no");
+          ')
+          if [ "$follow" = yes ]; then npm dist-tag add "$spec" latest; else echo "latest stays on the stable release"; fi
       - name: Move prerelease tags that fell behind the stable release
         if: steps.version.outputs.tag == 'latest'
         env:

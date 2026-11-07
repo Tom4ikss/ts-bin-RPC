@@ -10,7 +10,7 @@ or later.
 
 ## 1. Install
 
-The package is published as an alpha:
+The package is published as a beta:
 
 ```sh
 npm install ts-bin-rpc

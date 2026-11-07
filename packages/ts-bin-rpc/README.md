@@ -15,5 +15,6 @@ The package provides `ts-bin-rpc/server`, `ts-bin-rpc/client`, `ts-bin-rpc/node`
 brands, the codec runtime the generated code imports, and `tbr`. TypeScript is an optional peer
 dependency that only `tbr` needs.
 
-**Alpha.** The wire format may change before 1.0. Docs: https://tom4ikss.github.io/ts-bin-RPC/.
+**Beta.** The wire format, the generated code and the public API are stable: a change to them is a
+new major version. Docs: https://tom4ikss.github.io/ts-bin-RPC/.
 Source and issues: https://github.com/Tom4ikss/ts-bin-RPC. MIT license.

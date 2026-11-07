@@ -73,7 +73,7 @@ chart.setData([m.t, m.cpu]); // typed arrays over the response bytes, nothing co
   there yet. [TanStack Query](./tanstack-query.md) and [WebSocket](./websocket.md) subscriptions
   are. See the [FAQ](./faq.md).
 
-> [!WARNING]
-> ts-bin-rpc is an alpha: `npm install ts-bin-rpc`. The wire format may still change before 1.0; such changes bump the minor version, so `^0.6.0` stays compatible.
+> [!NOTE]
+> ts-bin-rpc is a beta: `npm install ts-bin-rpc`. The wire format, the generated code and the public API are stable from 1.0.0-beta.0, and a change to them is a new major version ([what is covered](https://github.com/Tom4ikss/ts-bin-RPC/blob/main/CHANGELOG.md)).
 
 Next: [Getting started](./getting-started.md).
