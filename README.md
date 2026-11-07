@@ -82,24 +82,24 @@ which moves some rows by 10–25%, and a few rows in Firefox change by up to 2×
 launch to the next.
 
 <!-- bench:start -->
-GitHub Actions `ubuntu-latest` (AMD EPYC 9V45 96-Core Processor), Chromium 156, Firefox 157, WebKit 27.2, Node 22.23 through Playwright, 2026-11-06, commit [`89208a7`](https://github.com/Tom4ikss/ts-bin-RPC/commit/89208a766c3961a5cebfbcfaeb94bb5dc7e3799d).
+GitHub Actions `ubuntu-latest` (AMD EPYC 9V74 80-Core Processor), Chromium 156, Firefox 157, WebKit 27.2, Node 22.23 through Playwright, 2026-11-07, commit [`445c39f`](https://github.com/Tom4ikss/ts-bin-RPC/commit/445c39fcf7228168b95e22edc8f7a357f64075db).
 Full tables, with times: [generated.md](bench/results/ci/generated.md).
 
 | Reading | Node | Chromium | Firefox | WebKit |
 |---|---|---|---|---|
-| 1000 users, every field | 8.2× | 4.5× | 3.3× | 3.7× |
-| 1000 users, 2 of 7 fields | 17× | 9.4× | 6.4× | 5.6× |
-| 1000 users, numeric fields only | 24× | 14× | 13× | 7.8× |
-| 100k points, every value | 153× | 24× | 124× | 25× |
-| 10 users, every field | 2.7× | 1.3× | 1.2× | 1.1× |
-| 500 products with long text | 5.4× | 1.7× | 2.4× | 2.9× |
-| 1 user | 1.2× | **0.94×** | **0.65×** | **0.62×** |
+| 1000 users, every field | 8.2× | 4.5× | 3.4× | 3.8× |
+| 1000 users, 2 of 7 fields | 16× | 8.6× | 5.8× | 5.7× |
+| 1000 users, numeric fields only | 22× | 13× | 11× | 7.1× |
+| 100k points, every value | 138× | 21× | 118× | 19× |
+| 10 users, every field | 2.8× | 1.4× | 1.1× | 1.1× |
+| 500 products with long text | 5.1× | 1.7× | 2.4× | 2.6× |
+| 1 user | 1.2× | **0.93×** | **0.65×** | **0.64×** |
 
 | Encoding | Node | Chromium | Firefox | WebKit |
 |---|---|---|---|---|
-| 1000 users | 2.9× | 3.0× | 1.8× | 1.9× |
-| 500 products with long text | 1.8× | 1.0× | 1.3× | 1.0× |
-| 100k points | 61× | 37× | 35× | 21× |
+| 1000 users | 2.9× | 3.0× | 1.7× | 2.1× |
+| 500 products with long text | 1.9× | **0.99×** | 1.2× | 1.0× |
+| 100k points | 64× | 37× | 37× | 22× |
 <!-- bench:end -->
 
 Users have 7 fields: three numbers, a boolean and three strings, 30% of names in Cyrillic. Products
