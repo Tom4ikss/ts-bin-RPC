@@ -75,6 +75,33 @@ describe('packed columns', () => {
   });
 });
 
+describe('absent columns', () => {
+  /** Field ids in the catalog of the root vector. */
+  const ids = (bytes: Uint8Array) => {
+    const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength), vec = dv.getUint32(dv.getUint32(4, true), true);
+    return Array.from({ length: dv.getUint16(vec + 4, true) }, (_, j) => dv.getUint16(vec + 8 + 8 * j, true));
+  };
+
+  it('stay out of the catalog when no row has the field', () => {
+    const bare = Array.from({ length: 5 }, (_, i) => ({ id: i }));
+    const one = [...bare, { id: 5, name: 'n' }];
+    // null is a value of a nullable field, so its column stays
+    const nulls = bare.map((r) => ({ ...r, hp: null }));
+    for (const value of [bare, one, nulls, [{ id: 1, x: undefined, side: undefined }]]) {
+      const bytes = codec().encode(value);
+      expect(codec().decode(bytes)).toEqual(value.map((r) => Object.fromEntries(Object.entries(r).filter(([, v]) => v !== undefined))));
+      expect(toPlain(codec().view(bytes))).toEqual(codec().decode(bytes));
+    }
+    expect(ids(codec().encode(bare))).toHaveLength(1);
+    expect(ids(codec().encode(one))).toHaveLength(2);
+    expect(ids(codec().encode(nulls))).toHaveLength(2);
+    const view = codec().view(codec().encode(one));
+    expect([view[0].name, view[0].x, view[5].name]).toEqual([undefined, undefined, 'n']);
+    // nine absent columns cost nothing: the id column, its catalog entry and the headers
+    expect(codec().encode(bare).length).toBeLessThan(codec().encode([...bare, full(5)]).length - 9 * 8);
+  });
+});
+
 describe('delta columns', () => {
   const ticks = () => g.mod.procedures.ticks.output!;
   // values on the grid of their scale, so that they come back equal

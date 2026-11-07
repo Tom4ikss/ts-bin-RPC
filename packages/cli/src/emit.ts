@@ -883,13 +883,24 @@ class Emitter {
       `  if (!Array.isArray(a)) bad('array', a);`,
       '  const n = a.length, nb = (n + 7) >>> 3;',
       `  for (let i = 0; i < n; i++) { const v = a[i]; if (typeof v !== 'object' || v === null) bad(${lit(name)}, v); }`,
-      `  const p = w.alloc(${8 + 8 * nc}, 4);`,
-      '  w.ru32(p, n);',
-      `  w.ru16(p + 4, ${nc});`,
     );
+    // An optional column that no row has stays out of the catalog (FORMAT §6): a small patch of live
+    // state carries only the fields it changes. Then the catalog entries follow one another from `ce`.
+    const optional = fields.filter((wf) => wf.f.optional);
+    const has = (wf: WireField) => `${acc('a[i]', wf.f.name)} ${wf.f.nullable ? '!==' : '!='} ${wf.f.nullable ? 'undefined' : 'null'}`;
+    if (optional.length) {
+      for (const wf of optional) L.push(`  let h${wf.k} = false;`, `  for (let i = 0; i < n; i++) if (${has(wf)}) { h${wf.k} = true; break; }`);
+      L.push(
+        `  const nc = ${nc - optional.length}${optional.map((wf) => ` + (h${wf.k} ? 1 : 0)`).join('')};`,
+        '  const p = w.alloc(8 + 8 * nc, 4);',
+        '  w.ru32(p, n);',
+        '  w.ru16(p + 4, nc);',
+        '  let ce = p + 8;',
+      );
+    } else L.push(`  const p = w.alloc(${8 + 8 * nc}, 4);`, '  w.ru32(p, n);', `  w.ru16(p + 4, ${nc});`);
     fields.forEach((wf, k) => {
       const f = wf.f, t = f.type, fl = flagsOf(f);
-      const e = `p + ${8 + 8 * k}`;
+      const e = optional.length ? 'ce' : `p + ${8 + 8 * k}`;
       const nbm = (f.optional ? 1 : 0) + (f.nullable ? 1 : 0);
       const presBase = 'bm', nullBase = f.optional ? 'bm + nb' : 'bm';
       const setBit = (base: string) => `buf[${base} + (i >>> 3)] |= 1 << (i & 7);`;
@@ -902,7 +913,7 @@ class Emitter {
         s.push(`      ${value}`);
         return ['    for (let i = 0; i < n; i++) {', ...s, '    }'];
       };
-      L.push('  {', `    w.ru16(${e}, ${wf.id});`, `    w.ru16(${e} + 2, ${fl});`);
+      L.push(f.optional ? `  if (h${wf.k}) {` : '  {', `    w.ru16(${e}, ${wf.id});`, `    w.ru16(${e} + 2, ${fl});`);
       if (fl) L.push(`    const bm = w.alloc(nb * ${nbm}, 1);`);
       const fx = this.fixed(t);
       if (fx) {
@@ -925,7 +936,7 @@ class Emitter {
         const colTs = t.kind === 'union' ? `${this.ts(t)} | null` : this.ts(t);
         L.push(`    const col = new Array<${colTs}>(n);`, '    const buf = w.buf;', ...rows(`col[i] = ${ph};`, 'col[i] = x;'), `    const d = ${this.bodyEnc(t, 'col', 'n', true)};`);
       }
-      L.push(`    w.ru32(${e} + 4, ${fl ? 'bm' : 'd'});`, '  }');
+      L.push(`    w.ru32(${e} + 4, ${fl ? 'bm' : 'd'});`, ...(optional.length ? ['    ce += 8;'] : []), '  }');
     });
     L.push('  return p;', '}', '');
 

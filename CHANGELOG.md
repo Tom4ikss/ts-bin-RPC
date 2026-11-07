@@ -10,6 +10,13 @@ From 0.2.0, a change to the wire format or another breaking change bumps the min
 0.3), and patch versions stay compatible: `^0.2.0` never picks up a new format. Versions before
 0.2.0 were prereleases under the `alpha` dist-tag.
 
+## Unreleased
+
+- Smaller messages of objects with optional fields: an optional field that no element of a vector
+  has leaves no column, where it used to cost a catalog entry, bitmaps and room for every element.
+  A patch of 5 entities of live state that move went from 232 to 180 bytes, a patch of one from 164
+  to 80. The format allowed it from the start (FORMAT §6), so 0.6.0 reads these messages.
+
 ## 0.6.0
 
 Not compatible with 0.5: messages are format 2, which 0.5 rejects with a `VerifyError` and 0.6
