@@ -8,7 +8,10 @@
 //   Starlight asides. Starlight's own `:::note` … `:::` syntax works as well;
 // - a comment `<!-- include ../../bench/results/libs.md -->` on its own is replaced by that file
 //   without its `# Title`, its headings one level down: the site shows bench results that GitHub
-//   readers reach through a link next to the comment.
+//   readers reach through a link next to the comment. In its tables of groups (a first column
+//   `Group`, `Load` or `Message`), the best, second best and worst value of each column within a
+//   group get the classes `tbr-best`, `tbr-second` and `tbr-worst`: lower is better, for times and
+//   bytes alike.
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { dirname, relative, resolve, sep } from 'node:path';
 import { visit, SKIP } from 'unist-util-visit';
@@ -73,6 +76,48 @@ function convertAlert(node) {
 
 const INCLUDE_RE = /^<!--\s*include\s+(\S+)\s*-->$/;
 
+const GROUPED = new Set(['Group', 'Load', 'Message']);
+const UNITS = { ns: 1e-9, 'µs': 1e-6, us: 1e-6, ms: 1e-3, s: 1, B: 1, KB: 1024, MB: 1024 * 1024 };
+const VALUE_RE = /^([\d.]+)\s*(ns|µs|us|ms|s|B|KB|MB)(?![\w/])/;
+/** Columns whose values in a group differ by less than this are noise, not a ranking. */
+const MIN_SPREAD = 1.05;
+/** Values this close to the best of a place share it: 1953 KB and 1954 KB are a tie. */
+const TIE = 1.01;
+
+const text = (node) => (node.value ?? '') + (node.children ?? []).map(text).join('');
+
+/** Marks the best, second best and worst cell of each column in each group of a table. */
+function rank(table) {
+  const [head, ...rows] = table.children;
+  if (!GROUPED.has(text(head.children[0]).trim())) return;
+  for (let start = 0; start < rows.length; ) {
+    const name = text(rows[start].children[0]);
+    let end = start;
+    while (end < rows.length && text(rows[end].children[0]) === name) end++;
+    const group = rows.slice(start, end);
+    for (let col = 2; col < head.children.length; col++) {
+      const cells = group.map((r) => r.children[col]).filter(Boolean);
+      const values = cells.map((c) => {
+        const m = VALUE_RE.exec(text(c).trim());
+        return m ? Number(m[1]) * UNITS[m[2]] : NaN;
+      });
+      const sorted = values.filter((v) => !Number.isNaN(v)).sort((a, b) => a - b);
+      if (sorted.length < 2 || sorted.at(-1) / sorted[0] < MIN_SPREAD) continue;
+      // places: runs of values within TIE of the first of the run
+      const firsts = [];
+      for (const v of sorted) if (!firsts.length || v / firsts.at(-1) >= TIE) firsts.push(v);
+      const place = (v) => firsts.findLastIndex((f) => v >= f);
+      cells.forEach((c, i) => {
+        if (Number.isNaN(values[i])) return;
+        const p = place(values[i]);
+        const cls = p === 0 ? 'tbr-best' : p === firsts.length - 1 ? 'tbr-worst' : p === 1 ? 'tbr-second' : undefined;
+        if (cls) c.data = { ...c.data, hProperties: { ...c.data?.hProperties, className: [cls] } };
+      });
+    }
+    start = end;
+  }
+}
+
 /** The nodes of a repository file for an include comment, with its links resolved from where it is. */
 function include(processor, url, fromFile) {
   const target = resolve(dirname(fromFile), url);
@@ -83,6 +128,7 @@ function include(processor, url, fromFile) {
     visit(n, (node) => {
       if (node.type === 'heading') node.depth = Math.min(6, node.depth + 1);
       if (node.type === 'link' || node.type === 'definition') node.url = rewriteUrl(node.url, target);
+      if (node.type === 'table') rank(node);
     });
   }
   return children;

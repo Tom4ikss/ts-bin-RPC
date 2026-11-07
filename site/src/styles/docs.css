@@ -351,3 +351,15 @@ footer .meta a:hover {
 .sl-menu-button:has(~ :popover-open) {
 	background: var(--tbr-surface-2) !important;
 }
+
+/* Bench tables of the guide: best, second best and worst value of a column within a group, marked by
+   remark-guide.mjs. Tints over the cell, so they read on both themes. */
+.sl-markdown-content td.tbr-best {
+	background: color-mix(in oklch, oklch(0.72 0.17 150) 30%, transparent);
+}
+.sl-markdown-content td.tbr-second {
+	background: color-mix(in oklch, oklch(0.72 0.17 150) 17%, transparent);
+}
+.sl-markdown-content td.tbr-worst {
+	background: color-mix(in oklch, oklch(0.64 0.2 25) 26%, transparent);
+}

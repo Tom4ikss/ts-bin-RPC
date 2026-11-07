@@ -12,7 +12,9 @@ Every table names its date and the commit it measured.
 
 How to read the speed tables: a group compares variants that do the same work; the ratio is speed
 relative to the first variant of the group, JSON unless the group says otherwise, so higher is
-better. `~` marks a row whose ratio ranged over 25% between runs. Data is synthetic, from
+better. `~` marks a row whose ratio ranged over 25% between runs. On the site, within each group
+green marks the best value of a column, light green the second and red the worst, for times and
+bytes alike; a column whose values differ by less than 5% is left plain. Data is synthetic, from
 [bench/lib/data.mjs](../../bench/lib/data.mjs), with 30% of names in Cyrillic.
 
 The bench workflow also runs the JSON suite on GitHub Actions for every release and publishes it to
