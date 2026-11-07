@@ -5,8 +5,11 @@
 // - relative links are rewritten: `./types.md#brands` → `/guide/types/#brands`, and links to other
 //   files of the repository (`../../bench/results/core.md`) go to GitHub;
 // - GitHub alerts (`> [!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, `[!CAUTION]`) become
-//   Starlight asides. Starlight's own `:::note` … `:::` syntax works as well.
-import { existsSync, statSync } from 'node:fs';
+//   Starlight asides. Starlight's own `:::note` … `:::` syntax works as well;
+// - a comment `<!-- include ../../bench/results/libs.md -->` on its own is replaced by that file
+//   without its `# Title`, its headings one level down: the site shows bench results that GitHub
+//   readers reach through a link next to the comment.
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { dirname, relative, resolve, sep } from 'node:path';
 import { visit, SKIP } from 'unist-util-visit';
 import { GITHUB_BLOB, GITHUB_TREE, fileToSlug, guideDir, repoRoot, slugToHref } from '../lib/guide.mjs';
@@ -68,10 +71,34 @@ function convertAlert(node) {
   return { type: 'containerDirective', name: alert.variant, attributes: {}, children, position: node.position };
 }
 
+const INCLUDE_RE = /^<!--\s*include\s+(\S+)\s*-->$/;
+
+/** The nodes of a repository file for an include comment, with its links resolved from where it is. */
+function include(processor, url, fromFile) {
+  const target = resolve(dirname(fromFile), url);
+  if (!inside(repoRoot, target) || !existsSync(target)) throw new Error(`${fromFile}: cannot include ${url}`);
+  const tree = processor.parse(readFileSync(target, 'utf8'));
+  const children = tree.children[0]?.type === 'heading' && tree.children[0].depth === 1 ? tree.children.slice(1) : tree.children;
+  for (const n of children) {
+    visit(n, (node) => {
+      if (node.type === 'heading') node.depth = Math.min(6, node.depth + 1);
+      if (node.type === 'link' || node.type === 'definition') node.url = rewriteUrl(node.url, target);
+    });
+  }
+  return children;
+}
+
 export default function remarkGuide() {
+  const processor = this;
   return (tree, file) => {
     const path = file.path ?? file.history?.[0];
     if (!path || !inside(guideDir, path)) return;
+
+    for (let i = tree.children.length - 1; i >= 0; i--) {
+      const n = tree.children[i];
+      const m = n.type === 'html' && INCLUDE_RE.exec(n.value.trim());
+      if (m) tree.children.splice(i, 1, ...include(processor, m[1], path));
+    }
 
     const firstIdx = tree.children.findIndex((n) => n.type !== 'yaml' && n.type !== 'toml' && n.type !== 'html');
     const firstNode = tree.children[firstIdx];

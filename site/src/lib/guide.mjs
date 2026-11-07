@@ -31,7 +31,7 @@ export const GUIDE_BASE = 'guide';
 export const PLAN = [
   { label: 'Start here', items: ['index', 'getting-started'] },
   { label: 'Concepts', items: ['types', 'validation', 'views', 'server-client', 'middleware', 'queries', 'tanstack-query', 'streams', 'live', 'websocket', 'batching', 'evolution'] },
-  { label: 'Reference', items: ['cli', 'devtools', 'performance', 'faq'] },
+  { label: 'Reference', items: ['cli', 'devtools', 'performance', 'benchmarks', 'faq'] },
 ];
 
 const PAGE_EXT = /\.mdx?$/;

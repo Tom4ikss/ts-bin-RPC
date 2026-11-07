@@ -3,7 +3,7 @@
 // for tables and series, Colyseus schema for game state. Numbers come from bench/results/libs.md
 // through src/data/bench.ts; a row where ts-bin-rpc loses is shaded, as in the compression table.
 import { LIBS, LIBS_MACHINE, LIBS_RUNTIMES, RUNTIMES } from '../../data/bench';
-import { GITHUB_BLOB } from '../../lib/guide.mjs';
+import { GITHUB_BLOB, href } from '../../lib/guide.mjs';
 
 const [cpu, commit] = LIBS_MACHINE;
 const runtimes = LIBS_RUNTIMES.map((id) => RUNTIMES.find((r) => r.id === id)?.label ?? id).join(', ');
@@ -71,7 +71,8 @@ const rows = LIBS.flatMap((w) =>
 			{cpu}, Node and headless Chromium, Firefox and WebKit, commit {commit}. Median of 5 runs per runtime.
 			Arrow and Flechette read whole columns, their fastest way; ts-bin-rpc reads rows. A patch of ts-bin-rpc
 			is its live-state frame; Colyseus finds changes in its setters, so its time includes that.
-			Source: <a href={`${GITHUB_BLOB}/bench/results/libs.md`}>libs.md</a>.
+			<a href={href('/guide/benchmarks/')}>All benchmark tables</a>; source:{' '}
+			<a href={`${GITHUB_BLOB}/bench/results/libs.md`}>libs.md</a>.
 		</p>
 	</div>
 </section>

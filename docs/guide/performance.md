@@ -8,7 +8,7 @@ description: Measured speed and size against JSON, in Node and three browsers, i
 All numbers come from the benchmarks in the repository: headless Chromium 156, Firefox 157 and
 WebKit 27.2 on an Apple M3 Pro, and Node 22. The baseline is `JSON.parse` over the same bytes,
 decoded with `TextDecoder`, which is what `response.json()` does. Run-to-run noise reaches 20–40% on
-some rows. Synthetic data.
+some rows. Synthetic data. [Benchmarks](./benchmarks.md) has every table, measured on a Linux server.
 
 ## Reading
 
