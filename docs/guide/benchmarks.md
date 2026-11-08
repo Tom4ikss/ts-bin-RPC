@@ -27,6 +27,11 @@ Generated codecs against `JSON.parse` over the same bytes decoded with `TextDeco
 `response.json()` does, and against `JSON.stringify` for encoding. Source:
 [server/generated.md](../../bench/results/server/generated.md).
 
+*Hand-written for this type* is the ceiling, not a competitor: the same columnar layout written by
+hand for `User[]` alone ([bench/lib/codec3.mjs](../../bench/lib/codec3.mjs)), the prototype the format
+was chosen from. It has no column catalog, verification, optional fields or schema evolution, so the
+distance to *generated* is what those cost: up to 25% on reads, close to nothing in WebKit.
+
 <!-- include ../../bench/results/server/generated.md -->
 
 ## Against Arrow JS, Flechette and Colyseus

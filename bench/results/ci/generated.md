@@ -11,22 +11,22 @@ Median of 10 runs per runtime, each in a fresh process or browser; ratio is spee
 | Group | Variant | node | chromium | firefox | webkit |
 |---|---|---|---|---|---|
 | 10 users, all fields | JSON | 6.36 µs | 3.26 µs | 4.41 µs | 3.65 µs |
-| 10 users, all fields | hand-written (codec3) | 1.53 µs (4.18x) | 1.57 µs (2.07x) | 2.78 µs (1.61x) | 2.75 µs (1.33x) |
+| 10 users, all fields | hand-written for this type | 1.53 µs (4.18x) | 1.57 µs (2.07x) | 2.78 µs (1.61x) | 2.75 µs (1.33x) |
 | 10 users, all fields | generated | 1.81 µs (3.51x) | 1.89 µs (1.72x) | 3.13 µs (1.43x) | 2.79 µs (1.31x) |
 | 10 users, all fields | generated + verify | 2.30 µs (2.76x) | 2.34 µs (1.39x) | 3.99 µs (1.11x) | 3.36 µs (1.09x) |
 | 10 users, all fields | generated, decode (plain) | 1.84 µs (3.46x) | 1.88 µs (1.72x) | 3.09 µs (1.43x) | 2.74 µs (1.33x) |
 | 1000 users, all fields | JSON | 761 µs | 505 µs | 388 µs | 396 µs |
-| 1000 users, all fields | hand-written (codec3) | 68 µs (11.15x) | 82 µs (6.20x) | 89 µs (4.34x) | 102 µs (3.91x) |
+| 1000 users, all fields | hand-written for this type | 68 µs (11.15x) | 82 µs (6.20x) | 89 µs (4.34x) | 102 µs (3.91x) |
 | 1000 users, all fields | generated | 81 µs (9.36x) | 103 µs (4.95x) | 99 µs (3.92x) | 95 µs (4.20x) |
 | 1000 users, all fields | generated + verify | 92 µs (8.20x) | 111 µs (4.54x) | 115 µs (3.36x) | 104 µs (3.80x) |
 | 1000 users, all fields | generated, decode (plain) | 72 µs (10.53x) | 83 µs (6.12x) | 98 µs (3.97x) | 90 µs (4.42x) |
 | 1000 users, 2 fields | JSON | 751 µs | 503 µs | 384 µs | 395 µs |
-| 1000 users, 2 fields | hand-written (codec3) | 36 µs (20.89x) | 42 µs (11.97x) | 47 µs (8.14x) | 65 µs (6.13x) |
+| 1000 users, 2 fields | hand-written for this type | 36 µs (20.89x) | 42 µs (11.97x) | 47 µs (8.14x) | 65 µs (6.13x) |
 | 1000 users, 2 fields | generated | 37 µs (20.43x) | 48 µs (10.47x) | 50 µs (7.74x) | 59 µs (6.70x) |
 | 1000 users, 2 fields | generated + verify | 48 µs (15.66x) | 58 µs (8.58x) | 66 µs (5.80x) | 70 µs (5.67x) |
 | 1000 users, 2 fields | generated, decode (plain) | 68 µs (11.02x) | 80 µs (6.25x) | 96 µs (4.03x) | 83 µs (4.77x) |
 | 1000 users, numbers only | JSON | 757 µs | 502 µs | 382 µs | 401 µs |
-| 1000 users, numbers only | hand-written (codec3) | 14 µs (53.16x) | 13 µs (37.61x) | 12 µs (32.80x) | 11 µs (34.30x) |
+| 1000 users, numbers only | hand-written for this type | 14 µs (53.16x) | 13 µs (37.61x) | 12 µs (32.80x) | 11 µs (34.30x) |
 | 1000 users, numbers only | generated | 18 µs (41.63x) | 17 µs (28.99x) | 14 µs (28.21x) | 11 µs (35.00x) |
 | 1000 users, numbers only | generated + verify | 35 µs (21.55x) | 40 µs (12.54x) | 36 µs (10.65x) | 56 µs (7.11x) |
 | 1000 users, numbers only | generated, decode (plain) | 70 µs (10.79x) | 81 µs (6.16x) | 96 µs (4.02x) | 89 µs (4.50x) |
@@ -43,7 +43,7 @@ Median of 10 runs per runtime, each in a fresh process or browser; ratio is spee
 | 100k points, every value | generated | 139 µs (138.10x) | 619 µs (20.76x) | 194 µs (117.73x) ~ | 664 µs (19.45x) |
 | 100k points, every value | generated + verify | 139 µs (138.06x) | 609 µs (20.85x) | 194 µs (117.79x) ~ | 663 µs (19.43x) |
 | encode 1000 users | JSON | 665 µs | 696 µs | 387 µs | 335 µs |
-| encode 1000 users | hand-written (codec3) | 340 µs (1.96x) | 254 µs (2.75x) | 249 µs (1.56x) | 137 µs (2.46x) ~ |
+| encode 1000 users | hand-written for this type | 340 µs (1.96x) | 254 µs (2.75x) | 249 µs (1.56x) | 137 µs (2.46x) ~ |
 | encode 1000 users | generated | 229 µs (2.85x) | 233 µs (3.04x) | 227 µs (1.71x) | 163 µs (2.05x) |
 | encode 500 products | JSON | 400 µs | 444 µs | 260 µs | 353 µs |
 | encode 500 products | generated | 210 µs (1.84x) ~ | 450 µs (0.99x) | 222 µs (1.17x) | 344 µs (1.03x) |

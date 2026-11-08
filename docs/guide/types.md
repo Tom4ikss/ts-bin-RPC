@@ -87,7 +87,7 @@ interface Tick {
   neighbours, in 1, 2 or 4 bytes each, whichever fits. It works on 8–32 bit integer brands, scaled
   ones included, and on `Date`. It pays off on sorted or slowly changing values: time stamps,
   sequence numbers, prices. The encoder falls back to the plain column when differences would not
-  be smaller.
+  be smaller, so on an 8-bit brand, whose differences take a byte as well, `Delta` has no effect.
 
 The price is zero-copy: such a column is decoded into its own typed array when the view of the
 array is created, instead of being a window into the message. That is one pass over the column,

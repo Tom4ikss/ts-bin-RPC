@@ -36,7 +36,7 @@ export function groups({ quick = false } = {}) {
       group,
       cases: [
         { label: 'JSON', fn: (b) => sJson(JSON.parse(td.decode(b))), input: te.encode(JSON.stringify(users)) },
-        { label: 'hand-written (codec3)', fn: (b) => sHand(readUsers3(b)), input: encodeUsers3(users) },
+        { label: 'hand-written for this type', fn: (b) => sHand(readUsers3(b)), input: encodeUsers3(users) },
         { label: 'generated', fn: (b) => sGen(K.view(b, { verify: false })), input: bytes },
         { label: 'generated + verify', fn: (b) => sVerify(K.view(b)), input: bytes },
         { label: 'generated, decode (plain)', fn: (b) => sDecode(K.decode(b, { verify: false })), input: bytes },
@@ -112,7 +112,7 @@ export function groups({ quick = false } = {}) {
     group: 'encode 1000 users',
     cases: [
       { label: 'JSON', fn: (u) => te.encode(JSON.stringify(u)).length, input: users },
-      { label: 'hand-written (codec3)', fn: (u) => encodeUsers3(u).length, input: users },
+      { label: 'hand-written for this type', fn: (u) => encodeUsers3(u).length, input: users },
       { label: 'generated', fn: (u) => K.encode(u).length, input: users },
     ],
   });

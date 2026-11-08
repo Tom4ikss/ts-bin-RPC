@@ -34,7 +34,7 @@ export function groups() {
       group: `${n} users`,
       cases: [
         { label: 'JSON, all fields', fn: (b) => sJson(JSON.parse(td.decode(b))), input: te.encode(JSON.stringify(users)) },
-        { label: 'hand-written (codec3), all fields', fn: (b) => sHand(readUsers3(b)), input: encodeUsers3(users) },
+        { label: 'hand-written for this type, all fields', fn: (b) => sHand(readUsers3(b)), input: encodeUsers3(users) },
         { label: 'generated, all fields', fn: (b) => sGen(K.view(b, { verify: false })), input: bytes },
         { label: 'generated + verify, all fields', fn: (b) => sVerify(K.view(b)), input: bytes },
         { label: 'verify only', fn: (b) => (K.verify(b), 1), input: bytes },

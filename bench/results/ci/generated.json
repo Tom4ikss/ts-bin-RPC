@@ -35,7 +35,7 @@
     },
     {
      "group": "10 users, all fields",
-     "variant": "hand-written (codec3)",
+     "variant": "hand-written for this type",
      "us": 1.5302799072265532,
      "spread": 0.08834530608083205,
      "ratio": 4.181509248321161,
@@ -130,7 +130,7 @@
     },
     {
      "group": "1000 users, all fields",
-     "variant": "hand-written (codec3)",
+     "variant": "hand-written for this type",
      "us": 68.25391796875024,
      "spread": 0.11512009754742428,
      "ratio": 11.153848832351875,
@@ -225,7 +225,7 @@
     },
     {
      "group": "1000 users, 2 fields",
-     "variant": "hand-written (codec3)",
+     "variant": "hand-written for this type",
      "us": 36.16706689453064,
      "spread": 0.08439485225211188,
      "ratio": 20.891790833754275,
@@ -320,7 +320,7 @@
     },
     {
      "group": "1000 users, numbers only",
-     "variant": "hand-written (codec3)",
+     "variant": "hand-written for this type",
      "us": 14.26316601562494,
      "spread": 0.02157012627687517,
      "ratio": 53.16207036833134,
@@ -643,7 +643,7 @@
     },
     {
      "group": "encode 1000 users",
-     "variant": "hand-written (codec3)",
+     "variant": "hand-written for this type",
      "us": 339.75972265625387,
      "spread": 0.10788061314258326,
      "ratio": 1.9631114287190314,
@@ -785,7 +785,7 @@
     },
     {
      "group": "10 users, all fields",
-     "variant": "hand-written (codec3)",
+     "variant": "hand-written for this type",
      "us": 1.5681457519516329,
      "spread": 0.033422587365382846,
      "ratio": 2.071242088607844,
@@ -880,7 +880,7 @@
     },
     {
      "group": "1000 users, all fields",
-     "variant": "hand-written (codec3)",
+     "variant": "hand-written for this type",
      "us": 81.66992187511823,
      "spread": 0.020762117962603088,
      "ratio": 6.200219701380515,
@@ -975,7 +975,7 @@
     },
     {
      "group": "1000 users, 2 fields",
-     "variant": "hand-written (codec3)",
+     "variant": "hand-written for this type",
      "us": 41.88476562501364,
      "spread": 0.06628604292982457,
      "ratio": 11.97414529394127,
@@ -1070,7 +1070,7 @@
     },
     {
      "group": "1000 users, numbers only",
-     "variant": "hand-written (codec3)",
+     "variant": "hand-written for this type",
      "us": 13.331298828120453,
      "spread": 0.052018249657807804,
      "ratio": 37.605605503122725,
@@ -1393,7 +1393,7 @@
     },
     {
      "group": "encode 1000 users",
-     "variant": "hand-written (codec3)",
+     "variant": "hand-written for this type",
      "us": 253.984374999618,
      "spread": 0.09713040909062971,
      "ratio": 2.753016688696555,
@@ -1535,7 +1535,7 @@
     },
     {
      "group": "10 users, all fields",
-     "variant": "hand-written (codec3)",
+     "variant": "hand-written for this type",
      "us": 2.7752685546875155,
      "spread": 0.10202241973689037,
      "ratio": 1.6061015972832702,
@@ -1630,7 +1630,7 @@
     },
     {
      "group": "1000 users, all fields",
-     "variant": "hand-written (codec3)",
+     "variant": "hand-written for this type",
      "us": 89.27734375000007,
      "spread": 0.057936122620595706,
      "ratio": 4.338498406184405,
@@ -1725,7 +1725,7 @@
     },
     {
      "group": "1000 users, 2 fields",
-     "variant": "hand-written (codec3)",
+     "variant": "hand-written for this type",
      "us": 47.216796875000355,
      "spread": 0.07256919180754123,
      "ratio": 8.13544755972508,
@@ -1820,7 +1820,7 @@
     },
     {
      "group": "1000 users, numbers only",
-     "variant": "hand-written (codec3)",
+     "variant": "hand-written for this type",
      "us": 11.718750000000222,
      "spread": 0.07023008548339282,
      "ratio": 32.80168421052606,
@@ -2143,7 +2143,7 @@
     },
     {
      "group": "encode 1000 users",
-     "variant": "hand-written (codec3)",
+     "variant": "hand-written for this type",
      "us": 248.51562499999602,
      "spread": 0.12760757148155105,
      "ratio": 1.5611027228287044,
@@ -2285,7 +2285,7 @@
     },
     {
      "group": "10 users, all fields",
-     "variant": "hand-written (codec3)",
+     "variant": "hand-written for this type",
      "us": 2.7514648437499956,
      "spread": 0.0314451295048664,
      "ratio": 1.3327432356759115,
@@ -2380,7 +2380,7 @@
     },
     {
      "group": "1000 users, all fields",
-     "variant": "hand-written (codec3)",
+     "variant": "hand-written for this type",
      "us": 101.58203125000043,
      "spread": 0.06554478075872884,
      "ratio": 3.905680423593709,
@@ -2475,7 +2475,7 @@
     },
     {
      "group": "1000 users, 2 fields",
-     "variant": "hand-written (codec3)",
+     "variant": "hand-written for this type",
      "us": 64.82421874999922,
      "spread": 0.12741666332845158,
      "ratio": 6.13042393274106,
@@ -2570,7 +2570,7 @@
     },
     {
      "group": "1000 users, numbers only",
-     "variant": "hand-written (codec3)",
+     "variant": "hand-written for this type",
      "us": 11.481933593749716,
      "spread": 0.24866214440062,
      "ratio": 34.298104606048085,
@@ -2893,7 +2893,7 @@
     },
     {
      "group": "encode 1000 users",
-     "variant": "hand-written (codec3)",
+     "variant": "hand-written for this type",
      "us": 136.95312500001933,
      "spread": 0.7881540170656248,
      "ratio": 2.456360524814124,

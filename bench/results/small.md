@@ -11,7 +11,7 @@ Median of 5 runs per runtime, each in a fresh process or browser; ratio is speed
 | Group | Variant | firefox | chromium | node | webkit |
 |---|---|---|---|---|---|
 | 10 users | JSON, all fields | 4.48 µs | 3.38 µs | 6.84 µs | 4.44 µs |
-| 10 users | hand-written (codec3), all fields | 3.19 µs (1.39x) ~ | 1.57 µs (2.16x) | 1.54 µs (4.45x) | 2.79 µs (1.60x) |
+| 10 users | hand-written for this type, all fields | 3.19 µs (1.39x) ~ | 1.57 µs (2.16x) | 1.54 µs (4.45x) | 2.79 µs (1.60x) |
 | 10 users | generated, all fields | 3.47 µs (1.30x) | 1.94 µs (1.74x) | 1.80 µs (3.74x) | 3.00 µs (1.48x) |
 | 10 users | generated + verify, all fields | 4.08 µs (1.12x) | 2.34 µs (1.46x) | 2.29 µs (2.97x) | 3.49 µs (1.28x) |
 | 10 users | verify only | 1.33 µs (3.37x) | 0.76 µs (4.50x) | 0.73 µs (9.32x) | 1.35 µs (3.36x) |
@@ -24,7 +24,7 @@ Median of 5 runs per runtime, each in a fresh process or browser; ratio is speed
 | 10 users | TextDecoder, UTF-16 block | 0.42 µs (10.75x) | 0.38 µs (8.92x) | 0.23 µs (29.06x) | 0.77 µs (5.85x) |
 | 10 users | WeakMap.set on a fresh array | 0.17 µs (26.70x) ~ | 0.14 µs (24.21x) | 0.20 µs (31.89x) ~ | 0.11 µs (41.06x) |
 | 100 users | JSON, all fields | 36 µs | 29 µs | 64 µs | 35 µs |
-| 100 users | hand-written (codec3), all fields | 12 µs (2.93x) ~ | 10 µs (2.77x) | 9.51 µs (6.75x) | 13 µs (2.58x) |
+| 100 users | hand-written for this type, all fields | 12 µs (2.93x) ~ | 10 µs (2.77x) | 9.51 µs (6.75x) | 13 µs (2.58x) |
 | 100 users | generated, all fields | 13 µs (2.77x) | 11 µs (2.53x) | 10 µs (6.30x) | 13 µs (2.60x) |
 | 100 users | generated + verify, all fields | 14 µs (2.49x) | 12 µs (2.31x) | 11 µs (5.56x) | 15 µs (2.38x) |
 | 100 users | verify only | 2.92 µs (12.59x) | 2.92 µs (9.90x) | 2.41 µs (26.63x) | 5.54 µs (6.19x) |

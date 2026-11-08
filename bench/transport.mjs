@@ -1,7 +1,10 @@
 // Streams over a real transport: ts-bin-rpc frames over HTTP and over a WebSocket against NDJSON over
 // fetch, SSE and JSON over a WebSocket, from a Node server to Chromium on the same machine. Writes
 // bench/results/stream-transport.md.
-//   node --experimental-strip-types --no-warnings bench/transport.mjs [--quick] [--out=dir]
+//   node --experimental-strip-types --no-warnings bench/transport.mjs [--quick] [--out=dir] [--repeat=n]
+//     [--only=text] [--load=text]
+// --only and --load keep the transports and loads whose names contain the text, and every run is
+// printed, for looking at one row closely.
 import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
@@ -19,7 +22,8 @@ import { appRouter, produce } from './transport/router.ts';
 
 const dir = import.meta.dirname;
 const quick = process.argv.includes('--quick');
-const REPS = quick ? 1 : 5;
+const arg = (name) => process.argv.find((a) => a.startsWith(`--${name}=`))?.slice(name.length + 3);
+const REPS = Number(arg('repeat') ?? (quick ? 1 : 5));
 
 // Codecs of the bench router, then the page bundle over them.
 const gen = path.join(dir, 'gen', 'out', 'transport.gen.ts');
@@ -130,12 +134,15 @@ const median = (xs) => [...xs].sort((a, b) => a - b)[xs.length >> 1];
 const ms = (x) => (x >= 100 ? `${x.toFixed(0)} ms` : x >= 10 ? `${x.toFixed(1)} ms` : `${x.toFixed(2)} ms`);
 const mb = (x) => (x >= 1 << 20 ? `${(x / (1 << 20)).toFixed(1)} MB` : `${(x / 1024).toFixed(0)} KB`);
 
-for (const v of variants) await once(v, { n: 2000, rate: 0 }); // warm up
+const only = arg('only'), load = arg('load');
+const picked = variants.filter((v) => !only || v.name.includes(only));
+for (const v of picked) await once(v, { n: 2000, rate: 0 }); // warm up
 const rows = [];
-for (const s of scenarios) {
-  for (const v of variants) {
+for (const s of scenarios.filter((x) => !load || x.name.includes(load))) {
+  for (const v of picked) {
     const runs = [];
     for (let i = 0; i < REPS; i++) runs.push(await once(v, s));
+    if (only || load) console.log(`${v.name}, ${s.name}: page main thread ${runs.map((r) => ms(r.client)).join(', ')}`);
     const m = (k) => median(runs.map((r) => r[k]));
     const row = [s.name, v.name, ms(m('ms')), ms(m('p50')), ms(m('p99')), ms(m('client')), ms(m('server')), mb(m('bytes'))];
     rows.push(row);
@@ -159,6 +166,8 @@ A Node HTTP server on 127.0.0.1 sends ticks \`{ t: f64, price: f32, size: u32, s
 
 ${table}
 `;
+// a filtered run is a look at some rows, not a result to keep
+if (only || load) process.exit(0);
 const outArg = process.argv.find((a) => a.startsWith('--out='));
 const outDir = outArg ? path.resolve(outArg.slice(6)) : path.join(import.meta.dirname, 'results');
 fs.mkdirSync(outDir, { recursive: true });
