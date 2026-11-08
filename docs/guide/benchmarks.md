@@ -47,9 +47,11 @@ A Node server streams ticks to a Chromium page over HTTP and over a WebSocket, a
 and JSON over a WebSocket. Source:
 [server/stream-transport.md](../../bench/results/server/stream-transport.md).
 
-On 0.6.0 the row of ts-bin-rpc over a WebSocket with `window: 0` is unstable: page main thread from
-118 to 268 ms at 1 000 ticks/s over four runs, against 111–119 ms on 0.5.1. The cause is not found
-yet; the default window of 16 ms is the same on both.
+On the server the row of ts-bin-rpc over a WebSocket with `window: 0` spread on 0.6.0: page main
+thread from 118 to 268 ms at 1 000 ticks/s over four runs, against 111–119 ms on 0.5.1. On an Apple
+M3, 18 runs of each version in turn gave 54–74 ms for both, so the spread is put down to that
+machine. The row itself is real: at this load it stays slower than JSON over a WebSocket, about 56
+against 41 ms on the M3.
 
 <!-- include ../../bench/results/server/stream-transport.md -->
 
