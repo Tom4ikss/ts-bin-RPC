@@ -193,17 +193,18 @@ generated code refers to it from `clientProcedures`.
 
 ## Measurements
 
-A Node server sends ticks to a Chromium page that reads every field
-([stream-transport.md](https://github.com/Tom4ikss/ts-bin-RPC/blob/main/bench/results/stream-transport.md)),
-against NDJSON over `fetch` and SSE with `EventSource`, all with the same producer:
+A Node server sends ticks to a Chromium page that reads every field, against NDJSON over `fetch`
+and SSE with `EventSource`, all with the same producer, on a Linux server
+([all transports](./benchmarks.md#streams-over-a-real-transport)):
 
 | 20 000 ticks/s | Delay p50 | Page main thread | Bytes |
 |---|---|---|---|
-| ts-bin-rpc, window 16 ms | 9.6 ms | 147 ms | 1.0 MB |
-| ts-bin-rpc, window 0 | 0.35 ms | 261 ms | 1.2 MB |
-| NDJSON | 0.30 ms | 279 ms | 3.7 MB |
-| SSE | 0.26 ms | 429 ms | 4.1 MB |
+| ts-bin-rpc, window 16 ms | 9.25 ms | 77.6 ms | 1010 KB |
+| ts-bin-rpc, window 0 | 0.10 ms | 130 ms | 1.2 MB |
+| NDJSON | 0.11 ms | 172 ms | 3.7 MB |
+| SSE | 0.15 ms | 441 ms | 4.1 MB |
 
-The default window trades about 10 ms of delay for half the main-thread time of NDJSON. With
-`window: 0` the delay is that of NDJSON and SSE, and the bytes are a third. At full speed,
-200 000 ticks arrive in 46 ms against 85 ms with NDJSON and 750 ms with SSE.
+The default window trades about 9 ms of delay for less than half the main-thread time of NDJSON.
+With `window: 0` the delay is that of NDJSON and SSE, the main thread does a quarter less, and the
+bytes are a third. At full speed, 200 000 ticks arrive in 100 ms against 202 ms with NDJSON and
+2 s with SSE.

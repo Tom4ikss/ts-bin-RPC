@@ -93,8 +93,8 @@ state, on one Linux server in Node, Chromium, Firefox and WebKit:
 
 - **1000 users, every field read:** 3–5× faster than JSON; Arrow and Flechette are slower than JSON
   here (0.35–0.86×), since they decode every string of a column.
-- **Numbers of 1000 users, and 100k-point series:** 1.3–3× faster to decode than Arrow and
-  Flechette, with the same bytes for the series.
+- **Numbers of 1000 users:** 1.3–3× faster to decode than Arrow and Flechette. **100k-point
+  series:** 1.7× in Node and Chromium, 1.0–1.2× in Firefox and WebKit, with the same bytes.
 - **Full state of 100 and 1000 entities:** 11–17× faster than Colyseus, and a quarter to a third
   smaller.
 - **Small patches** (5 of 100 entities move): 1.4–2× faster than Colyseus, but 180 bytes against its
@@ -108,13 +108,12 @@ Client bundles, minified and gzipped with esbuild
 
 | | Client, min + gz |
 |---|---|
-| Runtime and client, no procedures | 4.7 KB |
-| Stream client, when the router has streams | +1.4 KB |
-| Dashboard example (3 procedures and a stream) | 12.2 KB |
-| Test fixture with every supported type | 12.2 KB |
+| Runtime and client, no procedures | 5.3 KB |
+| Dashboard example (3 procedures and a stream) | 13.3 KB |
+| Test fixture with every supported type | 13.3 KB |
 
-The client gets only input encoders and output decoders. CI fails if the runtime grows past 5 KB or
-the fixture past 12.5 KB.
+The client gets only input encoders and output decoders, and the stream client only when the router
+has streams. CI fails if the runtime grows past 5.5 KB or the fixture past 13.5 KB.
 
 ## What made it fast
 

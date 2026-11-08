@@ -144,9 +144,9 @@ compress well as text, while float32 mantissas look like noise to a compressor.
 
 ### Bundle
 
-The client runtime is 4.2 KB min + gzip. The stream client adds 1.4 KB, only when the router has
-stream procedures. The client bundle of the dashboard example, codecs, runtime and the stream
-client, is 11.4 KB ([size.md](bench/results/size.md)). CI fails if the runtime grows past 5 KB.
+The client runtime is 5.3 KB min + gzip; the stream client comes only when the router has stream
+procedures. The client bundle of the dashboard example, codecs, runtime and the stream client, is
+13.3 KB ([size.md](bench/results/size.md)). CI fails if the runtime grows past 5.5 KB.
 
 ### Caveats
 

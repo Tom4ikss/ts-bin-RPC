@@ -170,7 +170,7 @@ const signed = (v: number) => (v > 0 ? `+${v}%` : v < 0 ? `−${Math.abs(v)}%` :
 			<h3>Client bundle, min + gzip</h3>
 			<dl class="sizes">
 				<div><dt>Runtime and client</dt><dd>{BUNDLE.runtime}</dd></div>
-				<div><dt>Dashboard example, 4 procedures</dt><dd>{BUNDLE.dashboard}</dd></div>
+				<div><dt>Dashboard example, 3 procedures and a stream</dt><dd>{BUNDLE.dashboard}</dd></div>
 				<div><dt>Fixture with every supported type</dt><dd>{BUNDLE.fixture}</dd></div>
 			</dl>
 			<p class="fine"><a href={`${GITHUB_BLOB}/${SOURCE.size}`}>size.md</a>, esbuild. The client gets only input encoders and output decoders.</p>
